@@ -1,0 +1,35 @@
+{
+  "name": "remotion-videos",
+  "version": "1.0.0",
+  "description": "Remotion video production + MMX visualization",
+  "scripts": {
+    "dev": "remotion studio",
+    "build": "remotion render",
+    "render": "remotion render",
+    "still": "remotion still",
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "ali",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@remotion/bundler": "4.0.434",
+    "@remotion/cli": "4.0.434",
+    "@remotion/renderer": "4.0.434",
+    "@remotion/studio": "4.0.434",
+    "@remotion/zod-types": "^4.0.434",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "remotion": "4.0.434",
+    "typescript": "5.9.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^28.0.0",
+    "jsdom": "^28.1.0",
+    "tsx": "^4.21.0",
+    "vitest": "^4.0.18"
+  }
+}

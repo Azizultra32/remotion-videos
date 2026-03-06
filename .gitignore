@@ -1,0 +1,12 @@
+node_modules/
+out/
+.env
+.env.local
+.env.*
+!.env.example
+brands/*/photos/
+brands/*/fonts/
+*.mp4
+*.webm
+*.mov
+.DS_Store

@@ -1,0 +1,37 @@
+{
+  "name": "Example Brand",
+  "tagline": "Innovation at Scale",
+  "colors": {
+    "primary": "#3b82f6",
+    "secondary": "#8b5cf6",
+    "accent": "#f59e0b",
+    "background": "#ffffff",
+    "text": "#111827"
+  },
+  "typography": {
+    "heading": "system-ui, -apple-system, sans-serif",
+    "body": "system-ui, -apple-system, sans-serif"
+  },
+  "social": {
+    "website": "https://example.com",
+    "twitter": "@example"
+  },
+  "features": [
+    {
+      "title": "Lightning Fast",
+      "description": "Built for speed with optimized performance at every layer of the stack.",
+      "icon": "⚡"
+    },
+    {
+      "title": "Rock Solid",
+      "description": "Enterprise-grade reliability with 99.99% uptime guarantee.",
+      "icon": "🛡️"
+    },
+    {
+      "title": "Beautifully Simple",
+      "description": "An intuitive interface that your team will love from day one.",
+      "icon": "✨"
+    }
+  ],
+  "ctaText": "Ready to Get Started?"
+}

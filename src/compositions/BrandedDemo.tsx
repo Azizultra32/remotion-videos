@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
 import type { CalculateMetadataFunction } from "remotion";
+import { AnimatedTitle } from "../components/AnimatedTitle";
 
 // ── Timing constants ────────────────────────────────────────────────────────────
 
@@ -89,11 +90,6 @@ const IntroSection: React.FC<{
   const { fps } = useVideoConfig();
 
   const logoScale = spring({ frame, fps, config: { damping: 12, mass: 0.5 } });
-  const titleY = spring({
-    frame: frame - 10,
-    fps,
-    config: { damping: 14 },
-  });
   const taglineOpacity = interpolate(frame, [30, 50], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -143,20 +139,16 @@ const IntroSection: React.FC<{
         </div>
       )}
 
-      <h1
-        style={{
-          fontFamily: config.typography.heading,
-          fontSize: 80,
-          fontWeight: 800,
-          color: config.colors.text,
-          margin: 0,
-          transform: `translateY(${interpolate(titleY, [0, 1], [40, 0])}px)`,
-          opacity: titleY,
-          letterSpacing: -2,
-        }}
-      >
-        {config.name}
-      </h1>
+      {/* NOTE: AnimatedTitle uses letterSpacing:-1; original was -2 */}
+      <AnimatedTitle
+        text={config.name}
+        fontSize={80}
+        fontWeight={800}
+        color={config.colors.text}
+        fontFamily={config.typography.heading}
+        delay={10}
+        springConfig={{ damping: 14, mass: 1, stiffness: 100 }}
+      />
 
       <div
         style={{

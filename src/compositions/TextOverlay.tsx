@@ -2,12 +2,11 @@ import React from "react";
 import {
   AbsoluteFill,
   useCurrentFrame,
-  useVideoConfig,
   interpolate,
-  spring,
 } from "remotion";
 import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
+import { AnimatedTitle } from "../components";
 
 export const textOverlaySchema = z.object({
   title: z.string(),
@@ -27,27 +26,6 @@ export const TextOverlay: React.FC<TextOverlayProps> = ({
   accentColor,
 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
-  const titleOpacity = interpolate(frame, [0, 30], [0, 1], {
-    extrapolateRight: "clamp",
-  });
-
-  const titleScale = spring({
-    frame,
-    fps,
-    config: { damping: 200, stiffness: 100 },
-  });
-
-  const subtitleOpacity = interpolate(frame, [30, 60], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
-  const subtitleY = interpolate(frame, [30, 60], [20, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
 
   const lineWidth = interpolate(frame, [15, 45], [0, 200], {
     extrapolateLeft: "clamp",
@@ -62,20 +40,16 @@ export const TextOverlay: React.FC<TextOverlayProps> = ({
         alignItems: "center",
       }}
     >
-      <h1
-        style={{
-          color: textColor,
-          fontSize: 80,
-          fontFamily: "system-ui, -apple-system, sans-serif",
-          fontWeight: 700,
-          opacity: titleOpacity,
-          transform: `scale(${titleScale})`,
-          margin: 0,
-          textAlign: "center",
-        }}
-      >
-        {title}
-      </h1>
+      <AnimatedTitle
+        text={title}
+        fontSize={90}
+        fontWeight={800}
+        color={textColor}
+        fontFamily="system-ui, -apple-system, sans-serif"
+        animationType="scale"
+        letterSpacing={-2}
+        springConfig={{ damping: 12, mass: 0.5, stiffness: 100 }}
+      />
       <div
         style={{
           width: lineWidth,
@@ -86,20 +60,17 @@ export const TextOverlay: React.FC<TextOverlayProps> = ({
           borderRadius: 2,
         }}
       />
-      <p
-        style={{
-          color: textColor,
-          fontSize: 32,
-          fontFamily: "system-ui, -apple-system, sans-serif",
-          fontWeight: 300,
-          opacity: subtitleOpacity,
-          transform: `translateY(${subtitleY}px)`,
-          margin: 0,
-          textAlign: "center",
-        }}
-      >
-        {subtitle}
-      </p>
+      <AnimatedTitle
+        as="h2"
+        text={subtitle}
+        fontSize={32}
+        fontWeight={300}
+        color={textColor}
+        fontFamily="system-ui, -apple-system, sans-serif"
+        animationType="slide-up"
+        letterSpacing={0}
+        delay={30}
+      />
     </AbsoluteFill>
   );
 };

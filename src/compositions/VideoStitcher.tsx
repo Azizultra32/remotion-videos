@@ -11,6 +11,8 @@ import {
 import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
 import type { CalculateMetadataFunction } from "remotion";
+import { AnimatedTitle } from "../components";
+import { ProgressBar } from "../components";
 
 // ---------------------------------------------------------------------------
 // Zod Schemas
@@ -60,59 +62,19 @@ export const calculateVideoStitcherMetadata: CalculateMetadataFunction<
 const LowerThird: React.FC<{
   sceneIndex: number;
   totalScenes: number;
-  textColor: string;
-  backgroundColor: string;
-}> = ({ sceneIndex, totalScenes, textColor, backgroundColor }) => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
-  const slideUp = spring({ frame, fps, config: { damping: 18, mass: 0.8 } });
-
+  sceneLabel: string;
+}> = ({ sceneIndex, totalScenes, sceneLabel }) => {
   return (
-    <div
-      style={{
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 54,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 32px",
-        backgroundColor: "rgba(0,0,0,0.55)",
-        backdropFilter: "blur(6px)",
-        transform: `translateY(${interpolate(slideUp, [0, 1], [60, 0])}px)`,
-        zIndex: 100,
-      }}
-    >
-      <span
-        style={{
-          color: "#fff",
-          fontSize: 16,
-          fontFamily: "system-ui, sans-serif",
-          fontWeight: 600,
-          letterSpacing: 1,
-        }}
-      >
-        SCENE {sceneIndex + 1} / {totalScenes}
-      </span>
-      {/* progress dots */}
-      <div style={{ display: "flex", gap: 6 }}>
-        {Array.from({ length: totalScenes }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              width: i === sceneIndex ? 24 : 8,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: i === sceneIndex ? "#fff" : "rgba(255,255,255,0.35)",
-              transition: "width 0.3s",
-            }}
-          />
-        ))}
-      </div>
-    </div>
+    <ProgressBar
+      currentIndex={sceneIndex}
+      totalItems={totalScenes}
+      variant="segmented"
+      showBackground={true}
+      label={sceneLabel}
+      color="#ffffff"
+      backgroundColor="rgba(255,255,255,0.35)"
+      barWidth={220}
+    />
   );
 };
 
@@ -128,14 +90,6 @@ const TitleScene: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const titleScale = spring({
-    frame,
-    fps,
-    config: { damping: 14, stiffness: 120, mass: 0.9 },
-  });
-  const titleOpacity = interpolate(frame, [0, 15], [0, 1], {
-    extrapolateRight: "clamp",
-  });
   const subtitleSlide = spring({
     frame: Math.max(0, frame - 12),
     fps,
@@ -152,20 +106,17 @@ const TitleScene: React.FC<{
         justifyContent: "center",
       }}
     >
-      <h1
-        style={{
-          fontSize: 72,
-          fontWeight: 800,
-          color: scene.textColor,
-          fontFamily: "system-ui, sans-serif",
-          textAlign: "center",
-          margin: 0,
-          opacity: titleOpacity,
-          transform: `scale(${interpolate(titleScale, [0, 1], [0.7, 1])})`,
-        }}
-      >
-        {scene.title}
-      </h1>
+      <AnimatedTitle
+        text={scene.title}
+        fontSize={72}
+        fontWeight={800}
+        color={scene.textColor}
+        fontFamily="system-ui, sans-serif"
+        textAlign="center"
+        letterSpacing={0}
+        animationType="scale"
+        springConfig={{ damping: 14, stiffness: 120, mass: 0.9 }}
+      />
       <p
         style={{
           fontSize: 28,
@@ -183,8 +134,7 @@ const TitleScene: React.FC<{
       <LowerThird
         sceneIndex={sceneIndex}
         totalScenes={totalScenes}
-        textColor={scene.textColor}
-        backgroundColor={scene.backgroundColor}
+        sceneLabel={`SCENE ${sceneIndex + 1} / ${totalScenes}`}
       />
     </AbsoluteFill>
   );
@@ -284,8 +234,7 @@ const FeatureScene: React.FC<{
       <LowerThird
         sceneIndex={sceneIndex}
         totalScenes={totalScenes}
-        textColor={scene.textColor}
-        backgroundColor={scene.backgroundColor}
+        sceneLabel={`SCENE ${sceneIndex + 1} / ${totalScenes}`}
       />
     </AbsoluteFill>
   );
@@ -382,8 +331,7 @@ const CtaScene: React.FC<{
       <LowerThird
         sceneIndex={sceneIndex}
         totalScenes={totalScenes}
-        textColor={scene.textColor}
-        backgroundColor={scene.backgroundColor}
+        sceneLabel={`SCENE ${sceneIndex + 1} / ${totalScenes}`}
       />
     </AbsoluteFill>
   );

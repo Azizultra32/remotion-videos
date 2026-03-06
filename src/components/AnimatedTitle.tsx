@@ -13,6 +13,8 @@ type SpringConfig = {
   overshootClamping?: boolean;
 };
 
+export type AnimationType = "slide-up" | "scale" | "fade-in";
+
 export type AnimatedTitleProps = {
   text: string;
   fontSize?: number;
@@ -20,8 +22,11 @@ export type AnimatedTitleProps = {
   color?: string;
   fontFamily?: string;
   textAlign?: React.CSSProperties["textAlign"];
+  letterSpacing?: number;
   delay?: number;
+  animationType?: AnimationType;
   springConfig?: SpringConfig;
+  as?: "h1" | "h2" | "h3" | "div";
 };
 
 export const AnimatedTitle: React.FC<AnimatedTitleProps> = ({
@@ -31,8 +36,11 @@ export const AnimatedTitle: React.FC<AnimatedTitleProps> = ({
   color = "#ffffff",
   fontFamily = "system-ui, sans-serif",
   textAlign = "center",
+  letterSpacing = -1,
   delay = 0,
+  animationType = "slide-up",
   springConfig = { damping: 14, mass: 0.8, stiffness: 100 },
+  as: Tag = "h1",
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -46,10 +54,18 @@ export const AnimatedTitle: React.FC<AnimatedTitleProps> = ({
   });
 
   const opacity = interpolate(entrance, [0, 1], [0, 1]);
-  const translateY = interpolate(entrance, [0, 1], [40, 0]);
+
+  let transform = "";
+  if (animationType === "slide-up") {
+    const translateY = interpolate(entrance, [0, 1], [40, 0]);
+    transform = `translateY(${translateY}px)`;
+  } else if (animationType === "scale") {
+    const scale = interpolate(entrance, [0, 1], [0.7, 1]);
+    transform = `scale(${scale})`;
+  }
 
   return (
-    <h1
+    <Tag
       style={{
         fontSize,
         fontWeight,
@@ -58,12 +74,12 @@ export const AnimatedTitle: React.FC<AnimatedTitleProps> = ({
         textAlign,
         margin: 0,
         opacity,
-        transform: `translateY(${translateY}px)`,
-        letterSpacing: -1,
+        transform,
+        letterSpacing,
         lineHeight: 1.1,
       }}
     >
       {text}
-    </h1>
+    </Tag>
   );
 };

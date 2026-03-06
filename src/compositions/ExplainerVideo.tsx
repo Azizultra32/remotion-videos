@@ -9,6 +9,8 @@ import {
 } from "remotion";
 import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
+import { AnimatedTitle } from "../components";
+import { ProgressBar } from "../components";
 
 const sceneSchema = z.object({
   title: z.string(),
@@ -59,17 +61,6 @@ const SceneContent: React.FC<{
     frame: sceneFrame,
     fps,
     config: { damping: 10, stiffness: 100, mass: 0.8 },
-  });
-
-  // Title appears after icon
-  const titleOpacity = interpolate(sceneFrame, [8, 20], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const titleSlide = interpolate(sceneFrame, [8, 20], [20, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
   });
 
   // Description appears after title
@@ -124,22 +115,20 @@ const SceneContent: React.FC<{
         </div>
 
         {/* Title */}
-        <h2
-          style={{
-            fontSize: 52,
-            fontWeight: 800,
-            color: "white",
-            fontFamily: "system-ui, sans-serif",
-            textAlign: "center",
-            margin: 0,
-            marginBottom: 16,
-            opacity: titleOpacity,
-            transform: `translateY(${titleSlide}px)`,
-            letterSpacing: -0.5,
-          }}
-        >
-          {scene.title}
-        </h2>
+        <div style={{ marginBottom: 16 }}>
+          <AnimatedTitle
+            as="h2"
+            text={scene.title}
+            fontSize={52}
+            fontWeight={800}
+            color="white"
+            fontFamily="system-ui, sans-serif"
+            textAlign="center"
+            letterSpacing={-0.5}
+            animationType="slide-up"
+            delay={8}
+          />
+        </div>
 
         {/* Description */}
         <p
@@ -158,65 +147,6 @@ const SceneContent: React.FC<{
           {scene.description}
         </p>
       </div>
-    </div>
-  );
-};
-
-const ProgressBar: React.FC<{
-  scenes: Scene[];
-  currentSceneIndex: number;
-  sceneProgress: number;
-}> = ({ scenes, currentSceneIndex, sceneProgress }) => {
-  const barWidth = 600;
-  const segmentWidth = barWidth / scenes.length;
-  const gap = 6;
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        bottom: 50,
-        left: "50%",
-        transform: "translateX(-50%)",
-        display: "flex",
-        gap,
-        alignItems: "center",
-      }}
-    >
-      {scenes.map((scene, i) => {
-        let fillPercent = 0;
-        if (i < currentSceneIndex) fillPercent = 100;
-        else if (i === currentSceneIndex) fillPercent = sceneProgress * 100;
-
-        return (
-          <div
-            key={i}
-            style={{
-              width: segmentWidth - gap,
-              height: 5,
-              borderRadius: 3,
-              backgroundColor: "rgba(255,255,255,0.15)",
-              overflow: "hidden",
-              position: "relative",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                height: "100%",
-                width: `${fillPercent}%`,
-                backgroundColor: scene.backgroundColor === "#1a1a2e"
-                  ? "#6C63FF"
-                  : "white",
-                borderRadius: 3,
-                transition: "none",
-              }}
-            />
-          </div>
-        );
-      })}
     </div>
   );
 };
@@ -278,23 +208,14 @@ export const ExplainerVideo: React.FC<ExplainerVideoProps> = ({ scenes }) => {
         </svg>
       </AbsoluteFill>
 
-      {/* Scene number indicator */}
-      <div
-        style={{
-          position: "absolute",
-          top: 40,
-          right: 50,
-          fontSize: 16,
-          color: "rgba(255,255,255,0.4)",
-          fontFamily: "system-ui, sans-serif",
-          fontWeight: 600,
-          letterSpacing: 2,
-          textTransform: "uppercase",
-          zIndex: 10,
-        }}
-      >
-        {currentSceneIndex + 1} / {scenes.length}
-      </div>
+      <ProgressBar
+        currentIndex={currentSceneIndex}
+        totalItems={scenes.length}
+        variant="fraction"
+        position="top"
+        color="rgba(255,255,255,0.75)"
+        backgroundColor="rgba(255,255,255,0.4)"
+      />
 
       {/* Scene content */}
       <SceneContent
@@ -307,9 +228,13 @@ export const ExplainerVideo: React.FC<ExplainerVideoProps> = ({ scenes }) => {
 
       {/* Progress bar */}
       <ProgressBar
-        scenes={scenes}
-        currentSceneIndex={currentSceneIndex}
-        sceneProgress={sceneProgress}
+        currentIndex={currentSceneIndex}
+        totalItems={scenes.length}
+        variant="segmented"
+        segmentProgress={sceneProgress}
+        color={currentScene.backgroundColor === "#1a1a2e" ? "#6C63FF" : "#ffffff"}
+        backgroundColor="rgba(255,255,255,0.15)"
+        barWidth={600}
       />
     </AbsoluteFill>
   );

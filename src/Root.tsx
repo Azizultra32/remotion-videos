@@ -23,6 +23,24 @@ import {
 import { MapAnimation, mapAnimationSchema } from "./compositions/MapAnimation";
 import { ExplainerVideo, explainerVideoSchema } from "./compositions/ExplainerVideo";
 import { SocialProof, socialProofSchema } from "./compositions/SocialProof";
+import {
+  CountdownTimer,
+  countdownTimerSchema,
+  calculateCountdownTimerMetadata,
+  defaultCountdownTimerProps,
+} from "./compositions/CountdownTimer";
+import {
+  CaptionedVideo,
+  captionedVideoSchema,
+  calculateCaptionedVideoMetadata,
+  defaultCaptionedVideoProps,
+} from "./compositions/CaptionedVideo";
+import {
+  LogoReveal,
+  logoRevealSchema,
+  calculateLogoRevealMetadata,
+  defaultLogoRevealProps,
+} from "./compositions/LogoReveal";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -264,6 +282,36 @@ export const RemotionRoot: React.FC = () => {
           ],
           accentColor: "#6C63FF",
         }}
+      />
+      <Composition
+        id="CountdownTimer"
+        component={CountdownTimer}
+        schema={countdownTimerSchema}
+        calculateMetadata={calculateCountdownTimerMetadata}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={defaultCountdownTimerProps}
+      />
+      <Composition
+        id="CaptionedVideo"
+        component={CaptionedVideo}
+        schema={captionedVideoSchema}
+        calculateMetadata={calculateCaptionedVideoMetadata}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={defaultCaptionedVideoProps}
+      />
+      <Composition
+        id="LogoReveal"
+        component={LogoReveal}
+        schema={logoRevealSchema}
+        calculateMetadata={calculateLogoRevealMetadata}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={defaultLogoRevealProps}
       />
     </>
   );

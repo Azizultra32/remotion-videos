@@ -6,7 +6,7 @@ import {
   interpolate,
 } from "remotion";
 
-export type ProgressBarVariant = "dots" | "bar" | "fraction";
+export type ProgressBarVariant = "dots" | "bar" | "fraction" | "segmented";
 
 export type ProgressBarProps = {
   currentIndex: number;
@@ -15,6 +15,10 @@ export type ProgressBarProps = {
   color?: string;
   backgroundColor?: string;
   position?: "bottom" | "top";
+  label?: string;
+  segmentProgress?: number;
+  showBackground?: boolean;
+  barWidth?: number;
 };
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({
@@ -24,6 +28,10 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   color = "#ffffff",
   backgroundColor = "rgba(255,255,255,0.2)",
   position = "bottom",
+  label,
+  segmentProgress = 0,
+  showBackground = false,
+  barWidth = 400,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -108,6 +116,66 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
               borderRadius: 3,
             }}
           />
+        </div>
+      </div>
+    );
+  }
+
+  if (variant === "segmented") {
+    return (
+      <div style={{
+        ...containerStyle,
+        ...(showBackground ? {
+          backgroundColor: "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(8px)",
+          padding: "12px 24px",
+          borderRadius: 8,
+          width: barWidth + 48,
+        } : {}),
+        flexDirection: "column",
+        gap: 8,
+      }}>
+        {label && (
+          <span style={{
+            fontFamily: "system-ui, sans-serif",
+            fontSize: 14,
+            fontWeight: 600,
+            color,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+          }}>
+            {label}
+          </span>
+        )}
+        <div style={{ display: "flex", gap: 4, width: barWidth }}>
+          {Array.from({ length: totalItems }).map((_, i) => {
+            const isCurrent = i === currentIndex;
+            const isPast = i < currentIndex;
+            const fillWidth = isCurrent ? segmentProgress * 100 : isPast ? 100 : 0;
+            return (
+              <div
+                key={i}
+                style={{
+                  flex: 1,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor,
+                  overflow: "hidden",
+                  position: "relative",
+                }}
+              >
+                <div style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  height: "100%",
+                  width: `${fillWidth}%`,
+                  backgroundColor: color,
+                  borderRadius: 2,
+                }} />
+              </div>
+            );
+          })}
         </div>
       </div>
     );

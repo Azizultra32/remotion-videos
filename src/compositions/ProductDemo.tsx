@@ -9,6 +9,7 @@ import {
 } from "remotion";
 import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
+import { AnimatedTitle } from "../components";
 
 export const productDemoSchema = z.object({
   productName: z.string(),
@@ -82,9 +83,6 @@ const TitleScene: React.FC<{
   textColor: string;
 }> = ({ productName, tagline, primaryColor, textColor }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
-  const scale = spring({ frame, fps, config: { damping: 200 } });
   const taglineOpacity = interpolate(frame, [20, 50], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -94,18 +92,16 @@ const TitleScene: React.FC<{
     <AbsoluteFill
       style={{ justifyContent: "center", alignItems: "center" }}
     >
-      <h1
-        style={{
-          fontSize: 96,
-          fontWeight: 800,
-          color: primaryColor,
-          fontFamily: "system-ui, sans-serif",
-          transform: `scale(${scale})`,
-          margin: 0,
-        }}
-      >
-        {productName}
-      </h1>
+      <AnimatedTitle
+        text={productName}
+        animationType="scale"
+        fontSize={96}
+        fontWeight={800}
+        color={primaryColor}
+        fontFamily="system-ui, sans-serif"
+        letterSpacing={0}
+        springConfig={{ damping: 200 }}
+      />
       <p
         style={{
           fontSize: 36,

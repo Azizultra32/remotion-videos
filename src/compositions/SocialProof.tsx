@@ -9,6 +9,7 @@ import {
 } from "remotion";
 import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
+import { ProgressBar } from "../components/ProgressBar";
 
 const testimonialSchema = z.object({
   quote: z.string(),
@@ -346,30 +347,14 @@ export const SocialProof: React.FC<SocialProofProps> = ({
       />
 
       {/* Testimonial counter dots */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 45,
-          left: "50%",
-          transform: "translateX(-50%)",
-          display: "flex",
-          gap: 12,
-        }}
-      >
-        {testimonials.map((_, i) => (
-          <div
-            key={i}
-            style={{
-              width: i === currentIndex ? 28 : 8,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor:
-                i === currentIndex ? accentColor : "rgba(255,255,255,0.2)",
-              transition: "none",
-            }}
-          />
-        ))}
-      </div>
+      <ProgressBar
+        currentIndex={currentIndex}
+        totalItems={testimonials.length}
+        variant="dots"
+        color={accentColor}
+        backgroundColor="rgba(255,255,255,0.2)"
+        position="bottom"
+      />
     </AbsoluteFill>
   );
 };

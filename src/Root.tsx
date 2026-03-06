@@ -41,6 +41,12 @@ import {
   calculateLogoRevealMetadata,
   defaultLogoRevealProps,
 } from "./compositions/LogoReveal";
+import {
+  TIDExplainer,
+  tidExplainerSchema,
+  calculateTIDExplainerMetadata,
+  defaultTIDExplainerProps,
+} from "./compositions/TIDExplainer";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -312,6 +318,16 @@ export const RemotionRoot: React.FC = () => {
         width={1920}
         height={1080}
         defaultProps={defaultLogoRevealProps}
+      />
+      <Composition
+        id="TIDExplainer"
+        component={TIDExplainer}
+        schema={tidExplainerSchema}
+        calculateMetadata={calculateTIDExplainerMetadata}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={defaultTIDExplainerProps}
       />
     </>
   );

@@ -10,3 +10,4 @@ brands/*/fonts/
 *.webm
 *.mov
 .DS_Store
+.worktrees/

@@ -17,11 +17,13 @@ Why this design:
   - For more ambitious setups see docs/AGENT-COORDINATION.md.
 
 Usage:
-  scripts/agents.py claim   <agent-id> <file>...
-  scripts/agents.py release <agent-id> [<file>...]      # no files = release all
-  scripts/agents.py check   <file>                      # exits 0 free, 1 held
+  scripts/agents.py claim    <agent-id> <file>...
+  scripts/agents.py release  <agent-id> [<file>...]     # no files = release all
+  scripts/agents.py check    <file>                     # exits 0 free, 1 held
   scripts/agents.py status
   scripts/agents.py prune                               # drop stale claims now
+  scripts/agents.py message  <from> <to|all> <text...>  # leave a note
+  scripts/agents.py messages [<agent-id>]               # read notes (all, or visible to agent)
 
 Environment:
   AGENTS_STATE_FILE  override state file path (default: repo-root/.agents-active.json)
@@ -58,23 +60,28 @@ def _parse_ts(ts: str) -> _dt.datetime:
         return _dt.datetime.now(_dt.timezone.utc)
 
 
-def _is_stale(ts: str) -> bool:
+def _is_stale(ts: str, hours: float | None = None) -> bool:
     age = _dt.datetime.now(_dt.timezone.utc) - _parse_ts(ts)
-    return age.total_seconds() > STALE_HOURS * 3600
+    limit = (hours if hours is not None else STALE_HOURS) * 3600
+    return age.total_seconds() > limit
 
 
 def _load_and_prune(fh) -> dict[str, Any]:
     fh.seek(0)
     raw = fh.read()
     if not raw.strip():
-        return {"claims": []}
+        return {"claims": [], "messages": []}
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
         # Corrupt file — start fresh rather than refuse to run.
-        return {"claims": []}
+        return {"claims": [], "messages": []}
     claims = [c for c in data.get("claims", []) if not _is_stale(c.get("at", ""))]
-    return {"claims": claims}
+    # Messages have a longer TTL (24h) since agents may check less often
+    messages = [
+        m for m in data.get("messages", []) if not _is_stale(m.get("at", ""), hours=24)
+    ]
+    return {"claims": claims, "messages": messages}
 
 
 def _save(fh, data: dict[str, Any]) -> None:
@@ -170,6 +177,49 @@ def cmd_status() -> int:
     return 0
 
 
+def cmd_message(from_agent: str, to_agent: str, text: str) -> int:
+    with _open_locked() as fh:
+        data = _load_and_prune(fh)
+        data["messages"].append(
+            {
+                "from": from_agent,
+                "to": to_agent,  # "all" or a specific agent id
+                "text": text,
+                "at": _now(),
+                "read_by": [],
+            }
+        )
+        _save(fh, data)
+    print(f"MESSAGE sent from {from_agent} to {to_agent}")
+    return 0
+
+
+def cmd_messages(for_agent: str | None) -> int:
+    with _open_locked() as fh:
+        data = _load_and_prune(fh)
+        # If reading for a specific agent, mark matching unread messages as read.
+        changed = False
+        for m in data["messages"]:
+            if for_agent is not None and (m["to"] == "all" or m["to"] == for_agent):
+                if for_agent not in m["read_by"]:
+                    m["read_by"].append(for_agent)
+                    changed = True
+        if changed:
+            _save(fh, data)
+    msgs = data["messages"]
+    if for_agent is not None:
+        msgs = [m for m in msgs if m["to"] in ("all", for_agent)]
+    if not msgs:
+        print("(no messages)")
+        return 0
+    for m in sorted(msgs, key=lambda x: x["at"]):
+        age = _dt.datetime.now(_dt.timezone.utc) - _parse_ts(m["at"])
+        mins = int(age.total_seconds() // 60)
+        target = m["to"] if m["to"] != "all" else "all"
+        print(f"[{mins}m ago] {m['from']} → {target}: {m['text']}")
+    return 0
+
+
 def cmd_prune() -> int:
     with _open_locked() as fh:
         raw_before = len(json.loads(fh.read() or '{"claims":[]}').get("claims", []))
@@ -196,6 +246,13 @@ def main(argv: list[str]) -> int:
         return cmd_status()
     if cmd == "prune" and len(argv) == 2:
         return cmd_prune()
+    if cmd == "message" and len(argv) >= 5:
+        # message FROM TO "body text (remaining args joined)"
+        return cmd_message(argv[2], argv[3], " ".join(argv[4:]))
+    if cmd == "messages" and len(argv) in (2, 3):
+        # messages               → all messages
+        # messages <agent-id>    → messages visible to this agent (all + to=agent-id)
+        return cmd_messages(argv[2] if len(argv) == 3 else None)
     print(__doc__)
     return 2
 

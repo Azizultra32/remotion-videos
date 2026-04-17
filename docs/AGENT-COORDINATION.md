@@ -41,7 +41,17 @@ scripts/agents.py release terminal-A
 
 # Manually drop claims older than AGENTS_STALE_HOURS (default 2h)
 scripts/agents.py prune
+
+# Leave a note for another agent (or "all")
+scripts/agents.py message terminal-A terminal-B "Taking over Preview.tsx, please hold off"
+scripts/agents.py message terminal-A all "Pushed bc4c17c, pulling requires no merge"
+
+# Read notes (all messages, or only those addressed to you)
+scripts/agents.py messages
+scripts/agents.py messages terminal-B
 ```
+
+Messages have a 24h TTL (claims have 2h). Both live in `.agents-active.json`.
 
 ## Typical workflow (two terminals)
 

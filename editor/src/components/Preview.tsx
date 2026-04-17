@@ -52,7 +52,36 @@ export const Preview = () => {
     if (!player) return;
     if (isPlaying && !player.isPlaying()) player.play();
     else if (!isPlaying && player.isPlaying()) player.pause();
+
+    // Transport seatbelt: when the store says paused, ensure every audio
+    // and video element in the document is actually paused. Remotion
+    // Player.pause() *should* stop all its <Audio> tags, but if any media
+    // element escapes its control (dev-mode prefetch, leaked wavesurfer,
+    // Remotion shared-audio-context bug), this is the reliable kill.
+    // We do NOT force-play anything on the true branch — start-of-playback
+    // is Remotion's job and it needs the user-gesture context.
+    if (!isPlaying) {
+      document
+        .querySelectorAll<HTMLMediaElement>("audio, video")
+        .forEach((el) => {
+          if (!el.paused) el.pause();
+        });
+    }
   }, [isPlaying]);
+
+  // Panic-stop: press Escape to force-pause all media in the DOM. Useful
+  // when a runaway audio element survives the normal pause path.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setPlaying(false);
+      document
+        .querySelectorAll<HTMLMediaElement>("audio, video")
+        .forEach((el) => el.pause());
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setPlaying]);
 
   // Mirror the Player's actual state into the store. This is the critical
   // fix for "pause doesn't work": the Player owns playback state, and the

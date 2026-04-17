@@ -3,10 +3,11 @@ import { Timeline } from "./components/Timeline";
 import { ElementDetail } from "./components/ElementDetail";
 import { Sidebar } from "./components/Sidebar";
 import { TransportControls } from "./components/TransportControls";
-import { SpectrumDisplay } from "./components/SpectrumDisplay";
+import { Scrubber } from "./components/Scrubber";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useBeatData } from "./hooks/useBeatData";
-import { usePlaybackSync } from "./hooks/usePlaybackSync";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useEditorStore } from "./store";
 
 const DEFAULT_BEATS_URL = "/dubfire-beats.json";
 
@@ -26,11 +27,14 @@ export const App = () => {
   // Load beat data (overridable via ?beats=... query param)
   useBeatData(getBeatsUrl());
 
-  // Sync playback
-  usePlaybackSync();
+  // Keyboard shortcuts (space, arrows, home/end, etc.)
+  useKeyboardShortcuts();
+
+  const audioSrc = useEditorStore((s) => s.audioSrc);
+  const audioUrl = audioSrc ? `/${audioSrc.replace(/^\//, "")}` : null;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gridTemplateRows: "auto auto 1fr 200px", height: "100vh", background: "#111", color: "#fff" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "240px minmax(0, 1fr)", gridTemplateRows: "auto auto 1fr 200px", height: "100vh", width: "100vw", overflow: "hidden", background: "#111", color: "#fff" }}>
       {/* Sidebar column: Header → Element Library → Element Detail */}
       <div style={{ gridRow: "1/5", borderRight: "1px solid #333", padding: 0, overflowY: "auto" }}>
         <div style={{ padding: 16, borderBottom: "1px solid #333" }}>
@@ -49,9 +53,15 @@ export const App = () => {
         <TransportControls />
       </ErrorBoundary>
 
-      {/* Spectrum Display */}
-      <ErrorBoundary name="Spectrum Display">
-        <SpectrumDisplay />
+      {/* Scrubber — click-to-seek waveform with drop markers and playhead */}
+      <ErrorBoundary name="Scrubber">
+        {audioUrl ? (
+          <Scrubber audioUrl={audioUrl} />
+        ) : (
+          <div style={{ padding: 12, color: "#888", fontSize: 11 }}>
+            No audio source set.
+          </div>
+        )}
       </ErrorBoundary>
 
       {/* Preview */}

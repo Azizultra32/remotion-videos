@@ -15,6 +15,8 @@ export const useEditorStore = create<EditorState>()(
       fps: 24,
       snapToBeat: true,
       loopPlayback: false,
+      audioSrc: "dubfire-sake-audio.mp3",
+      beatsSrc: "dubfire-beats.json",
       setCurrentTime: (t) =>
         set((s) => ({
           currentTimeSec: typeof t === "function" ? t(s.currentTimeSec) : t,
@@ -34,6 +36,8 @@ export const useEditorStore = create<EditorState>()(
       setBeatData: (d) => set({ beatData: d }),
       setSnapToBeat: (s) => set({ snapToBeat: s }),
       setLoopPlayback: (l) => set({ loopPlayback: l }),
+      setAudioSrc: (s) => set({ audioSrc: s }),
+      setBeatsSrc: (s) => set({ beatsSrc: s }),
     }),
     {
       name: "music-video-editor",
@@ -45,8 +49,10 @@ export const useEditorStore = create<EditorState>()(
         fps: s.fps,
         snapToBeat: s.snapToBeat,
         loopPlayback: s.loopPlayback,
+        audioSrc: s.audioSrc,
+        beatsSrc: s.beatsSrc,
       }),
-      version: 1,
+      version: 2,
     },
   ),
 );

@@ -1,5 +1,9 @@
 // src/types.ts
-export type ElementType = "text" | "image" | "effect" | "beat-flash";
+// ElementType is an opaque string — the canonical values are the ids exported
+// by element modules in src/compositions/elements/**/registry.ts.
+// Legacy values ("text", "image", "effect", "beat-flash") may still appear in
+// older localStorage state and are silently ignored by MusicVideo at render time.
+export type ElementType = string;
 
 export type TimelineElement = {
   id: string;
@@ -31,6 +35,8 @@ export type EditorState = {
   fps: number;
   snapToBeat: boolean;
   loopPlayback: boolean;
+  audioSrc: string | null;
+  beatsSrc: string | null;
   // Actions
   setCurrentTime: (t: number | ((prev: number) => number)) => void;
   setPlaying: (p: boolean) => void;
@@ -41,4 +47,6 @@ export type EditorState = {
   setBeatData: (d: BeatData) => void;
   setSnapToBeat: (s: boolean) => void;
   setLoopPlayback: (l: boolean) => void;
+  setAudioSrc: (s: string | null) => void;
+  setBeatsSrc: (s: string | null) => void;
 };

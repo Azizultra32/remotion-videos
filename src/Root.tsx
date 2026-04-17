@@ -69,6 +69,11 @@ import {
   defaultPublicCutProps,
 } from "./compositions/PublicCut";
 import {
+  MusicVideo,
+  musicVideoSchema,
+  defaultMusicVideoProps,
+} from "./compositions/MusicVideo";
+import {
   AudioShaderViz,
   audioShaderVizSchema,
   defaultAudioShaderVizProps,
@@ -389,6 +394,16 @@ export const RemotionRoot: React.FC = () => {
         width={848}
         height={480}
         defaultProps={defaultPublicCutProps}
+      />
+      <Composition
+        id="MusicVideo"
+        component={MusicVideo}
+        schema={musicVideoSchema as any}
+        durationInFrames={24 * 300}
+        fps={24}
+        width={848}
+        height={480}
+        defaultProps={defaultMusicVideoProps as any}
       />
       <Composition
         id="BeatDrop"

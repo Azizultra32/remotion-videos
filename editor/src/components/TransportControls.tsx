@@ -14,19 +14,21 @@ const toggleButtonStyle = (active: boolean) => ({
 });
 
 export const TransportControls = () => {
-  const {
-    isPlaying,
-    setPlaying,
-    currentTimeSec,
-    setCurrentTime,
-    compositionDuration,
-    fps,
-    beatData,
-    snapToBeat,
-    setSnapToBeat,
-    loopPlayback,
-    setLoopPlayback,
-  } = useEditorStore();
+  // Granular selectors. A full destructure re-renders this component on
+  // every store change — including every frameupdate at 24 Hz during
+  // playback. That caused the whole toolbar to churn and starved the pause
+  // button's click. Same fix Preview got in 83d932b and Scrubber now has.
+  const isPlaying = useEditorStore((s) => s.isPlaying);
+  const setPlaying = useEditorStore((s) => s.setPlaying);
+  const currentTimeSec = useEditorStore((s) => s.currentTimeSec);
+  const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
+  const compositionDuration = useEditorStore((s) => s.compositionDuration);
+  const fps = useEditorStore((s) => s.fps);
+  const beatData = useEditorStore((s) => s.beatData);
+  const snapToBeat = useEditorStore((s) => s.snapToBeat);
+  const setSnapToBeat = useEditorStore((s) => s.setSnapToBeat);
+  const loopPlayback = useEditorStore((s) => s.loopPlayback);
+  const setLoopPlayback = useEditorStore((s) => s.setLoopPlayback);
 
   const jump = (delta: number) => {
     setCurrentTime(

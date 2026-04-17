@@ -17,14 +17,20 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
   const [ready, setReady] = useState(false);
   const [duration, setDuration] = useState(0);
 
-  const {
-    currentTimeSec,
-    setCurrentTime,
-    beatData,
-    compositionDuration,
-    isPlaying,
-    setPlaying,
-  } = useEditorStore();
+  // Granular selectors — only re-render when THESE specific fields change.
+  // currentTimeSec is deliberately NOT subscribed as state: it changes 24 Hz
+  // during playback, and if the whole component re-rendered on every frame
+  // the 130-element SVG overlay + wavesurfer.setTime call would starve the
+  // main thread and make Pause feel broken. Same fix Preview got in 83d932b.
+  //
+  // Instead we subscribe imperatively: a ref-based listener moves the
+  // playhead div via `element.style.left` and calls `ws.setTime`, bypassing
+  // React reconciliation entirely. React only re-renders when beatData,
+  // duration, audioSrc, etc. change — which happens rarely.
+  const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
+  const beatData = useEditorStore((s) => s.beatData);
+  const compositionDuration = useEditorStore((s) => s.compositionDuration);
+  const playheadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -82,24 +88,40 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
 
   // Do NOT call ws.play()/pause() here. WaveSurfer's internal MediaElement
   // would play its own audio in parallel with the Remotion Player, which
-  // either doubles up or (more often) kills both. The progress fill is
-  // already driven by the `setTime` effect below, which is sufficient.
-
-  // Keep wavesurfer's playhead in sync with the canonical store time.
+  // either doubles up or (more often) kills both.
+  //
+  // Imperative playhead + wavesurfer sync: subscribe directly to the store,
+  // move the playhead DOM node via inline style, and call ws.setTime. No
+  // React re-render per frame. This is the hot path during playback; doing
+  // it via useState/useEffect re-renders was the root cause of the pause bug.
   useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws || !ready || !duration) return;
-    const progress = Math.min(1, Math.max(0, currentTimeSec / duration));
-    // setTime is gentler than seekTo and won't restart playback.
-    if (typeof (ws as any).setTime === "function") {
-      (ws as any).setTime(currentTimeSec);
-    } else {
-      ws.seekTo(progress);
-    }
-  }, [currentTimeSec, ready, duration]);
+    if (!ready || !duration) return;
+    const update = (t: number) => {
+      const el = playheadRef.current;
+      if (el) {
+        const pct = Math.min(100, Math.max(0, (t / duration) * 100));
+        el.style.left = `${pct}%`;
+      }
+      const ws = wsRef.current;
+      if (ws && typeof (ws as any).setTime === "function") {
+        try {
+          (ws as any).setTime(t);
+        } catch {
+          // wavesurfer can throw after unmount or src removal; harmless.
+        }
+      }
+    };
+    // Paint initial position before the first store tick.
+    update(useEditorStore.getState().currentTimeSec);
+    // Listen for subsequent changes without re-rendering the component.
+    return useEditorStore.subscribe((state, prev) => {
+      if (state.currentTimeSec !== prev.currentTimeSec) {
+        update(state.currentTimeSec);
+      }
+    });
+  }, [ready, duration]);
 
   const totalSec = duration || compositionDuration || 1;
-  const playheadPct = Math.min(100, Math.max(0, (currentTimeSec / totalSec) * 100));
 
   return (
     <div
@@ -172,13 +194,16 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
           </svg>
         )}
 
-        {/* Playhead — canonical store time, not wavesurfer's */}
+        {/* Playhead — canonical store time. `left` is set imperatively by
+            the subscribe hook above so this component does NOT re-render
+            on every frame. */}
         <div
+          ref={playheadRef}
           style={{
             position: "absolute",
             top: 0,
             bottom: 0,
-            left: `${playheadPct}%`,
+            left: "0%",
             width: 2,
             background: "#fff",
             boxShadow: "0 0 4px rgba(255,255,255,0.8)",
@@ -206,11 +231,6 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
         </div>
       )}
 
-      {/* Tap anywhere to pause — convenience when waveform is hidden by overlay */}
-      <div
-        onClick={() => setPlaying(!isPlaying)}
-        style={{ display: "none" }}
-      />
     </div>
   );
 };

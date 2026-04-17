@@ -1,5 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><title>Music Video Editor</title><style>html,body{margin:0;padding:0;overflow:hidden}</style></head>
+<head><meta charset="UTF-8" /><title>Music Video Editor</title><style>
+html,body{margin:0;padding:0;overflow:hidden}
+/* Timeline: force a visible dark-theme scrollbar. macOS hides scrollbars
+   by default, which made long timelines feel stuck — users didn't know
+   they could scroll right. Chrome/Edge/Safari read the webkit-scrollbar
+   rules; Firefox reads scrollbar-color/scrollbar-width. */
+.timeline-scroll{scrollbar-color:#555 #181818;scrollbar-width:thin}
+.timeline-scroll::-webkit-scrollbar{width:12px;height:12px}
+.timeline-scroll::-webkit-scrollbar-track{background:#181818}
+.timeline-scroll::-webkit-scrollbar-thumb{background:#555;border:2px solid #181818;border-radius:6px}
+.timeline-scroll::-webkit-scrollbar-thumb:hover{background:#777}
+.timeline-scroll::-webkit-scrollbar-corner{background:#181818}
+</style></head>
 <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
 </html>

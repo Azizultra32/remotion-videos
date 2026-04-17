@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { TimelineElement as TimelineElementType } from "../types";
 import { useEditorStore } from "../store";
 import { TimelineElement } from "./TimelineElement";
@@ -31,12 +32,34 @@ export const Timeline = () => {
   const elements = useEditorStore((s) => s.elements);
   const compositionDuration = useEditorStore((s) => s.compositionDuration);
   const beatData = useEditorStore((s) => s.beatData);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const widthPx = compositionDuration * PX_PER_SEC;
   const tracksHeight = TRACK_COUNT * TRACK_HEIGHT;
 
+  // Auto-follow the playhead. Subscribe imperatively so we don't re-render
+  // the Timeline on every frame — just nudge scrollLeft when the playhead
+  // approaches the visible edge. Keeps ~40px of leading gutter visible
+  // when scrolled, so the user can still see track labels while scrubbing.
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const follow = (sec: number) => {
+      const playX = GUTTER_WIDTH + sec * PX_PER_SEC;
+      const viewL = scroller.scrollLeft + GUTTER_WIDTH;
+      const viewR = scroller.scrollLeft + scroller.clientWidth - 32;
+      if (playX < viewL || playX > viewR) {
+        scroller.scrollLeft = Math.max(0, playX - scroller.clientWidth / 2);
+      }
+    };
+    follow(useEditorStore.getState().currentTimeSec);
+    return useEditorStore.subscribe((state, prev) => {
+      if (state.currentTimeSec !== prev.currentTimeSec) follow(state.currentTimeSec);
+    });
+  }, []);
+
   return (
-    <div style={{ height: "100%", overflow: "auto", background: "#0a0a0a" }}>
+    <div ref={scrollRef} className="timeline-scroll" style={{ height: "100%", overflow: "auto", background: "#0a0a0a" }}>
       <div style={{ position: "relative", width: GUTTER_WIDTH + widthPx, minHeight: "100%" }}>
         {/* Ruler row — sticky left corner + scrolling ticks */}
         <div style={{ display: "flex", height: RULER_HEIGHT, position: "sticky", top: 0, zIndex: 3 }}>

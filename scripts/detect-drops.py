@@ -103,7 +103,16 @@ DROP_DEDUPE_BARS = 1
 NOVELTY_KERNEL_BARS = int(cfg.get("novelty_kernel_bars", args.novelty_kernel_bars))
 NOVELTY_MIN_DISTANCE_BARS = int(cfg.get("novelty_peak_min_distance_bars", args.novelty_min_distance_bars))
 NOVELTY_CONFIRM_TOLERANCE_BARS = int(args.novelty_confirm_tolerance_bars)
-NOVELTY_NEW_BREAKDOWN_BARS = 4  # emit 4-bar breakdowns for unconfirmed peaks
+# Prominence filters out noise peaks in the normalized [0,1] novelty curve.
+# 0.05 was empirically too permissive (audit T4 saw 44% of unconfirmed peaks
+# in high-energy regions — over-fitting to micro-variations). 0.15 cuts the
+# obvious noise without throwing away real boundaries.
+NOVELTY_PROMINENCE = float(cfg.get("novelty_prominence", 0.50))
+# Max bars a novelty-new breakdown can extend. Old code emitted fixed 4-bar
+# ranges; audit T3 flagged that 100% had identical 7.45s width — an artifact
+# signature. The variable-width extender below will stop earlier if energy
+# returns. The cap is here as a safety net for tracks where energy stays low.
+NOVELTY_NEW_BREAKDOWN_BARS_MAX = 16
 
 STRUCT_PCTS = cfg.get("struct_percentiles", [25, 50, 70])
 NOVELTY_ENERGY_WINDOW = (-2, 6)  # [peak-2, peak+6) must be <= struct_p50
@@ -334,14 +343,24 @@ percentile_breakdown_bars: list[tuple[int, int]] = []  # (start_bar, end_bar_exc
 buildups: list[dict] = []
 drops_sec: list[float] = []
 
+def _snap_end_to_grid(end_bar: int) -> float:
+    """Return breakdown end time snapped to the downbeat grid.
+
+    Old code used `downbeats[end_bar] + mean_bar_sec` when the breakdown
+    ran to the last bar, which drifts off-grid (audit T2 fired on this).
+    Now: always snap to a downbeat — use `downbeats[end_bar+1]` if in
+    range, else `downbeats[-1]` as the terminal boundary (the last real
+    downbeat IS a grid point, unlike `duration`)."""
+    if end_bar + 1 < len(downbeats):
+        return float(downbeats[end_bar + 1])
+    return float(downbeats[-1])
+
+
 if structure_detected:
     breakdown_mask = struct_per_bar <= struct_p25
     for start_bar, end_bar in runs_where(breakdown_mask, BARS_PER_BREAKDOWN_MIN):
         start_t = float(downbeats[start_bar])
-        end_bar_start = float(downbeats[end_bar])
-        # Breakdown ends at the downbeat after the last qualifying bar.
-        end_t = float(downbeats[end_bar + 1]) if end_bar + 1 < len(downbeats) \
-            else end_bar_start + mean_bar_sec
+        end_t = _snap_end_to_grid(end_bar)
         percentile_breakdowns.append({"start": round(start_t, 3), "end": round(end_t, 3)})
         percentile_breakdown_bars.append((start_bar, end_bar + 1))
     # Retain old variable name for the legacy drop-finding pass below.
@@ -369,9 +388,7 @@ if structure_detected:
     buildup_mask = (struct_slope > 0) & (bass_per_bar <= bass_p50)
     for start_bar, end_bar in runs_where(buildup_mask, BARS_PER_BUILDUP_MIN):
         start_t = float(downbeats[start_bar])
-        end_bar_start = float(downbeats[end_bar])
-        end_t = float(downbeats[end_bar + 1]) if end_bar + 1 < len(downbeats) \
-            else end_bar_start + mean_bar_sec
+        end_t = _snap_end_to_grid(end_bar)
         buildups.append({"start": round(start_t, 3), "end": round(end_t, 3)})
 
     def first_loud_bar_after(bar_idx: int) -> int | None:
@@ -381,19 +398,47 @@ if structure_detected:
                 return k
         return None
 
-    candidates: list[float] = []
+    # EDM phrase structure is quantized to 16-bar multiples. Search in a
+    # window around the raw "first loud bar" candidate for a bar that is
+    # BOTH loud AND sits on a 16/32/64/128-bar boundary. Prefer the nearest
+    # phrase-aligned loud bar over the strict first-loud-bar — drops
+    # audibly land on phrase boundaries in 4/4 EDM, and a few bars of
+    # tolerance here materially improves alignment. If no phrase-aligned
+    # loud bar exists in the window, keep the raw candidate.
+    PHRASE_LENGTHS = (16, 32, 64, 128)
+    PHRASE_SEARCH_BARS = 12
+
+    def _bar_is_loud(k: int) -> bool:
+        return (0 <= k < num_bars
+                and struct_per_bar[k] >= struct_p70
+                and bass_per_bar[k] >= bass_p50)
+
+    def _bar_is_phrase_aligned(k: int) -> bool:
+        return any(k % phrase == 0 for phrase in PHRASE_LENGTHS)
+
+    def _snap_to_phrase(bar_idx: int) -> int:
+        # Prefer the closest phrase-aligned loud bar within ±PHRASE_SEARCH_BARS.
+        # Scan outward from bar_idx so ties are broken by proximity.
+        for delta in range(PHRASE_SEARCH_BARS + 1):
+            for k in (bar_idx - delta, bar_idx + delta):
+                if _bar_is_phrase_aligned(k) and _bar_is_loud(k):
+                    return k
+        return bar_idx
+
+    candidate_bars: list[int] = []
     for bd in breakdowns:
         end_bar_idx = int(np.searchsorted(downbeats, bd["end"], side="left"))
         k = first_loud_bar_after(end_bar_idx)
         if k is not None:
-            candidates.append(float(downbeats[k]))
+            candidate_bars.append(_snap_to_phrase(k))
     for bu in buildups:
         end_bar_idx = int(np.searchsorted(downbeats, bu["end"], side="left"))
         k = first_loud_bar_after(end_bar_idx)
         if k is not None:
-            candidates.append(float(downbeats[k]))
+            candidate_bars.append(_snap_to_phrase(k))
 
-    candidates.sort()
+    candidate_bars.sort()
+    candidates = [float(downbeats[b]) for b in candidate_bars]
     dedupe_sec = DROP_DEDUPE_BARS * mean_bar_sec
     for t in candidates:
         if not drops_sec or (t - drops_sec[-1]) > dedupe_sec:
@@ -423,7 +468,7 @@ novelty_curve = foote_novelty(ssm, kernel)
 peak_idx, _peak_props = find_peaks(
     novelty_curve,
     distance=max(1, NOVELTY_MIN_DISTANCE_BARS),
-    prominence=0.05,
+    prominence=NOVELTY_PROMINENCE,
 )
 # Drop peaks that fall in the boundary region where the kernel is half-padded
 # with zeros — their novelty values are dominated by padding, not content.
@@ -457,18 +502,32 @@ def _window_below_p50(bar: int) -> bool:
     return float(np.mean(struct_per_bar[lo:hi])) <= struct_p50
 
 
+def _extend_novelty_end(bar: int) -> int:
+    """Walk forward from a novelty peak until energy returns (> struct_p50)
+    OR we hit the max-length cap. Produces variable-width breakdowns
+    that end when the section actually does, not at a fixed 4 bars."""
+    k = bar
+    cap = min(num_bars, bar + NOVELTY_NEW_BREAKDOWN_BARS_MAX)
+    while k < cap and struct_per_bar[k] <= struct_p50:
+        k += 1
+    # Require at least 2 bars of low energy, otherwise this is a transient,
+    # not a section boundary.
+    if k - bar < 2:
+        return -1
+    return k
+
+
 for bar in novelty_peaks_bars:
     if _near_any_percentile_breakdown(bar):
         novelty_confirmed_bars.append(bar)
         continue
     if not _window_below_p50(bar):
         continue  # loud transition — that's a drop, not a breakdown
-    end_bar = min(num_bars, bar + NOVELTY_NEW_BREAKDOWN_BARS)
+    end_bar = _extend_novelty_end(bar)
+    if end_bar < 0:
+        continue  # too short to be a real section
     start_t = float(downbeats[bar])
-    if end_bar < len(downbeats):
-        end_t = float(downbeats[end_bar])
-    else:
-        end_t = start_t + NOVELTY_NEW_BREAKDOWN_BARS * mean_bar_sec
+    end_t = _snap_end_to_grid(end_bar - 1) if end_bar > 0 else float(downbeats[bar]) + mean_bar_sec
     novelty_new_breakdowns.append({"start": round(start_t, 3), "end": round(end_t, 3)})
     novelty_new_bar_ranges.append((bar, end_bar))
 

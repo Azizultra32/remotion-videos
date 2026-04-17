@@ -130,15 +130,102 @@ if USE_MADMOM:
     # is a (frames, 2) array of [beat_prob, downbeat_prob] per 10ms frame.
     rnn = RNNDownBeatProcessor()
     activations = rnn(AUDIO)
-    # DBN ties the RNN activations to a bar-phase state machine with
-    # beats_per_bar=[3,4] (3/4 and 4/4 time signatures).
-    dbn = DBNDownBeatTrackingProcessor(beats_per_bar=[3, 4], fps=100)
+    # DBN ties the RNN activations to a bar-phase state machine.
+    #
+    # Two priors we apply to stop the DBN from half-time-latching a sparse
+    # intro (the failure mode that gave the Love-In-Traffic output 15 "bars"
+    # at 3.72s spacing before snapping to the correct 1.86s).
+    #
+    # 1. beats_per_bar=[4]. Deep house / EDM is 4/4. Giving the HMM a 3/4
+    #    option lets it settle into a valid-looking-but-wrong interpretation.
+    # 2. min_bpm / max_bpm constrained around librosa's global tempo
+    #    estimate. With bpm in ±TEMPO_WINDOW_BPM of the estimate and
+    #    beats_per_bar=4, a bar of period 2× the true bar is
+    #    arithmetically impossible (would imply bpm below min_bpm).
+    #    This removes the half-time basin entirely.
+    TEMPO_WINDOW_BPM = 15.0
+    bpm_est = float(tempo)
+    min_bpm = max(60.0, bpm_est - TEMPO_WINDOW_BPM)
+    max_bpm = min(210.0, bpm_est + TEMPO_WINDOW_BPM)
+    print(f"  tempo prior: {min_bpm:.1f}–{max_bpm:.1f} BPM "
+          f"(librosa estimate = {bpm_est:.2f} ± {TEMPO_WINDOW_BPM:.0f}), "
+          f"beats_per_bar=[4]", flush=True)
+    dbn = DBNDownBeatTrackingProcessor(
+        beats_per_bar=[4],
+        min_bpm=min_bpm,
+        max_bpm=max_bpm,
+        fps=100,
+    )
     dbn_out = dbn(activations)  # shape (N, 2): [time_sec, beat_pos_within_bar]
     # Downbeats are rows where beat_pos_within_bar == 1.
     madmom_downbeats = dbn_out[dbn_out[:, 1] == 1, 0]
     madmom_downbeats = np.asarray([float(t) for t in madmom_downbeats])
     print(f"  madmom found {len(dbn_out)} beats, "
           f"{len(madmom_downbeats)} downbeats", flush=True)
+
+    # ── Outlier-bisection safety net ───────────────────────────────────
+    # Belt-and-suspenders for the tempo prior above. If any remaining
+    # delta is still >= 1.5× the median (i.e. madmom skipped a bar
+    # despite the prior), insert intermediate downbeats at the expected
+    # bar period, snapped to the nearest librosa beat for phase.
+    # Track-agnostic: uses the detector's own median delta as ground truth
+    # and the librosa beat grid (already in beat_times) for snap targets.
+    def _bisect_outlier_deltas(downbeats, beat_grid, max_ratio=1.5):
+        """Return a downbeat array with outlier deltas subdivided.
+
+        Any delta >= ``max_ratio × median(deltas)`` is replaced with
+        evenly-spaced intermediate downbeats at the median bar period,
+        each snapped to the nearest entry in ``beat_grid``. Runs until
+        no delta exceeds the threshold or no progress is made.
+        """
+        if len(downbeats) < 3:
+            return downbeats
+        beat_grid = np.asarray(beat_grid, dtype=float)
+        for _pass in range(8):  # hard cap — protects against infinite loop
+            deltas = np.diff(downbeats)
+            if len(deltas) == 0:
+                break
+            median = float(np.median(deltas))
+            worst = float(np.max(deltas))
+            if median <= 0 or worst < max_ratio * median:
+                return downbeats
+            out = [downbeats[0]]
+            inserted = 0
+            for i in range(len(deltas)):
+                lo = downbeats[i]
+                hi = downbeats[i + 1]
+                dt = hi - lo
+                # How many bars *should* be in this gap?
+                n_bars = int(round(dt / median))
+                if n_bars >= 2 and dt >= max_ratio * median:
+                    step = dt / n_bars
+                    for k in range(1, n_bars):
+                        tgt = lo + step * k
+                        if len(beat_grid) > 0:
+                            snap = float(beat_grid[np.argmin(np.abs(beat_grid - tgt))])
+                            # Only snap if it's within half a bar, else keep
+                            # the unsnapped interpolation.
+                            if abs(snap - tgt) <= 0.5 * median:
+                                tgt = snap
+                        out.append(tgt)
+                        inserted += 1
+                out.append(hi)
+            new_downbeats = np.asarray(out, dtype=float)
+            if inserted == 0 or len(new_downbeats) == len(downbeats):
+                return downbeats
+            print(f"  bisect pass {_pass + 1}: inserted {inserted} "
+                  f"intermediate downbeat(s), new total "
+                  f"{len(new_downbeats)}", flush=True)
+            downbeats = new_downbeats
+        return downbeats
+
+    before = len(madmom_downbeats)
+    madmom_downbeats = _bisect_outlier_deltas(
+        madmom_downbeats, beat_times, max_ratio=1.5
+    )
+    if len(madmom_downbeats) != before:
+        print(f"  outlier-bisection: {before} → {len(madmom_downbeats)} "
+              f"downbeats", flush=True)
 
     # Phase error comparison against librosa[::4]. For each librosa downbeat,
     # find the nearest madmom downbeat — compute offset in beats (relative to

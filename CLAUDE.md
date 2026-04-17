@@ -26,6 +26,31 @@ using the session id, so in practice you rarely need to call `claim` manually
 — but `status` before starting work is still a good sanity check. Full docs:
 `docs/AGENT-COORDINATION.md`.
 
+## Git Hygiene (tied to Remotion's determinism guarantee)
+
+Remotion renders are byte-identical for the same `(code, props, assets)`
+tuple. That guarantee is only useful if you can recover the exact input later,
+which means git discipline is part of the workflow, not optional.
+
+1. **Commit before every render you want to reference.** If an exported MP4
+   corresponds to no commit, you can't bisect "when did the drop sync break?"
+   Rule: no final render from a dirty tree.
+2. **Tag released renders.** When you export an MP4 for DaVinci, run:
+   `git tag render-<project>-<version>` (e.g. `render-dubfire-v3`).
+   Tags are the map from final-file → source code.
+3. **Props/state in git, not the editor alone.** The editor saves state to
+   `edits.json` / `project.json`; commit those with the code that consumes
+   them. "That version I liked yesterday" stays recoverable.
+4. **Stage narrowly — verify before committing.** When multiple agents are
+   live (see above), prefer `git add <specific-file>` over `git add -A/.`,
+   and always run `git diff --cached --stat` before `git commit` so you know
+   exactly what's in the commit. Another agent's pre-staged files WILL be
+   swept up otherwise.
+5. **Media stays out of git.** Raw video/audio (MP4/WAV > 10MB) belongs in
+   `~/media-raw/` or external storage, referenced by absolute path from
+   `project.json`. Git tracks code + small analysis JSON + stills + edit
+   state; not source media.
+
 ## Project Structure
 ```
 src/

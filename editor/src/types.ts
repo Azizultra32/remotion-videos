@@ -29,6 +29,8 @@ export type EditorState = {
   beatData: BeatData | null;
   compositionDuration: number; // seconds
   fps: number;
+  snapToBeat: boolean;
+  loopPlayback: boolean;
   // Actions
   setCurrentTime: (t: number | ((prev: number) => number)) => void;
   setPlaying: (p: boolean) => void;
@@ -37,4 +39,6 @@ export type EditorState = {
   removeElement: (id: string) => void;
   selectElement: (id: string | null) => void;
   setBeatData: (d: BeatData) => void;
+  setSnapToBeat: (s: boolean) => void;
+  setLoopPlayback: (l: boolean) => void;
 };

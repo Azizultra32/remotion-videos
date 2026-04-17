@@ -25,7 +25,10 @@ export const useElementDrag = (elementId: string, pxPerSec: number) => {
       const maxStart = state.compositionDuration - currentEl.durationSec;
       const boundedStart = Math.min(maxStart, Math.max(0, rawNewStart));
 
-      const snapped = ev.shiftKey ? boundedStart : snapToBeat(boundedStart, beats);
+      const state2 = useEditorStore.getState();
+      // shift-key inverts the current snap setting
+      const shouldSnap = ev.shiftKey ? !state2.snapToBeat : state2.snapToBeat;
+      const snapped = shouldSnap ? snapToBeat(boundedStart, beats) : boundedStart;
       updateElement(elementId, { startSec: snapped });
     };
     const onUp = () => {

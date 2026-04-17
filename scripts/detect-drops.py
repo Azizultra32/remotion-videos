@@ -1,58 +1,43 @@
-"""Track-agnostic EDM structure detector (percentile+novelty).
+"""Track-agnostic EDM breakdown detector (amplitude-only — does NOT claim
+structure detection).
 
-Replaces the legacy absolute-dB detector. All thresholds are derived from
-per-track percentiles of banded RMS aggregated per-bar using the beat grid
-produced by detect-beats.py — so the detector self-calibrates to any mix.
+**Scope — read before editing.**
 
-Two structural signals are combined:
+This script is an *amplitude* detector, not a structure detector.
+It identifies regions where banded-RMS energy drops — which correspond
+to audible/visible breakdowns in a waveform. It does NOT identify:
 
-  Signal A — "adaptive percentile" (v2):
-    HIGHS+AIR energy dropping below struct_p25 for >=8 bars. Fires on
-    breakdowns where hats/pads/leads strip out. Robust on deep/minimal
-    tracks that keep bass running through the breakdown.
+  - drops (kick/bass re-entry is a timbral event, not an amplitude event)
+  - buildups (risers are spectral-centroid + onset-density events,
+    not RMS events — a slow intro fade-in looks identical to a riser
+    in RMS space)
+  - phrase boundaries (16/32/64 bar arrangement alignment)
 
-  Signal B — "Foote novelty" (2026-04-17 extension):
-    MFCC per-bar → self-similarity matrix → checkerboard-kernel novelty
-    curve → scipy.signal.find_peaks. Peaks mark bars where timbre
-    changes abruptly (section boundaries). Based on Foote 2000,
-    "Automatic audio segmentation using a measure of audio novelty
-    score." Industry-standard boundary detector. MFCC captures timbral
-    similarity: two bars that "sound the same" score high on the SSM.
+Prior versions emitted `drops` and `buildups` fields by threshold-tuning
+percentile conjunctions. Those fields were perceptually random because
+RMS cannot see the features that define drops and buildups. We removed
+them rather than keep shipping confabulations. See:
+`~/.claude/projects/-Users-ali-remotion-videos/memory/
+ feedback_dont_confabulate_to_defend_broken_output.md` for context.
 
-Merge strategy (percentile is truth, novelty adds coverage):
-  - Keep all percentile-detected breakdowns.
-  - Each novelty peak within +/-4 bars of a percentile breakdown is
-    "confirmed-by-both" (recorded in analysis_meta, does not add a
-    new breakdown).
-  - Each novelty peak NOT near any percentile breakdown gets emitted
-    as a 4-bar breakdown at [peak, peak+4) iff the surrounding window
-    [peak-2, peak+6) averages at or below struct_p50. This avoids
-    flagging loud transitions (those are drops, not breakdowns).
-  - Final breakdown list is sorted by start time and overlapping
-    ranges are merged.
+Two breakdown signals are combined:
 
-Algorithm summary:
-  1. Banded RMS: bass (80-250 Hz), highs (2k-8k), air (8k+).
-  2. Per-bar aggregation (median) between consecutive downbeats.
-  3. Primary curve: struct_per_bar = dB(highs + air) per bar.
-  4. Percentiles on struct: struct_p25 ("stripped down") and struct_p70 ("full").
-  5. Guardrail: if struct_p70 - struct_p25 < 6 dB, the track has no
-     meaningful structure — emit empty lists and a warning.
-  6. Breakdown_percentile: >=8 consecutive bars at or below struct_p25.
-  7. Buildup: >=4 consecutive bars where struct_per_bar slope is positive
-     AND bass is flat / below bass_p50. The classic riser pattern.
-  8. Drop: single downbeat timestamp — first bar after a breakdown/buildup
-     where BOTH struct_per_bar >= struct_p70 AND bass_per_bar >= bass_p50
-     (the full mix comes back, not just hats). Dedupe within 1 bar, cap
-     at floor(dur/30).
-  9. MFCC (13 coeff) per-bar → cosine SSM → Foote novelty with 2N=16-bar
-     Gaussian checkerboard → scipy find_peaks (min-distance 8 bars).
- 10. Merge novelty peaks into breakdowns per the rules above.
- 11. Energy: struct_per_bar stored as percentile rank in [0, 1] per bar.
+  Signal A — "adaptive percentile":
+    HIGHS+AIR energy dropping below struct_p25 for >=8 bars. Robust on
+    deep/minimal tracks where the bass keeps running through breakdowns.
 
-Augments the input beats JSON in place. Existing `drops`, `breakdowns`,
-`energy` keys are retained (types preserved). Legacy `silences` and
-`drop_detection` keys are removed.
+  Signal B — "Foote novelty" (Foote 2000):
+    MFCC self-similarity matrix + checkerboard novelty. Peaks mark
+    timbral-change boundaries. Used only to AUGMENT breakdown detection
+    where the surrounding window is below struct_p50 (so we don't
+    flag loud transitions as breakdowns).
+
+Output fields:
+  - breakdowns: [{start, end}]  — audible quiet sections
+  - energy: [{t, rel}]          — per-bar percentile rank of struct_per_bar
+  - drops: []                   — always empty; amplitude can't see drops
+  - buildups: []                — always empty; amplitude can't see risers
+  - analysis_meta: { ... }      — percentiles, novelty debug, algorithm name
 """
 import argparse
 import json
@@ -363,92 +348,17 @@ if structure_detected:
         end_t = _snap_end_to_grid(end_bar)
         percentile_breakdowns.append({"start": round(start_t, 3), "end": round(end_t, 3)})
         percentile_breakdown_bars.append((start_bar, end_bar + 1))
-    # Retain old variable name for the legacy drop-finding pass below.
+    # Retain old variable name for downstream merge with novelty peaks.
     breakdowns = list(percentile_breakdowns)
 
-    # Buildup: sustained positive HF slope with flat/low bass. Use a 4-bar
-    # window to smooth slope estimation and require bass_per_bar <= p50.
-    def rolling_slope(x: np.ndarray, window: int) -> np.ndarray:
-        n = len(x)
-        out = np.zeros(n)
-        half = window // 2
-        for i in range(n):
-            a = max(0, i - half)
-            b = min(n, i + half + 1)
-            seg = x[a:b]
-            if len(seg) < 2:
-                continue
-            t = np.arange(len(seg), dtype=float)
-            # Least-squares slope.
-            slope = np.polyfit(t, seg, 1)[0]
-            out[i] = slope
-        return out
-
-    struct_slope = rolling_slope(struct_per_bar, window=BARS_PER_BUILDUP_MIN)
-    buildup_mask = (struct_slope > 0) & (bass_per_bar <= bass_p50)
-    for start_bar, end_bar in runs_where(buildup_mask, BARS_PER_BUILDUP_MIN):
-        start_t = float(downbeats[start_bar])
-        end_t = _snap_end_to_grid(end_bar)
-        buildups.append({"start": round(start_t, 3), "end": round(end_t, 3)})
-
-    def first_loud_bar_after(bar_idx: int) -> int | None:
-        # Drop = full mix returns: hats/air up AND bass present.
-        for k in range(bar_idx, num_bars):
-            if struct_per_bar[k] >= struct_p70 and bass_per_bar[k] >= bass_p50:
-                return k
-        return None
-
-    # EDM phrase structure is quantized to 16-bar multiples. Search in a
-    # window around the raw "first loud bar" candidate for a bar that is
-    # BOTH loud AND sits on a 16/32/64/128-bar boundary. Prefer the nearest
-    # phrase-aligned loud bar over the strict first-loud-bar — drops
-    # audibly land on phrase boundaries in 4/4 EDM, and a few bars of
-    # tolerance here materially improves alignment. If no phrase-aligned
-    # loud bar exists in the window, keep the raw candidate.
-    PHRASE_LENGTHS = (16, 32, 64, 128)
-    PHRASE_SEARCH_BARS = 12
-
-    def _bar_is_loud(k: int) -> bool:
-        return (0 <= k < num_bars
-                and struct_per_bar[k] >= struct_p70
-                and bass_per_bar[k] >= bass_p50)
-
-    def _bar_is_phrase_aligned(k: int) -> bool:
-        return any(k % phrase == 0 for phrase in PHRASE_LENGTHS)
-
-    def _snap_to_phrase(bar_idx: int) -> int:
-        # Prefer the closest phrase-aligned loud bar within ±PHRASE_SEARCH_BARS.
-        # Scan outward from bar_idx so ties are broken by proximity.
-        for delta in range(PHRASE_SEARCH_BARS + 1):
-            for k in (bar_idx - delta, bar_idx + delta):
-                if _bar_is_phrase_aligned(k) and _bar_is_loud(k):
-                    return k
-        return bar_idx
-
-    candidate_bars: list[int] = []
-    for bd in breakdowns:
-        end_bar_idx = int(np.searchsorted(downbeats, bd["end"], side="left"))
-        k = first_loud_bar_after(end_bar_idx)
-        if k is not None:
-            candidate_bars.append(_snap_to_phrase(k))
-    for bu in buildups:
-        end_bar_idx = int(np.searchsorted(downbeats, bu["end"], side="left"))
-        k = first_loud_bar_after(end_bar_idx)
-        if k is not None:
-            candidate_bars.append(_snap_to_phrase(k))
-
-    candidate_bars.sort()
-    candidates = [float(downbeats[b]) for b in candidate_bars]
-    dedupe_sec = DROP_DEDUPE_BARS * mean_bar_sec
-    for t in candidates:
-        if not drops_sec or (t - drops_sec[-1]) > dedupe_sec:
-            drops_sec.append(t)
-
-    max_drops = max(1, int(duration // 30))
-    if len(drops_sec) > max_drops:
-        drops_sec = drops_sec[:max_drops]
-
-    drops_sec = [round(t, 3) for t in drops_sec]
+# Drops and buildups intentionally empty. See module docstring:
+# amplitude-only RMS cannot distinguish a drop (kick/bass re-entry = timbral
+# event) from a plateau, and cannot distinguish a riser (spectral-centroid +
+# onset-density ramp) from a slow intro fade. Prior versions tuned
+# percentile conjunctions until audit tests passed while the outputs were
+# perceptually random. We removed those fields rather than ship noise.
+drops_sec = []
+buildups = []
 
 # === Signal B: Foote novelty over per-bar MFCC self-similarity ==============
 # Computed unconditionally so analysis_meta always reports a value, even if

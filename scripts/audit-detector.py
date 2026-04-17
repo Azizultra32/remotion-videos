@@ -487,10 +487,12 @@ TESTS = [
     ("T1 downbeat grid regularity", test_t1_downbeat_regularity),
     ("T2 bar-index ↔ time consistency", test_t2_bar_index_time_consistency),
     ("T3 breakdown width diversity", test_t3_breakdown_width_diversity),
-    ("T4 unconfirmed novelty peak positioning", test_t4_unconfirmed_peak_positioning),
-    ("T5 drop phrase alignment", test_t5_drop_phrase_alignment),
     ("T6 madmom half-time sanity", test_t6_madmom_halftime_sanity),
-    ("T7 buildup/breakdown disjoint", test_t7_buildup_breakdown_disjoint),
+    # T4 (unconfirmed novelty peak positioning), T5 (drop phrase alignment),
+    # and T7 (buildup/breakdown disjoint) were removed when drops/buildups
+    # were deleted from the detector output. Those tests measured artifacts
+    # of an amplitude-based pretend-structure-detector; now that the detector
+    # only claims to find breakdowns, they don't apply.
 ]
 
 

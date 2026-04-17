@@ -30,7 +30,15 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
   const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
   const beatData = useEditorStore((s) => s.beatData);
   const compositionDuration = useEditorStore((s) => s.compositionDuration);
+  const audioSrc = useEditorStore((s) => s.audioSrc);
   const playheadRef = useRef<HTMLDivElement>(null);
+
+  const trackName = audioSrc
+    ? audioSrc
+        .replace(/^.*\//, "")
+        .replace(/\.[^.]+$/, "")
+        .replace(/[-_]+/g, " ")
+    : null;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -141,8 +149,8 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
           justifyContent: "space-between",
         }}
       >
-        <span>
-          Waveform — click to seek · space: play/pause · ← → step 1s · shift+← → 5s
+        <span style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          Waveform{trackName ? ` — ${trackName}` : ""}
         </span>
         <span>
           {beatData

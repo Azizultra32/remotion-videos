@@ -22,20 +22,25 @@ export const WaveformViz: React.FC<WaveformVizProps> = ({
   const { width, fps } = useVideoConfig();
   const currentTimeSec = frame / fps;
 
-  // Generate waveform bars from beat data
-  const bars = useMemo(() => {
+  // PERFORMANCE FIX: Optimize bar calculation to avoid recalculating on every frame
+  // Static bar positions (only recalculate when beats/width/duration change)
+  const staticBars = useMemo(() => {
     if (beats.length === 0) return [];
+    return beats.map((beatTime) => ({
+      beatTime,
+      x: (beatTime / duration) * width,
+    }));
+  }, [beats, width, duration]);
 
-    const barWidth = width / beats.length;
-    return beats.map((beatTime, i) => {
+  // Dynamic properties (recalculate only when time crosses 0.5s boundaries)
+  const timeQuantized = Math.floor(currentTimeSec * 2) / 2; // Snap to 0.5s intervals
+  const bars = useMemo(() => {
+    return staticBars.map(({ beatTime, x }) => {
       // Height based on proximity to current time (taller when playing)
-      const timeDiff = Math.abs(currentTimeSec - beatTime);
+      const timeDiff = Math.abs(timeQuantized - beatTime);
       const heightMultiplier = timeDiff < 0.5 ? 1.0 : timeDiff < 2.0 ? 0.6 : 0.3;
       const barHeight = height * heightMultiplier;
-
-      // Position in timeline
-      const x = (beatTime / duration) * width;
-      const isPast = beatTime < currentTimeSec;
+      const isPast = beatTime < timeQuantized;
 
       return {
         x,
@@ -43,7 +48,7 @@ export const WaveformViz: React.FC<WaveformVizProps> = ({
         isPast,
       };
     });
-  }, [beats, currentTimeSec, width, duration, height]);
+  }, [staticBars, timeQuantized, height]);
 
   // Progress indicator
   const progressX = (currentTimeSec / duration) * width;
@@ -75,7 +80,6 @@ export const WaveformViz: React.FC<WaveformVizProps> = ({
             backgroundColor: bar.isPast
               ? color
               : color.replace("0.6", "0.3").replace("0.8", "0.4"),
-            transition: "height 0.1s ease-out",
           }}
         />
       ))}

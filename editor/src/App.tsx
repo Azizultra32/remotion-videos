@@ -3,6 +3,7 @@ import { Timeline } from "./components/Timeline";
 import { ElementDetail } from "./components/ElementDetail";
 import { TransportControls } from "./components/TransportControls";
 import { SpectrumDisplay } from "./components/SpectrumDisplay";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useBeatData } from "./hooks/useBeatData";
 import { usePlaybackSync } from "./hooks/usePlaybackSync";
 
@@ -20,23 +21,33 @@ export const App = () => {
         <div style={{ padding: 16, borderBottom: "1px solid #333" }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Music Video Editor</h2>
         </div>
-        <ElementDetail />
+        <ErrorBoundary name="Element Detail">
+          <ElementDetail />
+        </ErrorBoundary>
       </div>
 
       {/* Transport Controls */}
-      <TransportControls />
+      <ErrorBoundary name="Transport Controls">
+        <TransportControls />
+      </ErrorBoundary>
 
       {/* Spectrum Display */}
-      <SpectrumDisplay />
+      <ErrorBoundary name="Spectrum Display">
+        <SpectrumDisplay />
+      </ErrorBoundary>
 
       {/* Preview */}
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", background: "#000" }}>
-        <Preview />
+        <ErrorBoundary name="Preview">
+          <Preview />
+        </ErrorBoundary>
       </div>
 
       {/* Timeline */}
       <div style={{ borderTop: "1px solid #333" }}>
-        <Timeline />
+        <ErrorBoundary name="Timeline">
+          <Timeline />
+        </ErrorBoundary>
       </div>
     </div>
   );

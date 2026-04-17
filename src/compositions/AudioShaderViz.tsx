@@ -13,7 +13,8 @@ import { z } from "zod";
 export const audioShaderVizSchema = z.object({
   audioSrc: z.string(),
   beatsSrc: z.string(),
-  shaderPreset: z.enum(["sonar", "spectrum", "tunnel"]).default("sonar"),
+  // Only "sonar" shader is implemented. Adding new presets requires a new shader source + switch.
+  shaderPreset: z.enum(["sonar"]).default("sonar"),
   colorPalette: z.enum(["blue", "purple", "fire", "ice"]).default("blue"),
   beatSensitivity: z.number().min(0).max(2).default(1.0),
 });
@@ -124,6 +125,7 @@ const ShaderCanvas: React.FC<{
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const glRef = React.useRef<WebGLRenderingContext | null>(null);
   const programRef = React.useRef<WebGLProgram | null>(null);
+  const bufferRef = React.useRef<WebGLBuffer | null>(null);
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -145,7 +147,7 @@ const ShaderCanvas: React.FC<{
     if (!gl) return;
     glRef.current = gl;
 
-    // Compile shader
+    // Compile vertex shader
     const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
     gl.shaderSource(
       vertexShader,
@@ -153,18 +155,46 @@ const ShaderCanvas: React.FC<{
     );
     gl.compileShader(vertexShader);
 
+    // CRITICAL FIX: Check compilation status
+    if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+      console.error("Vertex shader compilation failed:", gl.getShaderInfoLog(vertexShader));
+      gl.deleteShader(vertexShader);
+      return;
+    }
+
+    // Compile fragment shader
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
     gl.shaderSource(fragmentShader, sonarShaderSource);
     gl.compileShader(fragmentShader);
 
+    // CRITICAL FIX: Check compilation status
+    if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
+      console.error("Fragment shader compilation failed:", gl.getShaderInfoLog(fragmentShader));
+      gl.deleteShader(vertexShader);
+      gl.deleteShader(fragmentShader);
+      return;
+    }
+
+    // Link program
     const program = gl.createProgram()!;
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
+
+    // CRITICAL FIX: Check link status
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error("Program linking failed:", gl.getProgramInfoLog(program));
+      gl.deleteShader(vertexShader);
+      gl.deleteShader(fragmentShader);
+      gl.deleteProgram(program);
+      return;
+    }
+
     programRef.current = program;
 
     // Setup geometry
     const buffer = gl.createBuffer();
+    bufferRef.current = buffer;
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(
       gl.ARRAY_BUFFER,
@@ -175,6 +205,22 @@ const ShaderCanvas: React.FC<{
     const position = gl.getAttribLocation(program, "position");
     gl.enableVertexAttribArray(position);
     gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+    // CRITICAL FIX: Cleanup WebGL resources on unmount
+    return () => {
+      if (program) {
+        gl.deleteProgram(program);
+      }
+      if (vertexShader) {
+        gl.deleteShader(vertexShader);
+      }
+      if (fragmentShader) {
+        gl.deleteShader(fragmentShader);
+      }
+      if (buffer) {
+        gl.deleteBuffer(buffer);
+      }
+    };
   }, []);
 
   React.useEffect(() => {

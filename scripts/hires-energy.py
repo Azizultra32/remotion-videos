@@ -4,30 +4,14 @@ Also export a per-frame "flash" value: for each video frame,
 flash = exp(-decay * timeSinceLastOnset). Creates sharp flicker
 that dies fast between events.
 """
-import argparse
 import json
 import numpy as np
 import librosa
 
-from track_config import load_config
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--audio", default="out/dubfire-sake.wav")
-parser.add_argument("--fps", type=int, default=24)
-parser.add_argument("--decay", type=float, default=2.5,
-                    help="Higher = flash dies faster. 2.5 ≈ 1.5s lifetime.")
-parser.add_argument("--out", default="public/dubfire-energy-24fps.json")
-parser.add_argument("--config", default=None,
-                    help="Optional per-track config JSON; `energy` section "
-                    "overrides CLI defaults. See docs/track-config-schema.md.")
-args = parser.parse_args()
-
-cfg = load_config(args.config, "energy")
-AUDIO = args.audio
-VIDEO_FPS = args.fps
-DECAY = float(cfg.get("decay", args.decay))
-ONSET_HOP_MS = float(cfg.get("onset_hop_ms", 11.6))
-OUT = args.out
+AUDIO = "out/dubfire-sake.wav"
+VIDEO_FPS = 24
+DECAY = 2.5  # Slow — each flash lingers ~1.5 seconds before dying.
+OUT = "public/dubfire-energy-24fps.json"
 
 print("Loading audio...", flush=True)
 y, sr = librosa.load(AUDIO, sr=22050, mono=True)
@@ -37,7 +21,7 @@ print(f"{duration:.1f}s → {total_frames} video frames", flush=True)
 
 # Detect ALL onsets at high resolution.
 print("Computing onset envelope...", flush=True)
-hop = max(1, int(round(ONSET_HOP_MS * sr / 1000)))
+hop = 256  # ~11.6ms — very fine resolution
 onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop)
 
 print("Detecting onsets...", flush=True)

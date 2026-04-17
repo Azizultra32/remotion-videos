@@ -11,48 +11,6 @@ type Props = {
   height?: number;
 };
 
-const LABEL_LANE_HEIGHT = 18;
-
-// Chip label rendered in the lane above the waveform. Positioned by
-// percentage so label centers land on their marker. transform:
-// translateX(-50%) keeps short labels centered and wider labels
-// (e.g. D12) from pulling off the right edge.
-const Chip = ({
-  leftPct,
-  bg,
-  fg,
-  label,
-  title,
-}: {
-  leftPct: number;
-  bg: string;
-  fg: string;
-  label: string;
-  title: string;
-}) => (
-  <span
-    title={title}
-    style={{
-      position: "absolute",
-      top: 2,
-      left: `${leftPct}%`,
-      transform: "translateX(-50%)",
-      padding: "1px 5px",
-      fontSize: 9,
-      fontWeight: 700,
-      color: fg,
-      background: bg,
-      borderRadius: 2,
-      letterSpacing: "0.04em",
-      whiteSpace: "nowrap",
-      pointerEvents: "auto",
-      zIndex: 2,
-    }}
-  >
-    {label}
-  </span>
-);
-
 export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
@@ -201,165 +159,47 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
         </span>
       </div>
 
-      {/* Dedicated label lane above the waveform. All chips (D/B/U) live
-          here instead of floating inside the wave. This keeps the audio
-          shape legible and leaves the marker lines as pure pointers that
-          bridge the lane to the wave below. Research basis: SoundCloud,
-          Audacity, iZotope RX all use an above-or-below lane rather than
-          in-wave labels. */}
-      {ready && beatData && (
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            height: LABEL_LANE_HEIGHT,
-            marginBottom: 2,
-          }}
-        >
-          {beatData.breakdowns.map((b, i) => {
-            const leftPct = ((b.start + b.end) / 2 / totalSec) * 100;
-            return (
-              <Chip
-                key={`lbl-bd${i}`}
-                leftPct={leftPct}
-                bg="#7ab8ff"
-                fg="#0a1628"
-                label={`B${i + 1}`}
-                title={`Breakdown ${i + 1}: ${b.start.toFixed(1)}s → ${b.end.toFixed(1)}s`}
-              />
-            );
-          })}
-          {(beatData.buildups ?? []).map((b, i) => {
-            const leftPct = ((b.start + b.end) / 2 / totalSec) * 100;
-            return (
-              <Chip
-                key={`lbl-bu${i}`}
-                leftPct={leftPct}
-                bg="#ffb86b"
-                fg="#1a1000"
-                label={`U${i + 1}`}
-                title={`Buildup ${i + 1}: ${b.start.toFixed(1)}s → ${b.end.toFixed(1)}s`}
-              />
-            );
-          })}
-          {beatData.drops.map((t, i) => {
-            const leftPct = (t / totalSec) * 100;
-            const mm = Math.floor(t / 60);
-            const ss = (t - mm * 60).toFixed(1);
-            return (
-              <Chip
-                key={`lbl-drop${i}`}
-                leftPct={leftPct}
-                bg="#ff3838"
-                fg="#fff"
-                label={`D${i + 1}`}
-                title={`Drop ${i + 1} @ ${mm}:${ss}`}
-              />
-            );
-          })}
-        </div>
-      )}
-
       <div style={{ position: "relative", width: "100%", height }}>
         <div ref={containerRef} style={{ width: "100%", height }} />
 
-        {/* Overlays in the waveform area: region fills (SVG) + region
-            borders + drop vertical lines. Labels live in the lane above. */}
+        {/* Overlays drawn in the same coordinate space as the waveform */}
         {ready && beatData && (
-          <>
-            <svg
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                pointerEvents: "none",
-              }}
-              preserveAspectRatio="none"
-              viewBox={`0 0 ${totalSec} 100`}
-            >
-              {beatData.breakdowns.map((b, i) => (
-                <rect
-                  key={`bd${i}`}
-                  x={b.start}
-                  width={Math.max(0.01, b.end - b.start)}
-                  y={0}
-                  height={100}
-                  fill="rgba(122,184,255,0.12)"
-                />
-              ))}
-              {(beatData.buildups ?? []).map((b, i) => (
-                <rect
-                  key={`bu${i}`}
-                  x={b.start}
-                  width={Math.max(0.01, b.end - b.start)}
-                  y={0}
-                  height={100}
-                  fill="rgba(255,184,107,0.10)"
-                />
-              ))}
-            </svg>
-            {beatData.breakdowns.map((b, i) => {
-              const leftPct = (b.start / totalSec) * 100;
-              const widthPct = Math.max(0.5, ((b.end - b.start) / totalSec) * 100);
-              return (
-                <div
-                  key={`bdl${i}`}
-                  style={{
-                    position: "absolute",
-                    left: `${leftPct}%`,
-                    width: `${widthPct}%`,
-                    top: 0,
-                    height: "100%",
-                    pointerEvents: "none",
-                    borderTop: "1px solid rgba(122,184,255,0.55)",
-                    borderBottom: "1px solid rgba(122,184,255,0.55)",
-                  }}
-                />
-              );
-            })}
-            {(beatData.buildups ?? []).map((b, i) => {
-              const leftPct = (b.start / totalSec) * 100;
-              const widthPct = Math.max(0.5, ((b.end - b.start) / totalSec) * 100);
-              return (
-                <div
-                  key={`bul${i}`}
-                  style={{
-                    position: "absolute",
-                    left: `${leftPct}%`,
-                    width: `${widthPct}%`,
-                    top: 0,
-                    height: "100%",
-                    pointerEvents: "none",
-                    borderLeft: "1.5px dashed rgba(255,184,107,0.6)",
-                    borderRight: "1.5px dashed rgba(255,184,107,0.6)",
-                  }}
-                />
-              );
-            })}
-            {beatData.drops.map((t, i) => {
-              const leftPct = (t / totalSec) * 100;
-              const mm = Math.floor(t / 60);
-              const ss = (t - mm * 60).toFixed(1);
-              return (
-                <div
-                  key={`drop${i}`}
-                  style={{
-                    position: "absolute",
-                    left: `${leftPct}%`,
-                    top: 0,
-                    bottom: 0,
-                    width: 2,
-                    background: "#ff6b7a",
-                    boxShadow: "0 0 4px rgba(255,107,122,0.8)",
-                    transform: "translateX(-1px)",
-                    pointerEvents: "none",
-                  }}
-                  title={`Drop ${i + 1} @ ${mm}:${ss}`}
-                />
-              );
-            })}
-          </>
+          <svg
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: "none",
+            }}
+            preserveAspectRatio="none"
+            viewBox={`0 0 ${totalSec} 100`}
+          >
+            {/* Breakdown regions */}
+            {beatData.breakdowns.map((b, i) => (
+              <rect
+                key={`bd${i}`}
+                x={b.start}
+                width={Math.max(0.01, b.end - b.start)}
+                y={0}
+                height={100}
+                fill="rgba(255,80,80,0.08)"
+              />
+            ))}
+            {/* Drop markers */}
+            {beatData.drops.map((t, i) => (
+              <line
+                key={`d${i}`}
+                x1={t}
+                x2={t}
+                y1={0}
+                y2={100}
+                stroke="#ff4444"
+                strokeWidth={0.15}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </svg>
         )}
 
         {/* Playhead — canonical store time. `left` is set imperatively by

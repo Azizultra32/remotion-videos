@@ -16,4 +16,3 @@ public/*.mp3
 public/*.wav
 .DS_Store
 .worktrees/
-scripts/__pycache__/

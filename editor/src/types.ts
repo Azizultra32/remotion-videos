@@ -22,12 +22,7 @@ export type BeatData = {
   downbeats: number[];
   drops: number[];
   breakdowns: { start: number; end: number }[];
-  // Optional: emitted by the adaptive detector (analyze-audio.sh). Older
-  // JSONs predating that detector don't have it — consumers must check.
-  buildups?: { start: number; end: number }[];
-  // energy shape changed with the adaptive detector. Old: {t, db} absolute
-  // dB. New: {t, rel} percentile in [0,1]. Either may be present.
-  energy: ({ t: number; db?: number; rel?: number })[];
+  energy: { t: number; db: number }[];
 };
 
 export type EditorState = {

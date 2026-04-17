@@ -1,8 +1,31 @@
 // src/components/TransportControls.tsx
 import { useEditorStore } from "../store";
 
+const toggleButtonStyle = (active: boolean) => ({
+  padding: "4px 12px",
+  background: active ? "#2196F3" : "#222",
+  border: `1px solid ${active ? "#2196F3" : "#444"}`,
+  borderRadius: 4,
+  color: "#fff",
+  fontSize: 11,
+  cursor: "pointer" as const,
+  fontWeight: 500,
+});
+
 export const TransportControls = () => {
-  const { isPlaying, setPlaying, currentTimeSec, setCurrentTime, compositionDuration, fps, beatData } = useEditorStore();
+  const {
+    isPlaying,
+    setPlaying,
+    currentTimeSec,
+    setCurrentTime,
+    compositionDuration,
+    fps,
+    beatData,
+    snapToBeat,
+    setSnapToBeat,
+    loopPlayback,
+    setLoopPlayback,
+  } = useEditorStore();
 
   const formatTime = (sec: number) => {
     const mins = Math.floor(sec / 60);
@@ -51,6 +74,24 @@ export const TransportControls = () => {
           BPM: {beatData.bpm_global.toFixed(1)}
         </div>
       )}
+
+      <div style={{ flex: 1 }} />
+
+      <button
+        onClick={() => setSnapToBeat(!snapToBeat)}
+        style={toggleButtonStyle(snapToBeat)}
+        title="Snap dragged elements to beats (shift inverts)"
+      >
+        Snap: {snapToBeat ? "ON" : "OFF"}
+      </button>
+
+      <button
+        onClick={() => setLoopPlayback(!loopPlayback)}
+        style={toggleButtonStyle(loopPlayback)}
+        title="Loop playback at end of composition"
+      >
+        Loop: {loopPlayback ? "ON" : "OFF"}
+      </button>
 
       <button
         onClick={() => setCurrentTime(0)}

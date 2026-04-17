@@ -7,7 +7,7 @@ import { buildProps } from "../utils/propsBuilder";
 
 export const Preview = () => {
   const playerRef = useRef<PlayerRef>(null);
-  const { currentTimeSec, fps, isPlaying, setCurrentTime, elements, compositionDuration } =
+  const { currentTimeSec, fps, isPlaying, setCurrentTime, elements, compositionDuration, loopPlayback } =
     useEditorStore();
 
   const inputProps = useMemo(
@@ -55,6 +55,7 @@ export const Preview = () => {
       controls={false}
       style={{ width: "100%", maxHeight: "100%" }}
       clickToPlay={false}
+      loop={loopPlayback}
     />
   );
 };

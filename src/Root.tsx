@@ -73,6 +73,21 @@ import {
   audioShaderVizSchema,
   defaultAudioShaderVizProps,
 } from "./compositions/AudioShaderViz";
+import {
+  ImageOnBeat,
+  imageOnBeatSchema,
+  defaultImageOnBeatProps,
+} from "./compositions/ImageOnBeat";
+import {
+  VideoFolderCycle,
+  videoFolderCycleSchema,
+  defaultVideoFolderCycleProps,
+} from "./compositions/VideoFolderCycle";
+import {
+  SpeedRamp,
+  speedRampSchema,
+  defaultSpeedRampProps,
+} from "./compositions/SpeedRamp";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -404,6 +419,36 @@ export const RemotionRoot: React.FC = () => {
         width={1920}
         height={1080}
         defaultProps={defaultAudioShaderVizProps}
+      />
+      <Composition
+        id="ImageOnBeat"
+        component={ImageOnBeat}
+        schema={imageOnBeatSchema}
+        durationInFrames={24 * 30}
+        fps={24}
+        width={848}
+        height={480}
+        defaultProps={defaultImageOnBeatProps}
+      />
+      <Composition
+        id="VideoFolderCycle"
+        component={VideoFolderCycle}
+        schema={videoFolderCycleSchema}
+        durationInFrames={24 * 30}
+        fps={24}
+        width={848}
+        height={480}
+        defaultProps={defaultVideoFolderCycleProps}
+      />
+      <Composition
+        id="SpeedRamp"
+        component={SpeedRamp}
+        schema={speedRampSchema}
+        durationInFrames={24 * 30}
+        fps={24}
+        width={848}
+        height={480}
+        defaultProps={defaultSpeedRampProps}
       />
     </>
   );

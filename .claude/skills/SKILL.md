@@ -60,3 +60,9 @@ Read individual rule files for detailed explanations and code examples:
 - [rules/maps.md](rules/maps.md) - Add a map using Mapbox and animate it
 - [rules/voiceover.md](rules/voiceover.md) - Adding AI-generated voiceover to Remotion compositions using ElevenLabs TTS
 - [rules/music-video-creator.md](rules/music-video-creator.md) - Beat-matched music video framework — zeta points, beat-mapped animations, audio analysis pipeline
+- [rules/motion-designer.md](rules/motion-designer.md) - Spec-before-code: scene-by-scene video spec with timing, audio cues, SFX, transitions before touching a composition
+- [rules/awwwards-animations.md](rules/awwwards-animations.md) - Award-tier animation patterns (glitch, kinetic typography, liquid morph, number tickers) ported to frame-deterministic Remotion code
+- [rules/animated-component-libraries.md](rules/animated-component-libraries.md) - Clippkit / Magic UI / React Bits / shadcn / dnd-kit / wavesurfer — what's safe in renders vs editor-only, install commands, frame-binding port pattern
+- [rules/explainer-video-guide.md](rules/explainer-video-guide.md) - End-to-end narration pipeline: script → ElevenLabs TTS → Whisper captions → scene planning → render → git tag
+- [rules/remotion-render.md](rules/remotion-render.md) - All four render paths (CLI, still, @remotion/renderer Node API, Lambda), critical flags, project scripts, Git Hygiene tagging
+- [rules/playwright-mcp.md](rules/playwright-mcp.md) - Browser automation via @playwright/mcp for visual verification of Studio, the custom editor, and composition previews

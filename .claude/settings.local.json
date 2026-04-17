@@ -4,7 +4,8 @@
       "Skill(using-superpowers)",
       "Skill(subagent-driven-development)",
       "Skill(using-git-worktrees)",
-      "Skill(writing-plans)"
+      "Skill(writing-plans)",
+      "Skill(update-config)"
     ]
   },
   "enableAllProjectMcpServers": true,

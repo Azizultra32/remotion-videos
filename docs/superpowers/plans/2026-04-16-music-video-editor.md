@@ -8,6 +8,14 @@
 
 **Tech Stack:** React 19, Vite, @remotion/player, wavesurfer.js, Zustand (state), TypeScript
 
+> **Architecture note (Path B):** Considered Editor Starter ($600) / Timeline commercial products — chose greenfield + aggressive pattern lifting from official Remotion templates instead (see `template-music-visualization` citations throughout).
+
+---
+
+## Risks & Compatibility
+
+- **rAF/GSAP libs break determinism.** Magic UI / React Bits components from the `animated-component-libraries` skill drive animation via `requestAnimationFrame` or GSAP tweens. That is fine inside the editor UI (timeline, sidebar, detail panel), but it **will break Remotion's frame-deterministic seek** if used inside a rendered composition. For any visual element that ends up in the final MP4, port the animation to `interpolate(frame, ...)` or `spring({ frame, fps })`. Keep a hard mental line: editor chrome = rAF OK, rendered composition = frame-driven only.
+
 ---
 
 ## File Structure
@@ -219,6 +227,15 @@ git commit -m "feat: editor state management (Zustand + types)"
 - Create: `editor/src/components/Preview.tsx`
 - Modify: `editor/src/App.tsx`
 
+**Player ref API reference** (https://www.remotion.dev/docs/player/api):
+- Imperative methods on `PlayerRef`: `seekTo(frame)`, `getCurrentFrame()`, `play()`, `pause()`, `toggle()`, `isPlaying()`, `mute()`, `unmute()`.
+- Subscribable events via `addEventListener` / `removeEventListener`:
+  - `frameupdate` — fires every frame during playback, payload `{ detail: { frame: number } }`. Use this to drive the timeline playhead from inside the Player.
+  - `timeupdate` — fires at a throttled rate (~250ms) with playback time in seconds. Cheaper than `frameupdate` for non-critical UI (e.g. transport time readout).
+  - `seeked` — fires once after a `seekTo()` completes. Use this to confirm the Player has arrived before re-enabling a scrubbing UI.
+  - Also: `play`, `pause`, `ended`, `ratechange`, `volumechange`, `fullscreenchange`, `mutechange`.
+- Policy for this editor: `store.currentTimeSec` is the single source of truth. Player emits `frameupdate` → store updates → Waveform/Timeline re-read store. Waveform clicks / timeline drags write to store → `useEffect` calls `player.seekTo()`. Listen for `seeked` to clear any "scrubbing" UI flag.
+
 - [ ] **Step 1: Create Preview component**
 
 ```tsx
@@ -291,6 +308,8 @@ export const Preview = () => {
 - Create: `editor/src/components/Waveform.tsx`
 - Create: `editor/src/components/BeatMarkers.tsx`
 - Create: `editor/src/hooks/useBeatData.ts`
+
+> **Editor UI vs. rendered output — two different waveform stacks.** `template-music-visualization` proves you do **not** need wavesurfer.js for the *rendered* composition: `useWindowedAudioData` + `visualizeAudioWaveform` + `createSmoothSvgPath` from `@remotion/media-utils` produce a deterministic per-frame waveform that renders inside Remotion compositions. Keep wavesurfer.js strictly for the editor UI here — it gives us interactive scrubbing, click-to-seek, and zoom that the media-utils stack does not. When we later need a waveform *baked into the MP4*, use the media-utils approach instead. Reference: https://github.com/remotion-dev/template-music-visualization/blob/main/src/Visualizer/Waveform.tsx.
 
 - [ ] **Step 1: Create useBeatData hook**
 
@@ -398,7 +417,47 @@ export const BeatMarkers = ({ widthPx, visibleRange }: {
 };
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Steal `processFrequencyData` verbatim into `editor/src/utils/audio.ts`**
+
+The music-visualization template ships a well-tuned log-scale + power-curve frequency normalizer. Do **not** reinvent it — paste verbatim, then re-export.
+
+Source: https://github.com/remotion-dev/template-music-visualization/blob/main/src/helpers/process-frequency-data.ts
+
+```ts
+// editor/src/utils/audio.ts
+// Verbatim from template-music-visualization (see citation above).
+// Takes raw FFT magnitudes, remaps to log-frequency bins, applies a power curve
+// for perceptual weighting, and returns a fixed-length bar array.
+export { processFrequencyData } from "./process-frequency-data.ts";
+```
+
+Create `editor/src/utils/process-frequency-data.ts` with the exact file contents from the template. This feeds both the drop-marker energy cue (Step 5 below) and the SpectrumDisplay (Task 9).
+
+- [ ] **Step 5: Adapt `BassOverlay` pattern as the drop-marker visual cue**
+
+The template's `BassOverlay` maps low-band amplitude → full-screen opacity flash ("kick punch"). In the editor we reuse the **same signal-to-opacity mapping** but paint it into the timeline lane above each drop marker so the eye can see the drop intensity, not just its position.
+
+Source: https://github.com/remotion-dev/template-music-visualization/blob/main/src/Visualizer/BassOverlay.tsx
+
+Port the low-band extraction + opacity curve from `BassOverlay` into a new `DropPulse` component inside `BeatMarkers.tsx`:
+
+```tsx
+// Inside BeatMarkers.tsx, alongside the drop <line> renderer:
+// For each drop timestamp, compute bass amplitude at that moment from beatData.energy,
+// use the same normalization curve as BassOverlay (clamp + power), and render an
+// amplitude-scaled halo behind the red drop line so bigger drops glow harder.
+```
+
+This is visual-only (editor UI), so rAF-style work is fine here — but keep the actual math pure (amplitude → opacity) so it's portable to a rendered composition later.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add editor/src/components/Waveform.tsx editor/src/components/BeatMarkers.tsx \
+        editor/src/hooks/useBeatData.ts editor/src/utils/audio.ts \
+        editor/src/utils/process-frequency-data.ts
+git commit -m "feat(editor): waveform + beat/drop markers (lifted processFrequencyData + BassOverlay pattern from music-viz template)"
+```
 
 ---
 
@@ -581,4 +640,308 @@ Show bass energy as a colored strip under the waveform — green=quiet, yellow=b
 ```bash
 git add -A
 git commit -m "feat: music video editor v1 — waveform, beats, draggable timeline, live preview"
+```
+
+---
+
+### Task 11: Pulse-Pattern Library (Additive + Subtractive Springs)
+
+**Files:**
+- Create: `editor/src/utils/pulses.ts`
+- Create: `editor/tests/pulses.test.ts`
+- Modify: `editor/src/types.ts` (add `PulseName` type)
+- Modify: `editor/src/components/Sidebar.tsx` (expose pulse presets)
+- Modify: `editor/src/hooks/useElementDrag.ts` (auto-snap-to-nearest-beat on drop of a pulse)
+
+**Background.** Decoded from the user's Remotion Timing Editor config: the "pop and release" envelope is produced by **stacking two springs**:
+- Spring A — additive, delay 0 frames (the attack)
+- Spring B — subtractive, delay ~77 frames (the release)
+The sum is a curve that rises fast, overshoots, then pulls back to zero. That is the canonical kick/drop envelope. Build a named library so users drag a pulse onto the timeline instead of hand-tuning damping sliders.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// editor/tests/pulses.test.ts
+import { describe, it, expect } from "vitest";
+import { kickPulse, snarePulse, dropSwell } from "../src/utils/pulses";
+
+describe("pulse curves", () => {
+  it("kickPulse peaks shortly after frame 0 and returns near 0 by frame 60", () => {
+    const fps = 30;
+    const v0 = kickPulse({ frame: 0, fps });
+    const vPeak = kickPulse({ frame: 8, fps });
+    const vEnd = kickPulse({ frame: 60, fps });
+    expect(v0).toBeCloseTo(0, 2);
+    expect(vPeak).toBeGreaterThan(0.5);
+    expect(Math.abs(vEnd)).toBeLessThan(0.1);
+  });
+
+  it("snarePulse is sharper than kickPulse (earlier peak)", () => {
+    const fps = 30;
+    const kickAt5 = kickPulse({ frame: 5, fps });
+    const snareAt5 = snarePulse({ frame: 5, fps });
+    expect(snareAt5).toBeGreaterThan(kickAt5);
+  });
+
+  it("dropSwell is wider (still elevated at frame 90)", () => {
+    const fps = 30;
+    expect(dropSwell({ frame: 90, fps })).toBeGreaterThan(0.2);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd editor && npx vitest run tests/pulses.test.ts`
+Expected: FAIL with "Cannot find module '../src/utils/pulses'".
+
+- [ ] **Step 3: Implement `pulses.ts` with the additive + subtractive spring stack**
+
+```ts
+// editor/src/utils/pulses.ts
+import { spring } from "remotion";
+
+type PulseArgs = { frame: number; fps: number };
+type PulseConfig = {
+  // Attack spring (additive, delay 0).
+  attack: { damping: number; stiffness: number; mass: number };
+  // Release spring (subtractive, delay in frames).
+  releaseDelayFrames: number;
+  release: { damping: number; stiffness: number; mass: number };
+};
+
+const evaluate = (cfg: PulseConfig, { frame, fps }: PulseArgs): number => {
+  const a = spring({
+    frame,
+    fps,
+    config: cfg.attack,
+    durationInFrames: 240,
+  });
+  const b = spring({
+    frame: Math.max(0, frame - cfg.releaseDelayFrames),
+    fps,
+    config: cfg.release,
+    durationInFrames: 240,
+  });
+  // Additive attack minus subtractive release = pop-and-release envelope.
+  return a - b;
+};
+
+export const kickPulse = (args: PulseArgs) =>
+  evaluate(
+    {
+      attack: { damping: 10, stiffness: 200, mass: 0.5 },
+      releaseDelayFrames: 8,
+      release: { damping: 14, stiffness: 120, mass: 0.8 },
+    },
+    args,
+  );
+
+export const snarePulse = (args: PulseArgs) =>
+  evaluate(
+    {
+      attack: { damping: 8, stiffness: 300, mass: 0.35 },
+      releaseDelayFrames: 5,
+      release: { damping: 12, stiffness: 180, mass: 0.6 },
+    },
+    args,
+  );
+
+export const dropSwell = (args: PulseArgs) =>
+  // The user's decoded config: delay-0 additive + delay-77 subtractive.
+  evaluate(
+    {
+      attack: { damping: 30, stiffness: 60, mass: 1.2 },
+      releaseDelayFrames: 77,
+      release: { damping: 30, stiffness: 60, mass: 1.2 },
+    },
+    args,
+  );
+
+export const PULSES = { kickPulse, snarePulse, dropSwell } as const;
+export type PulseName = keyof typeof PULSES;
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd editor && npx vitest run tests/pulses.test.ts`
+Expected: PASS (3 tests).
+
+- [ ] **Step 5: Extend `types.ts` with `PulseName` on elements**
+
+```ts
+// editor/src/types.ts — add to TimelineElement.props shape via a new typed variant
+export type PulseElementProps = {
+  pulseName: import("./utils/pulses").PulseName;
+  targetField: string; // which composition prop to drive (e.g. "kickOpacity")
+};
+```
+
+- [ ] **Step 6: Add pulse presets to Sidebar**
+
+In `editor/src/components/Sidebar.tsx`, add a "Pulses" section listing the three presets. On drop, the preset creates a `TimelineElement` of `type: "effect"` with `props: { pulseName, targetField }`.
+
+- [ ] **Step 7: Auto-bind to nearest beat in `useElementDrag.ts`**
+
+When a newly-dropped element has `el.props.pulseName` set, snap `startSec` to the **nearest drop timestamp** if within 0.5s, else nearest beat. This is the "drag a pulse, it locks to the music" UX.
+
+```ts
+// Inside useElementDrag onMouseUp, if creating a new pulse element:
+const beats = beatData?.beats ?? [];
+const drops = beatData?.drops ?? [];
+const nearestDrop = drops.reduce(
+  (best, t) => (Math.abs(t - startSec) < Math.abs(best - startSec) ? t : best),
+  drops[0] ?? Infinity,
+);
+const snapped =
+  Math.abs(nearestDrop - startSec) < 0.5
+    ? nearestDrop
+    : snapToBeat(startSec, beats);
+updateElement(id, { startSec: snapped });
+```
+
+- [ ] **Step 8: Wire into propsBuilder**
+
+In `editor/src/utils/propsBuilder.ts`, for every element with `props.pulseName`, emit a per-frame function binding so the composition evaluates `PULSES[pulseName]({ frame: frame - startFrame, fps })` when rendering. (Composition-side: a generic `<PulseDriver>` component reads the binding and writes the scalar into the target field each frame.)
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add editor/src/utils/pulses.ts editor/tests/pulses.test.ts \
+        editor/src/types.ts editor/src/components/Sidebar.tsx \
+        editor/src/hooks/useElementDrag.ts editor/src/utils/propsBuilder.ts
+git commit -m "feat(editor): pulse-pattern library (additive+subtractive spring stack) with auto-beat-snap"
+```
+
+---
+
+### Task 12: Calculate Composition Metadata From Audio
+
+**Files:**
+- Create: `editor/src/utils/calcMetadata.ts`
+- Create: `editor/tests/calcMetadata.test.ts`
+- Modify: `editor/src/components/Preview.tsx` (consume computed `durationInFrames`)
+- Modify: `editor/package.json` (add `mediabunny` dep)
+
+**Background.** In `template-music-visualization`, the composition's `durationInFrames` is not hardcoded — it's derived from the audio file via the `calculateMetadata` pattern, which uses `mediabunny`'s `Input` + `computeDuration()` to read the container without decoding. This means the editor never has to ask "how long is the video?" — it reads the audio and the answer falls out.
+
+Reference: https://github.com/remotion-dev/template-music-visualization/blob/main/src/Root.tsx (see the `calculateMetadata` prop on `<Composition>`).
+
+- [ ] **Step 1: Install mediabunny**
+
+```bash
+cd editor && npm install mediabunny
+```
+
+- [ ] **Step 2: Write the failing test**
+
+```ts
+// editor/tests/calcMetadata.test.ts
+import { describe, it, expect } from "vitest";
+import { calcDurationInFramesFromAudio } from "../src/utils/calcMetadata";
+
+describe("calcDurationInFramesFromAudio", () => {
+  it("returns a positive frame count for a real audio file", async () => {
+    // Use an existing fixture (public/dubfire.wav or similar).
+    const url = "/dubfire.wav";
+    const frames = await calcDurationInFramesFromAudio(url, 24);
+    expect(frames).toBeGreaterThan(0);
+    expect(Number.isInteger(frames)).toBe(true);
+  });
+
+  it("scales with fps", async () => {
+    const url = "/dubfire.wav";
+    const f24 = await calcDurationInFramesFromAudio(url, 24);
+    const f48 = await calcDurationInFramesFromAudio(url, 48);
+    expect(f48).toBeCloseTo(f24 * 2, -1);
+  });
+});
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `cd editor && npx vitest run tests/calcMetadata.test.ts`
+Expected: FAIL with "Cannot find module '../src/utils/calcMetadata'".
+
+- [ ] **Step 4: Implement `calcMetadata.ts` using mediabunny**
+
+```ts
+// editor/src/utils/calcMetadata.ts
+import { Input, UrlSource, ALL_FORMATS } from "mediabunny";
+
+/**
+ * Read an audio file's container and return its duration in seconds.
+ * No decoding — uses mediabunny's lazy Input.computeDuration().
+ * Pattern from: https://github.com/remotion-dev/template-music-visualization/blob/main/src/Root.tsx
+ */
+export const computeAudioDurationSec = async (url: string): Promise<number> => {
+  const input = new Input({
+    source: new UrlSource(url),
+    formats: ALL_FORMATS,
+  });
+  const durationSec = await input.computeDuration();
+  return durationSec;
+};
+
+export const calcDurationInFramesFromAudio = async (
+  url: string,
+  fps: number,
+): Promise<number> => {
+  const sec = await computeAudioDurationSec(url);
+  return Math.round(sec * fps);
+};
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd editor && npx vitest run tests/calcMetadata.test.ts`
+Expected: PASS (2 tests). If the fixture path doesn't resolve in jsdom, mark the test `it.skipIf(!process.env.EDITOR_AUDIO_FIXTURE)` and provide the path via env.
+
+- [ ] **Step 6: Consume in Preview.tsx**
+
+Replace the hardcoded `durationInFrames={Math.round(90 * fps)}` with a value computed from the loaded audio file:
+
+```tsx
+// Inside Preview.tsx
+import { useEffect, useState } from "react";
+import { calcDurationInFramesFromAudio } from "../utils/calcMetadata";
+
+// ...inside component:
+const [durationInFrames, setDurationInFrames] = useState<number | null>(null);
+const audioUrl = useEditorStore((s) => s.audioUrl); // add this to store
+
+useEffect(() => {
+  if (!audioUrl) return;
+  let cancelled = false;
+  calcDurationInFramesFromAudio(audioUrl, fps).then((f) => {
+    if (!cancelled) setDurationInFrames(f);
+  });
+  return () => { cancelled = true; };
+}, [audioUrl, fps]);
+
+if (durationInFrames === null) return <div>Loading audio…</div>;
+
+return (
+  <Player
+    ref={playerRef}
+    component={PublicCut}
+    // ...
+    durationInFrames={durationInFrames}
+    // ...
+  />
+);
+```
+
+Also update `compositionDuration` in the store to `durationInFrames / fps` when it resolves, so the Timeline's `visibleRange` stretches to the real audio length.
+
+- [ ] **Step 7: Verify — load editor, confirm timeline auto-scales to the audio length**
+
+Run: `cd editor && npx vite` → open localhost:4000 → verify timeline right-edge matches waveform right-edge, and `durationInFrames` in the Player equals `audio duration × fps`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add editor/src/utils/calcMetadata.ts editor/tests/calcMetadata.test.ts \
+        editor/src/components/Preview.tsx editor/package.json
+git commit -m "feat(editor): derive composition duration from audio via mediabunny (calculateMetadata pattern)"
 ```

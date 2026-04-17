@@ -2,11 +2,12 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { sidecarPlugin } from "./vite-plugin-sidecar";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), sidecarPlugin()],
   // Editor shares Remotion's public/ dir so staticFile() paths resolve in-browser.
   publicDir: path.resolve(__dirname, "../public"),
   resolve: {

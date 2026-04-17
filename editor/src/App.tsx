@@ -4,6 +4,7 @@ import { ElementDetail } from "./components/ElementDetail";
 import { Sidebar } from "./components/Sidebar";
 import { TransportControls } from "./components/TransportControls";
 import { Scrubber } from "./components/Scrubber";
+import { ChatPane } from "./components/ChatPane";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useBeatData } from "./hooks/useBeatData";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
@@ -34,7 +35,7 @@ export const App = () => {
   const audioUrl = audioSrc ? `/${audioSrc.replace(/^\//, "")}` : null;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "240px minmax(0, 1fr)", gridTemplateRows: "auto auto 1fr 200px", height: "100vh", width: "100vw", overflow: "hidden", background: "#111", color: "#fff" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "240px minmax(0, 1fr) 320px", gridTemplateRows: "auto auto 1fr 200px", height: "100vh", width: "100vw", overflow: "hidden", background: "#111", color: "#fff" }}>
       {/* Sidebar column: Header → Element Library → Element Detail */}
       <div style={{ gridRow: "1/5", borderRight: "1px solid #333", padding: 0, overflowY: "auto" }}>
         <div style={{ padding: 16, borderBottom: "1px solid #333" }}>
@@ -75,6 +76,13 @@ export const App = () => {
       <div style={{ borderTop: "1px solid #333" }}>
         <ErrorBoundary name="Timeline">
           <Timeline />
+        </ErrorBoundary>
+      </div>
+
+      {/* Chat pane — natural-language mutations via /api/chat sidecar */}
+      <div style={{ gridRow: "1/5", gridColumn: 3, borderLeft: "1px solid #333", overflow: "hidden" }}>
+        <ErrorBoundary name="Chat">
+          <ChatPane />
         </ErrorBoundary>
       </div>
     </div>

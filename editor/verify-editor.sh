@@ -93,6 +93,33 @@ echo "7. SpectrumDisplay drop flash lines (Task 9):"
 grep -q "drops.map" src/components/SpectrumDisplay.tsx && pass "drop lines rendered" || fail "drop flash lines missing"
 
 echo ""
+echo "8. Behavioral tests (vitest):"
+# Real logic tests — exercise store actions and propsBuilder mappings.
+# Catches regressions in add/update/remove/select, snap+loop toggles, and
+# label→prop mapping that grep-based checks cannot.
+if [ "${SKIP_TESTS:-0}" = "1" ]; then
+  echo "   (skipped — SKIP_TESTS=1)"
+else
+  TEST_LOG=$(mktemp)
+  if npx vitest run --reporter=default >"$TEST_LOG" 2>&1; then
+    PASS_LINE=$(grep -E "^ +Tests +" "$TEST_LOG" | head -1)
+    pass "vitest ${PASS_LINE:-passed}"
+  else
+    fail "vitest failed — see log:"
+    cat "$TEST_LOG"
+  fi
+  rm -f "$TEST_LOG"
+fi
+
+echo ""
+echo "9. usePlaybackSync respects loopPlayback (Task 7):"
+grep -q "loopPlayback" src/hooks/usePlaybackSync.ts && pass "loopPlayback consulted in playback advance" || fail "usePlaybackSync ignores loopPlayback"
+
+echo ""
+echo "10. ElementDetail spring-curve preview (Task 6):"
+grep -q "SpringPreview" src/components/ElementDetail.tsx && pass "spring-curve preview present" || fail "SpringPreview component missing"
+
+echo ""
 echo "================================"
 if [ $FAIL -eq 0 ]; then
   echo "All checks passed."

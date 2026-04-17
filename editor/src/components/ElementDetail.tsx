@@ -23,11 +23,76 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
   </label>
 );
 
+/**
+ * Mini spring-response preview. Samples a damped-oscillator response over
+ * `frames` steps at fps=30, draws it as an SVG polyline. Target is 1, resting
+ * position is 0. Useful for tuning damping/stiffness visually without rendering.
+ */
+const SpringPreview = ({
+  damping,
+  stiffness,
+  frames = 60,
+  width = 200,
+  height = 60,
+}: {
+  damping: number;
+  stiffness: number;
+  frames?: number;
+  width?: number;
+  height?: number;
+}) => {
+  const mass = 1;
+  const target = 1;
+  const dt = 1 / 30;
+
+  let pos = 0;
+  let vel = 0;
+  const yMin = -0.5;
+  const yMax = 1.8;
+  const range = yMax - yMin;
+  const toY = (v: number) => height - ((v - yMin) / range) * height;
+
+  const pts: string[] = [];
+  for (let i = 0; i < frames; i++) {
+    const force = -stiffness * (pos - target) - damping * vel;
+    vel += (force / mass) * dt;
+    pos += vel * dt;
+    const x = (i / (frames - 1)) * width;
+    const y = toY(Math.max(yMin, Math.min(yMax, pos)));
+    pts.push(`${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`);
+  }
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      style={{ background: "#0a0a0a", borderRadius: 4, display: "block" }}
+    >
+      {/* Zero line */}
+      <line x1={0} y1={toY(0)} x2={width} y2={toY(0)} stroke="#333" strokeWidth={0.5} />
+      {/* Target line */}
+      <line
+        x1={0}
+        y1={toY(target)}
+        x2={width}
+        y2={toY(target)}
+        stroke="#444"
+        strokeDasharray="2 3"
+        strokeWidth={0.5}
+      />
+      <path d={pts.join(" ")} fill="none" stroke="#4CAF50" strokeWidth={1.5} />
+    </svg>
+  );
+};
+
 const TextControls = ({ element }: { element: TimelineElement }) => {
   const { updateElement } = useEditorStore();
   const word = typeof element.props.word === "string" ? element.props.word : "";
   const fontSize = typeof element.props.fontSize === "number" ? element.props.fontSize : 72;
   const color = typeof element.props.color === "string" ? element.props.color : "#ffffff";
+  // Spring config (Remotion default-ish: damping=10, stiffness=100, mass=1)
+  const damping = typeof element.props.damping === "number" ? element.props.damping : 10;
+  const stiffness = typeof element.props.stiffness === "number" ? element.props.stiffness : 100;
 
   const setProp = (k: string, v: unknown) =>
     updateElement(element.id, { props: { ...element.props, [k]: v } });
@@ -59,6 +124,29 @@ const TextControls = ({ element }: { element: TimelineElement }) => {
           onChange={(e) => setProp("color", e.target.value)}
           style={{ ...fieldStyle, padding: 2, height: 28 }}
         />
+      </Field>
+      <Field label={`Spring Damping (${damping.toFixed(1)})`}>
+        <input
+          type="range"
+          min={1}
+          max={40}
+          step={0.5}
+          value={damping}
+          onChange={(e) => setProp("damping", parseFloat(e.target.value))}
+        />
+      </Field>
+      <Field label={`Spring Stiffness (${stiffness.toFixed(0)})`}>
+        <input
+          type="range"
+          min={10}
+          max={400}
+          step={5}
+          value={stiffness}
+          onChange={(e) => setProp("stiffness", parseFloat(e.target.value))}
+        />
+      </Field>
+      <Field label="Spring Response Preview">
+        <SpringPreview damping={damping} stiffness={stiffness} />
       </Field>
     </>
   );

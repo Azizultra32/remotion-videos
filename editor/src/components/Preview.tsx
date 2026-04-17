@@ -11,6 +11,7 @@ export const Preview = () => {
     fps,
     isPlaying,
     setCurrentTime,
+    setPlaying,
     elements,
     compositionDuration,
     loopPlayback,
@@ -28,13 +29,10 @@ export const Preview = () => {
     [audioSrc, beatsSrc, elements],
   );
 
-  // Only seek when the store time diverges meaningfully from the player's
-  // own clock. During playback, onFrameUpdate writes currentTimeSec ≈ the
-  // player's current frame, so this comparison skips those updates.
-  // External writes (scrubber click, snap, Reset) produce a big delta and
-  // seek through. Previously we used a ref-flag to distinguish origins,
-  // but React batching could swallow a user click that landed in the same
-  // tick as a frameupdate.
+  // Seek when the store time diverges meaningfully from the player's clock.
+  // During playback, onFrameUpdate writes currentTimeSec ≈ player frame, so
+  // this compare skips those. External writes (scrubber click, snap, Reset)
+  // produce a big delta and seek through.
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
@@ -45,26 +43,47 @@ export const Preview = () => {
     }
   }, [currentTimeSec, fps]);
 
+  // Drive the Player from isPlaying. Kept separate from the event listener
+  // below to avoid a loop (the listener writes the store, this reads it).
+  // Only acts when the Player disagrees with the store, so a stray event
+  // doesn't bounce us back.
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
-    if (isPlaying) player.play();
-    else player.pause();
+    if (isPlaying && !player.isPlaying()) player.play();
+    else if (!isPlaying && player.isPlaying()) player.pause();
   }, [isPlaying]);
 
+  // Mirror the Player's actual state into the store. This is the critical
+  // fix for "pause doesn't work": the Player owns playback state, and the
+  // store merely reflects it. A Pause click writes false → effect above
+  // calls player.pause() → Player fires 'pause' event → store confirms
+  // false. If the Player ever pauses on its own (end, error), the UI
+  // updates to match instead of lying about its state.
   const onFrameUpdate = useCallback(
     (e: { detail: { frame: number } }) => {
       setCurrentTime(e.detail.frame / fps);
     },
     [fps, setCurrentTime],
   );
+  const onPlay = useCallback(() => setPlaying(true), [setPlaying]);
+  const onPause = useCallback(() => setPlaying(false), [setPlaying]);
+  const onEnded = useCallback(() => setPlaying(false), [setPlaying]);
 
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
     player.addEventListener("frameupdate", onFrameUpdate as any);
-    return () => player.removeEventListener("frameupdate", onFrameUpdate as any);
-  }, [onFrameUpdate]);
+    player.addEventListener("play", onPlay as any);
+    player.addEventListener("pause", onPause as any);
+    player.addEventListener("ended", onEnded as any);
+    return () => {
+      player.removeEventListener("frameupdate", onFrameUpdate as any);
+      player.removeEventListener("play", onPlay as any);
+      player.removeEventListener("pause", onPause as any);
+      player.removeEventListener("ended", onEnded as any);
+    };
+  }, [onFrameUpdate, onPlay, onPause, onEnded]);
 
   return (
     <Player

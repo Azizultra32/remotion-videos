@@ -4,14 +4,22 @@ Also export a per-frame "flash" value: for each video frame,
 flash = exp(-decay * timeSinceLastOnset). Creates sharp flicker
 that dies fast between events.
 """
+import argparse
 import json
 import numpy as np
 import librosa
 
-AUDIO = "out/dubfire-sake.wav"
-VIDEO_FPS = 24
-DECAY = 2.5  # Slow — each flash lingers ~1.5 seconds before dying.
-OUT = "public/dubfire-energy-24fps.json"
+parser = argparse.ArgumentParser()
+parser.add_argument("--audio", default="out/dubfire-sake.wav")
+parser.add_argument("--fps", type=int, default=24)
+parser.add_argument("--decay", type=float, default=2.5,
+                    help="Higher = flash dies faster. 2.5 ≈ 1.5s lifetime.")
+parser.add_argument("--out", default="public/dubfire-energy-24fps.json")
+args = parser.parse_args()
+AUDIO = args.audio
+VIDEO_FPS = args.fps
+DECAY = args.decay
+OUT = args.out
 
 print("Loading audio...", flush=True)
 y, sr = librosa.load(AUDIO, sr=22050, mono=True)

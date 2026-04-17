@@ -4,16 +4,23 @@ Output: public/dubfire-spectrum-24fps.json
 Array of arrays: spectrum[frame] = [band0, band1, ..., band7]
 Each value 0..1 (locally normalized per band).
 """
+import argparse
 import json
 import numpy as np
 import librosa
 from scipy.ndimage import maximum_filter1d
 
-AUDIO = "out/dubfire-sake.wav"
-VIDEO_FPS = 24
-N_BANDS = 16
+parser = argparse.ArgumentParser()
+parser.add_argument("--audio", default="out/dubfire-sake.wav")
+parser.add_argument("--fps", type=int, default=24)
+parser.add_argument("--bands", type=int, default=16)
+parser.add_argument("--out", default="public/dubfire-spectrum-24fps.json")
+args = parser.parse_args()
+AUDIO = args.audio
+VIDEO_FPS = args.fps
+N_BANDS = args.bands
 LOCAL_WINDOW_SEC = 3.0
-OUT = "public/dubfire-spectrum-24fps.json"
+OUT = args.out
 
 print("Loading audio...", flush=True)
 y, sr = librosa.load(AUDIO, sr=22050, mono=True)

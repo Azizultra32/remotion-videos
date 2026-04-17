@@ -14,6 +14,7 @@ Augments public/dubfire-beats.json with:
   "drops":      [seconds, ...]
   "energy":     [{t, bass_db}, ...]   # sampled every 1s for plotting
 """
+import argparse
 import json
 import os
 import numpy as np
@@ -21,8 +22,13 @@ import librosa
 from scipy.signal import medfilt
 from scipy.ndimage import maximum_filter1d
 
-AUDIO = "out/dubfire-sake.wav"
-BEATS_JSON = "public/dubfire-beats.json"
+parser = argparse.ArgumentParser()
+parser.add_argument("--audio", default="out/dubfire-sake.wav")
+parser.add_argument("--beats-json", default="public/dubfire-beats.json",
+                    help="Path to beats JSON (will be augmented in place)")
+args = parser.parse_args()
+AUDIO = args.audio
+BEATS_JSON = args.beats_json
 
 print("Loading audio...", flush=True)
 y, sr = librosa.load(AUDIO, sr=22050, mono=True)

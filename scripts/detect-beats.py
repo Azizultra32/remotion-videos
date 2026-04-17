@@ -22,6 +22,14 @@ import librosa
 parser = argparse.ArgumentParser()
 parser.add_argument("--audio", default="out/dubfire-sake.wav")
 parser.add_argument("--out", default="public/dubfire-beats.json")
+parser.add_argument(
+    "--extend-intro",
+    action="store_true",
+    help="Extrapolate beats backwards from the first detected beat at the "
+    "locked BPM so the grid covers the intro. Detectors often won't commit "
+    "to a tempo when only a bass line is present (no kick/snare) — this "
+    "fills in the missing grid.",
+)
 args = parser.parse_args()
 AUDIO = args.audio
 OUT = args.out
@@ -40,6 +48,21 @@ tempo, beat_frames = librosa.beat.beat_track(
 )
 beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=512)
 print(f"Global BPM estimate: {float(tempo):.2f}  |  beats: {len(beat_times)}", flush=True)
+
+if args.extend_intro and len(beat_times) > 0:
+    first = float(beat_times[0])
+    period = 60.0 / float(tempo)
+    if first > period:
+        padded = []
+        t = first - period
+        while t > 0:
+            padded.append(t)
+            t -= period
+        padded.reverse()
+        beat_times = np.concatenate([np.array(padded), beat_times])
+        print(f"  ↳ extended intro with {len(padded)} back-dated beats at "
+              f"{60 / period:.2f} BPM (first beat: {beat_times[0]:.2f}s)",
+              flush=True)
 
 print("Computing tempogram for local BPM curve...", flush=True)
 tempogram = librosa.feature.tempogram(onset_envelope=onset_env, sr=sr, hop_length=512)

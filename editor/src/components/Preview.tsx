@@ -1,20 +1,22 @@
 // src/components/Preview.tsx
 //
-// Minimal Remotion Player host. Store is source of truth for isPlaying
-// and currentTimeSec; Player is a controlled output. No two-way event
-// mirroring — it caused "Maximum update depth" when combined with a
-// re-render storm from the destructure-everything subscription pattern.
+// Editor preview. We own audio directly via a plain <audio> element —
+// Remotion's Player handles visuals only. This inversion exists because
+// Remotion's dev-mode audio path wouldn't reliably pause in our setup
+// (possibly SharedAudioContext or prefetched media), and an editor needs
+// the transport to be the authority. MusicVideo's own <Audio> is
+// suppressed in the preview by passing audioSrc=null; at render time
+// (remotion render), the CLI passes audioSrc through and the composition
+// plays it normally.
 import { Player, PlayerRef } from "@remotion/player";
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import { useEditorStore } from "../store";
 import { MusicVideo, defaultMusicVideoProps } from "@compositions/MusicVideo";
 
 export const Preview = () => {
   const playerRef = useRef<PlayerRef>(null);
+  const audioElRef = useRef<HTMLAudioElement>(null);
 
-  // Granular selectors. Destructuring the whole store caused this component
-  // to re-render on every frameupdate (24 Hz), which cascaded into the
-  // Player and bricked pause.
   const fps = useEditorStore((s) => s.fps);
   const isPlaying = useEditorStore((s) => s.isPlaying);
   const elements = useEditorStore((s) => s.elements);
@@ -22,73 +24,89 @@ export const Preview = () => {
   const loopPlayback = useEditorStore((s) => s.loopPlayback);
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);
-  const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
 
+  // Visuals only: force audioSrc=null for the Player so MusicVideo skips
+  // its <Audio> tag. The separate <audio> element below owns playback.
   const inputProps = useMemo(
     () => ({
       ...defaultMusicVideoProps,
-      audioSrc: audioSrc ?? defaultMusicVideoProps.audioSrc,
+      audioSrc: null,
       beatsSrc: beatsSrc ?? defaultMusicVideoProps.beatsSrc,
       elements,
     }),
-    [audioSrc, beatsSrc, elements],
+    [beatsSrc, elements],
   );
 
-  // One-way control: store → Player. The store is the source of truth;
-  // we never mirror the Player's events back.
+  // Resolve audio URL same way MusicVideo did.
+  const audioUrl = useMemo(() => {
+    if (!audioSrc) return null;
+    if (audioSrc.startsWith("http") || audioSrc.startsWith("/")) return audioSrc;
+    return `/${audioSrc}`;
+  }, [audioSrc]);
+
+  // Transport: isPlaying drives BOTH the Player (visuals) and the <audio>
+  // element (audio). Two separate, direct calls — no framework magic.
   useEffect(() => {
     const player = playerRef.current;
-    if (!player) return;
-    if (isPlaying) player.play();
-    else player.pause();
+    const audioEl = audioElRef.current;
+    if (isPlaying) {
+      player?.play();
+      audioEl?.play().catch(() => {});
+    } else {
+      player?.pause();
+      audioEl?.pause();
+    }
   }, [isPlaying]);
 
-  // External seeks (scrubber click, snap, Reset) write currentTimeSec; the
-  // Player's own frameupdate also writes it. To avoid fighting the Player's
-  // clock, we subscribe to currentTimeSec via getState() inside a listener
-  // and only seek when the gap is large. This effect runs once.
+  // Keep <audio> in sync with the Player's clock. Subscribe once; read
+  // currentTimeSec fresh so this effect doesn't re-run on every tick.
   useEffect(() => {
-    const player = playerRef.current;
-    if (!player) return;
     const unsub = useEditorStore.subscribe((state, prev) => {
       if (state.currentTimeSec === prev.currentTimeSec) return;
+      const player = playerRef.current;
+      const audioEl = audioElRef.current;
       const desired = Math.round(state.currentTimeSec * fps);
-      const actual = player.getCurrentFrame();
-      if (Math.abs(desired - actual) > 2) {
-        player.seekTo(desired);
+      if (player) {
+        const actual = player.getCurrentFrame();
+        if (Math.abs(desired - actual) > 2) player.seekTo(desired);
+      }
+      if (audioEl && Math.abs(audioEl.currentTime - state.currentTimeSec) > 0.25) {
+        audioEl.currentTime = state.currentTimeSec;
       }
     });
     return unsub;
   }, [fps]);
 
-  // Player → store: write currentTimeSec on every frame so the scrubber
-  // playhead tracks playback. This is the ONLY Player → store path.
-  const onFrameUpdate = useCallback(
-    (e: { detail: { frame: number } }) => {
-      setCurrentTime(e.detail.frame / fps);
-    },
-    [fps, setCurrentTime],
-  );
+  // Player → store: drive currentTimeSec from the Player's frame clock so
+  // the scrubber playhead tracks visual playback. Audio is kept in sync
+  // via the subscribe above.
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
-    player.addEventListener("frameupdate", onFrameUpdate as any);
-    return () => player.removeEventListener("frameupdate", onFrameUpdate as any);
-  }, [onFrameUpdate]);
+    const handler = (e: { detail: { frame: number } }) => {
+      useEditorStore.setState({ currentTimeSec: e.detail.frame / fps });
+    };
+    player.addEventListener("frameupdate", handler as any);
+    return () => player.removeEventListener("frameupdate", handler as any);
+  }, [fps]);
 
   return (
-    <Player
-      ref={playerRef}
-      component={MusicVideo}
-      inputProps={inputProps as any}
-      compositionWidth={848}
-      compositionHeight={480}
-      fps={fps}
-      durationInFrames={Math.round(compositionDuration * fps)}
-      controls={false}
-      style={{ width: "100%", maxHeight: "100%" }}
-      clickToPlay={false}
-      loop={loopPlayback}
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {audioUrl && (
+        <audio ref={audioElRef} src={audioUrl} preload="auto" />
+      )}
+      <Player
+        ref={playerRef}
+        component={MusicVideo}
+        inputProps={inputProps as any}
+        compositionWidth={848}
+        compositionHeight={480}
+        fps={fps}
+        durationInFrames={Math.round(compositionDuration * fps)}
+        controls={false}
+        style={{ width: "100%", maxHeight: "100%" }}
+        clickToPlay={false}
+        loop={loopPlayback}
       errorFallback={({ error }) => (
         <div
           style={{
@@ -115,5 +133,6 @@ export const Preview = () => {
         </div>
       )}
     />
+    </div>
   );
 };

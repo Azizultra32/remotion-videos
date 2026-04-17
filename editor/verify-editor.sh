@@ -66,6 +66,33 @@ echo "5. Drag bounds enforced in useElementDrag:"
 grep -q "compositionDuration" src/hooks/useElementDrag.ts && pass "drag clamps to composition duration" || fail "drag bounds missing"
 
 echo ""
+echo "6. Production build (vite build):"
+# Real integration check — catches import errors, missing deps, malformed JSX,
+# failed tree-shaking, etc. that tsc --noEmit won't catch.
+if [ "${SKIP_BUILD:-0}" = "1" ]; then
+  echo "   (skipped — SKIP_BUILD=1)"
+else
+  BUILD_LOG=$(mktemp)
+  if npx vite build --logLevel=error >"$BUILD_LOG" 2>&1; then
+    pass "vite build succeeded"
+    # Bundle should contain editor entry and a non-empty JS chunk
+    if [ -d "dist" ] && find dist -name "*.js" -type f -not -empty | grep -q .; then
+      pass "dist/ contains non-empty JS bundle"
+    else
+      fail "dist/ missing or empty after build"
+    fi
+  else
+    fail "vite build failed — see log:"
+    cat "$BUILD_LOG"
+  fi
+  rm -f "$BUILD_LOG"
+fi
+
+echo ""
+echo "7. SpectrumDisplay drop flash lines (Task 9):"
+grep -q "drops.map" src/components/SpectrumDisplay.tsx && pass "drop lines rendered" || fail "drop flash lines missing"
+
+echo ""
 echo "================================"
 if [ $FAIL -eq 0 ]; then
   echo "All checks passed."

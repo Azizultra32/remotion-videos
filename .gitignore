@@ -1,6 +1,7 @@
 node_modules/
 out/
 source-media/
+editor/dist/
 .env
 .env.local
 .env.*

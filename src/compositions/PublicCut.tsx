@@ -21,6 +21,8 @@ export const publicCutSchema = z.object({
   zoomStart: z.number().min(1).max(3).step(0.1),
   zoomEnd: z.number().min(0.2).max(1).step(0.05),
   zoomDuration: z.number().min(10).max(90).step(1),
+  zoomRelativeToAhura: z.boolean().default(false),
+  zoomEasing: z.enum(["linear", "ease-in", "ease-out", "ease-in-out"]).default("linear"),
   ahuraGlowMultiplier: z.number().min(0).max(100).step(5),
   // Title timing (seconds)
   dubfireIn: z.number().min(20).max(90).step(0.5),
@@ -124,12 +126,39 @@ export const PublicCut: React.FC<z.infer<typeof publicCutSchema>> = (p) => {
   const ahuraOpacity = Math.exp(
     -Math.pow(t - p.ahuraPeak, 2) / (2 * p.ahuraSigma ** 2),
   );
-  const scale = interpolate(
+
+  // Zoom: can be relative to AHURA peak or absolute from start
+  const zoomStartTime = p.zoomRelativeToAhura ? p.ahuraPeak - p.zoomDuration / 2 : 0;
+  const zoomEndTime = p.zoomRelativeToAhura ? p.ahuraPeak + p.zoomDuration / 2 : p.zoomDuration;
+
+  // Easing functions
+  const applyEasing = (progress: number, easing: string): number => {
+    switch (easing) {
+      case "ease-in":
+        return progress * progress;
+      case "ease-out":
+        return 1 - (1 - progress) * (1 - progress);
+      case "ease-in-out":
+        return progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      default:
+        return progress; // linear
+    }
+  };
+
+  const rawProgress = interpolate(
     frame,
-    [0, fps * p.zoomDuration],
-    [p.zoomStart, p.zoomEnd],
+    [fps * zoomStartTime, fps * zoomEndTime],
+    [0, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
+  const easedProgress = applyEasing(rawProgress, p.zoomEasing);
+  const scale = interpolate(easedProgress, [0, 1], [p.zoomStart, p.zoomEnd], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
   const glow = bassIntensity * p.ahuraGlowMultiplier * ahuraOpacity;
 
   // Title reveals
@@ -271,6 +300,8 @@ export const defaultPublicCutProps: z.infer<typeof publicCutSchema> = {
   zoomStart: 1.8,
   zoomEnd: 0.5,
   zoomDuration: 45,
+  zoomRelativeToAhura: false,
+  zoomEasing: "linear",
   ahuraGlowMultiplier: 50,
   // Title
   dubfireIn: 50,

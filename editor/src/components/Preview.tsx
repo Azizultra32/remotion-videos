@@ -1,12 +1,19 @@
 // src/components/Preview.tsx
 import { Player, PlayerRef } from "@remotion/player";
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 import { useEditorStore } from "../store";
 import { PublicCut, defaultPublicCutProps } from "@compositions/PublicCut";
+import { buildProps } from "../utils/propsBuilder";
 
 export const Preview = () => {
   const playerRef = useRef<PlayerRef>(null);
-  const { currentTimeSec, fps, isPlaying, setCurrentTime } = useEditorStore();
+  const { currentTimeSec, fps, isPlaying, setCurrentTime, elements, compositionDuration } =
+    useEditorStore();
+
+  const inputProps = useMemo(
+    () => buildProps(elements, defaultPublicCutProps),
+    [elements],
+  );
 
   useEffect(() => {
     const player = playerRef.current;
@@ -40,11 +47,11 @@ export const Preview = () => {
     <Player
       ref={playerRef}
       component={PublicCut}
-      inputProps={defaultPublicCutProps}
+      inputProps={inputProps}
       compositionWidth={848}
       compositionHeight={480}
       fps={fps}
-      durationInFrames={Math.round(90 * fps)}
+      durationInFrames={Math.round(compositionDuration * fps)}
       controls={false}
       style={{ width: "100%", maxHeight: "100%" }}
       clickToPlay={false}

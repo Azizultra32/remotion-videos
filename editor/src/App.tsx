@@ -1,6 +1,7 @@
 import { Preview } from "./components/Preview";
 import { Timeline } from "./components/Timeline";
 import { ElementDetail } from "./components/ElementDetail";
+import { Sidebar } from "./components/Sidebar";
 import { TransportControls } from "./components/TransportControls";
 import { SpectrumDisplay } from "./components/SpectrumDisplay";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -30,11 +31,14 @@ export const App = () => {
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gridTemplateRows: "auto auto 1fr 200px", height: "100vh", background: "#111", color: "#fff" }}>
-      {/* Sidebar */}
-      <div style={{ gridRow: "1/5", borderRight: "1px solid #333", padding: 0 }}>
+      {/* Sidebar column: Header → Element Library → Element Detail */}
+      <div style={{ gridRow: "1/5", borderRight: "1px solid #333", padding: 0, overflowY: "auto" }}>
         <div style={{ padding: 16, borderBottom: "1px solid #333" }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Music Video Editor</h2>
         </div>
+        <ErrorBoundary name="Sidebar">
+          <Sidebar />
+        </ErrorBoundary>
         <ErrorBoundary name="Element Detail">
           <ElementDetail />
         </ErrorBoundary>

@@ -2,6 +2,7 @@ node_modules/
 out/
 source-media/
 editor/dist/
+.agents-active.json
 .env
 .env.local
 .env.*

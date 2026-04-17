@@ -1,14 +1,35 @@
-"""Track-agnostic EDM structure detector (adaptive-percentile-v2).
+"""Track-agnostic EDM structure detector (percentile+novelty).
 
 Replaces the legacy absolute-dB detector. All thresholds are derived from
 per-track percentiles of banded RMS aggregated per-bar using the beat grid
 produced by detect-beats.py — so the detector self-calibrates to any mix.
 
-The primary "is this a breakdown" signal is HIGHS+AIR energy, not bass.
-Deep house / minimal techno often keep bass playing through breakdowns
-while stripping out hats, pads, and leads — a bass-only detector flags
-such tracks as structureless (v1 did this). Highs/air dropping is the
-common signature across EDM subgenres.
+Two structural signals are combined:
+
+  Signal A — "adaptive percentile" (v2):
+    HIGHS+AIR energy dropping below struct_p25 for >=8 bars. Fires on
+    breakdowns where hats/pads/leads strip out. Robust on deep/minimal
+    tracks that keep bass running through the breakdown.
+
+  Signal B — "Foote novelty" (2026-04-17 extension):
+    MFCC per-bar → self-similarity matrix → checkerboard-kernel novelty
+    curve → scipy.signal.find_peaks. Peaks mark bars where timbre
+    changes abruptly (section boundaries). Based on Foote 2000,
+    "Automatic audio segmentation using a measure of audio novelty
+    score." Industry-standard boundary detector. MFCC captures timbral
+    similarity: two bars that "sound the same" score high on the SSM.
+
+Merge strategy (percentile is truth, novelty adds coverage):
+  - Keep all percentile-detected breakdowns.
+  - Each novelty peak within +/-4 bars of a percentile breakdown is
+    "confirmed-by-both" (recorded in analysis_meta, does not add a
+    new breakdown).
+  - Each novelty peak NOT near any percentile breakdown gets emitted
+    as a 4-bar breakdown at [peak, peak+4) iff the surrounding window
+    [peak-2, peak+6) averages at or below struct_p50. This avoids
+    flagging loud transitions (those are drops, not breakdowns).
+  - Final breakdown list is sorted by start time and overlapping
+    ranges are merged.
 
 Algorithm summary:
   1. Banded RMS: bass (80-250 Hz), highs (2k-8k), air (8k+).
@@ -17,14 +38,17 @@ Algorithm summary:
   4. Percentiles on struct: struct_p25 ("stripped down") and struct_p70 ("full").
   5. Guardrail: if struct_p70 - struct_p25 < 6 dB, the track has no
      meaningful structure — emit empty lists and a warning.
-  6. Breakdown: >=8 consecutive bars at or below struct_p25.
+  6. Breakdown_percentile: >=8 consecutive bars at or below struct_p25.
   7. Buildup: >=4 consecutive bars where struct_per_bar slope is positive
      AND bass is flat / below bass_p50. The classic riser pattern.
   8. Drop: single downbeat timestamp — first bar after a breakdown/buildup
      where BOTH struct_per_bar >= struct_p70 AND bass_per_bar >= bass_p50
      (the full mix comes back, not just hats). Dedupe within 1 bar, cap
      at floor(dur/30).
-  9. Energy: struct_per_bar stored as percentile rank in [0, 1] per bar.
+  9. MFCC (13 coeff) per-bar → cosine SSM → Foote novelty with 2N=16-bar
+     Gaussian checkerboard → scipy find_peaks (min-distance 8 bars).
+ 10. Merge novelty peaks into breakdowns per the rules above.
+ 11. Energy: struct_per_bar stored as percentile rank in [0, 1] per bar.
 
 Augments the input beats JSON in place. Existing `drops`, `breakdowns`,
 `energy` keys are retained (types preserved). Legacy `silences` and
@@ -36,23 +60,53 @@ import os
 
 import librosa
 import numpy as np
+from scipy.signal import find_peaks
+
+from track_config import load_config
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--audio", required=True)
 parser.add_argument("--beats-json", required=True,
                     help="Path to beats JSON (will be augmented in place)")
+parser.add_argument("--min-breakdown-bars", type=int, default=8,
+                    help="Minimum contiguous bars below struct_p25 to call a "
+                    "breakdown (default 8 ≈ 15s at 128 BPM).")
+parser.add_argument("--min-buildup-bars", type=int, default=4,
+                    help="Minimum contiguous bars of rising HF slope with "
+                    "flat bass to call a buildup (default 4 ≈ 7.5s at 128 BPM).")
+parser.add_argument("--novelty-kernel-bars", type=int, default=8,
+                    help="Foote novelty half-kernel size N (full kernel is "
+                    "2N x 2N, default N=8 → 16-bar context window).")
+parser.add_argument("--novelty-min-distance-bars", type=int, default=8,
+                    help="Minimum bar-distance between novelty peaks (default 8).")
+parser.add_argument("--novelty-confirm-tolerance-bars", type=int, default=4,
+                    help="A novelty peak within +/-N bars of a percentile "
+                    "breakdown is 'confirmed-by-both' (default 4).")
+parser.add_argument("--config", default=None,
+                    help="Optional per-track config JSON; `drops` section "
+                    "overrides CLI defaults. See docs/track-config-schema.md.")
 args = parser.parse_args()
 AUDIO = args.audio
 BEATS_JSON = args.beats_json
 
-BASS_BAND_HZ = (80.0, 250.0)
-HIGHS_BAND_HZ = (2000.0, 8000.0)
-AIR_BAND_HZ = (8000.0, 16000.0)
+cfg = load_config(args.config, "drops")
 
-BARS_PER_BREAKDOWN_MIN = 8
-BARS_PER_BUILDUP_MIN = 4
-STRUCTURE_DELTA_DB_MIN = 6.0
+BASS_BAND_HZ = tuple(cfg.get("bass_band_hz", [80.0, 250.0]))
+HIGHS_BAND_HZ = tuple(cfg.get("highs_band_hz", [2000.0, 8000.0]))
+AIR_BAND_HZ = tuple(cfg.get("air_band_hz", [8000.0, 16000.0]))
+
+BARS_PER_BREAKDOWN_MIN = int(cfg.get("bars_per_breakdown_min", args.min_breakdown_bars))
+BARS_PER_BUILDUP_MIN = int(cfg.get("bars_per_buildup_min", args.min_buildup_bars))
+STRUCTURE_DELTA_DB_MIN = float(cfg.get("structure_delta_db_min", 6.0))
 DROP_DEDUPE_BARS = 1
+
+NOVELTY_KERNEL_BARS = int(cfg.get("novelty_kernel_bars", args.novelty_kernel_bars))
+NOVELTY_MIN_DISTANCE_BARS = int(cfg.get("novelty_peak_min_distance_bars", args.novelty_min_distance_bars))
+NOVELTY_CONFIRM_TOLERANCE_BARS = int(args.novelty_confirm_tolerance_bars)
+NOVELTY_NEW_BREAKDOWN_BARS = 4  # emit 4-bar breakdowns for unconfirmed peaks
+
+STRUCT_PCTS = cfg.get("struct_percentiles", [25, 50, 70])
+NOVELTY_ENERGY_WINDOW = (-2, 6)  # [peak-2, peak+6) must be <= struct_p50
 
 
 def db(x: np.ndarray) -> np.ndarray:
@@ -110,6 +164,103 @@ def percentile_rank(values: np.ndarray) -> np.ndarray:
     return ranks / n
 
 
+def aggregate_mfcc_per_bar(mfcc: np.ndarray, frame_times: np.ndarray,
+                           downbeats: list[float], duration: float) -> np.ndarray:
+    """Median MFCC vector per bar. mfcc shape = (n_coeff, n_frames)."""
+    bar_edges = list(downbeats) + [float(duration)]
+    n_coeff = mfcc.shape[0]
+    out = np.zeros((len(downbeats), n_coeff), dtype=float)
+    for i in range(len(downbeats)):
+        lo, hi = bar_edges[i], bar_edges[i + 1]
+        lo_idx = int(np.searchsorted(frame_times, lo, side="left"))
+        hi_idx = int(np.searchsorted(frame_times, hi, side="left"))
+        if hi_idx <= lo_idx:
+            hi_idx = min(lo_idx + 1, mfcc.shape[1])
+            lo_idx = max(hi_idx - 1, 0)
+        segment = mfcc[:, lo_idx:hi_idx]
+        if segment.shape[1] == 0:
+            continue
+        out[i, :] = np.median(segment, axis=1)
+    return out
+
+
+def cosine_ssm(features: np.ndarray) -> np.ndarray:
+    """Self-similarity matrix via cosine similarity. features shape = (n_bars, n_coeff).
+    Returns (n_bars, n_bars) in [-1, 1]."""
+    norms = np.linalg.norm(features, axis=1, keepdims=True)
+    norms = np.where(norms < 1e-12, 1.0, norms)
+    unit = features / norms
+    return unit @ unit.T
+
+
+def foote_checkerboard_kernel(n: int) -> np.ndarray:
+    """Foote 2000 2N x 2N Gaussian-tapered checkerboard kernel.
+
+    The kernel has +1 on the top-left and bottom-right quadrants (self-similarity
+    before/after the boundary) and -1 on the top-right/bottom-left (cross-similarity
+    across the boundary). A low-value response at a diagonal point means "bar
+    before here looks like bar after here" → no boundary. A high response
+    means "bar before here does NOT look like bar after here" → boundary.
+    The Gaussian taper weights the response toward the center of the kernel.
+    """
+    size = 2 * n
+    # Coordinates centered at the boundary (between index n-1 and n).
+    idx = np.arange(size, dtype=float) - (n - 0.5)
+    x = idx[:, None]
+    y = idx[None, :]
+    # Sign: +1 if (x<0,y<0) or (x>0,y>0); -1 otherwise (the checkerboard).
+    sign = np.sign(x) * np.sign(y)
+    # Gaussian taper. sigma = n/2 puts most weight near the center boundary.
+    sigma = max(n / 2.0, 1.0)
+    gauss = np.exp(-(x ** 2 + y ** 2) / (2.0 * sigma ** 2))
+    kernel = sign * gauss
+    return kernel
+
+
+def foote_novelty(ssm: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """Slide the checkerboard kernel along the diagonal of the SSM.
+
+    At each center bar c, overlay the 2N x 2N kernel centered on (c, c) and
+    compute the element-wise sum of (kernel * ssm_patch). Out-of-bounds
+    elements are treated as zero (via clipped indexing). Normalized to [0, 1].
+    """
+    n_bars = ssm.shape[0]
+    size = kernel.shape[0]
+    half = size // 2
+    novelty = np.zeros(n_bars, dtype=float)
+    # Pad SSM with zeros so boundary bars still get a valid patch.
+    padded = np.zeros((n_bars + size, n_bars + size), dtype=float)
+    padded[half:half + n_bars, half:half + n_bars] = ssm
+    for c in range(n_bars):
+        patch = padded[c:c + size, c:c + size]
+        novelty[c] = float(np.sum(patch * kernel))
+    # Normalize to [0, 1] for stable peak thresholding.
+    lo = float(novelty.min())
+    hi = float(novelty.max())
+    if hi - lo > 1e-12:
+        novelty = (novelty - lo) / (hi - lo)
+    else:
+        novelty = np.zeros_like(novelty)
+    return novelty
+
+
+def merge_overlapping_ranges(ranges: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Merge overlapping/touching [start, end] ranges. Input is list of (s, e).
+
+    Ranges that touch (e1 == s2) or overlap are merged into one."""
+    if not ranges:
+        return []
+    ranges = sorted(ranges, key=lambda r: (r[0], r[1]))
+    merged = [ranges[0]]
+    for s, e in ranges[1:]:
+        ps, pe = merged[-1]
+        if s <= pe:
+            merged[-1] = (ps, max(pe, e))
+        else:
+            merged.append((s, e))
+    return merged
+
+
 print("Loading audio...", flush=True)
 y, sr = librosa.load(AUDIO, sr=22050, mono=True)
 duration = float(librosa.get_duration(y=y, sr=sr))
@@ -150,9 +301,9 @@ print(f"Bars: {num_bars}", flush=True)
 # p25/p70 brackets "stripped down" and "full mix" sections for a single
 # EDM track. Long DJ mixes need wider percentiles, but they're not the
 # target — single-track structure is.
-struct_p25 = float(np.percentile(struct_per_bar, 25))
-struct_p50 = float(np.percentile(struct_per_bar, 50))
-struct_p70 = float(np.percentile(struct_per_bar, 70))
+struct_p25 = float(np.percentile(struct_per_bar, STRUCT_PCTS[0]))
+struct_p50 = float(np.percentile(struct_per_bar, STRUCT_PCTS[1]))
+struct_p70 = float(np.percentile(struct_per_bar, STRUCT_PCTS[2]))
 bass_p25 = float(np.percentile(bass_per_bar, 25))
 bass_p50 = float(np.percentile(bass_per_bar, 50))
 bass_p70 = float(np.percentile(bass_per_bar, 70))
@@ -172,6 +323,14 @@ bar_lengths = np.diff(list(downbeats) + [duration])
 mean_bar_sec = float(np.mean(bar_lengths)) if bar_lengths.size else 2.0
 
 breakdowns: list[dict] = []
+# Parallel bookkeeping: for each final breakdown, the source that generated it
+# ("percentile", "novelty-new", or "confirmed-by-both"). Kept in sync with
+# `breakdowns` via index after the merge.
+breakdown_sources: list[str] = []
+# The percentile pass builds its own list first so we can keep a pristine
+# count for novelty agreement checks.
+percentile_breakdowns: list[dict] = []
+percentile_breakdown_bars: list[tuple[int, int]] = []  # (start_bar, end_bar_exclusive)
 buildups: list[dict] = []
 drops_sec: list[float] = []
 
@@ -183,7 +342,10 @@ if structure_detected:
         # Breakdown ends at the downbeat after the last qualifying bar.
         end_t = float(downbeats[end_bar + 1]) if end_bar + 1 < len(downbeats) \
             else end_bar_start + mean_bar_sec
-        breakdowns.append({"start": round(start_t, 3), "end": round(end_t, 3)})
+        percentile_breakdowns.append({"start": round(start_t, 3), "end": round(end_t, 3)})
+        percentile_breakdown_bars.append((start_bar, end_bar + 1))
+    # Retain old variable name for the legacy drop-finding pass below.
+    breakdowns = list(percentile_breakdowns)
 
     # Buildup: sustained positive HF slope with flat/low bass. Use a 4-bar
     # window to smooth slope estimation and require bass_per_bar <= p50.
@@ -243,6 +405,107 @@ if structure_detected:
 
     drops_sec = [round(t, 3) for t in drops_sec]
 
+# === Signal B: Foote novelty over per-bar MFCC self-similarity ==============
+# Computed unconditionally so analysis_meta always reports a value, even if
+# the percentile pass said "no structure". Novelty breakdowns are still
+# gated by struct_p50 so a structureless track will typically add nothing.
+print("Computing MFCCs (13 coeff)...", flush=True)
+mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13, n_fft=n_fft, hop_length=hop)
+# Per-bar median MFCC vector, shape (num_bars, 13).
+mfcc_per_bar = aggregate_mfcc_per_bar(mfcc, frame_times, downbeats, duration)
+print("Computing MFCC self-similarity matrix...", flush=True)
+ssm = cosine_ssm(mfcc_per_bar)
+kernel_n = max(2, min(NOVELTY_KERNEL_BARS, max(2, num_bars // 4)))
+# find_peaks needs at least kernel_n bars on each side for a meaningful score.
+print(f"Sliding Foote checkerboard kernel (2N={2*kernel_n} bars)...", flush=True)
+kernel = foote_checkerboard_kernel(kernel_n)
+novelty_curve = foote_novelty(ssm, kernel)
+peak_idx, _peak_props = find_peaks(
+    novelty_curve,
+    distance=max(1, NOVELTY_MIN_DISTANCE_BARS),
+    prominence=0.05,
+)
+# Drop peaks that fall in the boundary region where the kernel is half-padded
+# with zeros — their novelty values are dominated by padding, not content.
+novelty_peaks_bars = [int(i) for i in peak_idx if kernel_n <= i < num_bars - kernel_n]
+novelty_peaks_bars.sort()
+print(f"Novelty peaks (inside valid region): {len(novelty_peaks_bars)}", flush=True)
+
+# Merge percentile breakdowns with novelty peaks.
+#   "confirmed-by-both":  novelty peak is within +/-tol bars of a percentile
+#                         breakdown range [start_bar, end_bar_exclusive).
+#   "novelty-new":        peak is not near any percentile breakdown AND the
+#                         surrounding window is at/below struct_p50.
+novelty_confirmed_bars: list[int] = []
+novelty_new_breakdowns: list[dict] = []
+novelty_new_bar_ranges: list[tuple[int, int]] = []
+
+def _near_any_percentile_breakdown(bar: int) -> bool:
+    for (s, e) in percentile_breakdown_bars:
+        # Interpret "within +/-tol bars" as distance from the range [s, e).
+        if bar >= s - NOVELTY_CONFIRM_TOLERANCE_BARS and \
+                bar < e + NOVELTY_CONFIRM_TOLERANCE_BARS:
+            return True
+    return False
+
+
+def _window_below_p50(bar: int) -> bool:
+    lo = max(0, bar + NOVELTY_ENERGY_WINDOW[0])
+    hi = min(num_bars, bar + NOVELTY_ENERGY_WINDOW[1])
+    if hi <= lo:
+        return False
+    return float(np.mean(struct_per_bar[lo:hi])) <= struct_p50
+
+
+for bar in novelty_peaks_bars:
+    if _near_any_percentile_breakdown(bar):
+        novelty_confirmed_bars.append(bar)
+        continue
+    if not _window_below_p50(bar):
+        continue  # loud transition — that's a drop, not a breakdown
+    end_bar = min(num_bars, bar + NOVELTY_NEW_BREAKDOWN_BARS)
+    start_t = float(downbeats[bar])
+    if end_bar < len(downbeats):
+        end_t = float(downbeats[end_bar])
+    else:
+        end_t = start_t + NOVELTY_NEW_BREAKDOWN_BARS * mean_bar_sec
+    novelty_new_breakdowns.append({"start": round(start_t, 3), "end": round(end_t, 3)})
+    novelty_new_bar_ranges.append((bar, end_bar))
+
+# Combine percentile + novelty-new breakdowns, sort, merge overlaps.
+all_ranges: list[tuple[float, float, str]] = []
+for bd in percentile_breakdowns:
+    all_ranges.append((bd["start"], bd["end"], "percentile"))
+for bd in novelty_new_breakdowns:
+    all_ranges.append((bd["start"], bd["end"], "novelty-new"))
+all_ranges.sort(key=lambda r: (r[0], r[1]))
+
+merged_breakdowns: list[dict] = []
+merged_sources: list[str] = []
+for s, e, src in all_ranges:
+    if merged_breakdowns and s <= merged_breakdowns[-1]["end"]:
+        merged_breakdowns[-1]["end"] = round(max(merged_breakdowns[-1]["end"], e), 3)
+        # Source precedence: percentile+novelty-new overlap → percentile wins
+        # (the percentile range was already the "hard" signal).
+        if merged_sources[-1] == "novelty-new" and src == "percentile":
+            merged_sources[-1] = "percentile"
+    else:
+        merged_breakdowns.append({"start": round(s, 3), "end": round(e, 3)})
+        merged_sources.append(src)
+
+# Apply "confirmed-by-both" upgrade: any merged breakdown that overlaps a
+# novelty-confirmed bar gets its source flagged accordingly.
+for i, bd in enumerate(merged_breakdowns):
+    bd_start_bar = int(np.searchsorted(downbeats, bd["start"], side="left"))
+    bd_end_bar = int(np.searchsorted(downbeats, bd["end"], side="left"))
+    for cb in novelty_confirmed_bars:
+        if bd_start_bar - NOVELTY_CONFIRM_TOLERANCE_BARS <= cb < bd_end_bar + NOVELTY_CONFIRM_TOLERANCE_BARS:
+            merged_sources[i] = "confirmed-by-both"
+            break
+
+breakdowns = merged_breakdowns
+breakdown_sources = merged_sources
+
 bar_rank = percentile_rank(struct_per_bar) if num_bars else np.array([])
 energy = [
     {"t": round(float(downbeats[i]), 3), "rel": round(float(bar_rank[i]), 4)}
@@ -257,7 +520,8 @@ data["breakdowns"] = breakdowns
 data["buildups"] = buildups
 data["energy"] = energy
 data["analysis_meta"] = {
-    "algorithm": "adaptive-percentile-v2",
+    "algorithm": "adaptive-percentile-v2+foote-novelty",
+    "boundaries_source": "percentile+novelty",
     "primary_signal": "highs+air (2k–16kHz)",
     "bass_band_hz": list(BASS_BAND_HZ),
     "highs_band_hz": list(HIGHS_BAND_HZ),
@@ -277,6 +541,15 @@ data["analysis_meta"] = {
         "delta_db": round(structure_delta, 3),
     },
     "energy_shape": "[{t: downbeat_sec, rel: struct_percentile_rank_0_1}]",
+    "novelty_peaks_bars": list(novelty_peaks_bars),
+    "novelty_peaks_count": int(len(novelty_peaks_bars)),
+    "novelty_kernel_bars": int(kernel_n),
+    "novelty_min_distance_bars": int(NOVELTY_MIN_DISTANCE_BARS),
+    "novelty_confirm_tolerance_bars": int(NOVELTY_CONFIRM_TOLERANCE_BARS),
+    "novelty_confirmed_bars": list(novelty_confirmed_bars),
+    "novelty_new_breakdowns_count": int(len(novelty_new_breakdowns)),
+    "percentile_breakdowns_count": int(len(percentile_breakdowns)),
+    "breakdown_sources": list(breakdown_sources),
 }
 
 # Atomic write so a mid-run kill can't corrupt the JSON.
@@ -289,14 +562,17 @@ print()
 print(f"Updated {BEATS_JSON}")
 print()
 print("=== SUMMARY ===")
-print(f"  bass_p25:   {bass_p25:.2f} dB")
-print(f"  bass_p70:   {bass_p70:.2f} dB")
-print(f"  struct_p25: {struct_p25:.2f} dB  (highs+air, primary detector signal)")
-print(f"  struct_p70: {struct_p70:.2f} dB")
-print(f"  num bars:   {num_bars}")
-print(f"  drops:      {len(drops_sec)}")
-print(f"  breakdowns: {len(breakdowns)}")
-print(f"  buildups:   {len(buildups)}")
+print(f"  bass_p25:     {bass_p25:.2f} dB")
+print(f"  bass_p70:     {bass_p70:.2f} dB")
+print(f"  struct_p25:   {struct_p25:.2f} dB  (highs+air, primary detector signal)")
+print(f"  struct_p70:   {struct_p70:.2f} dB")
+print(f"  num bars:     {num_bars}")
+print(f"  drops:        {len(drops_sec)}")
+print(f"  breakdowns:   {len(breakdowns)}  (percentile={len(percentile_breakdowns)}, "
+      f"novelty-new={len(novelty_new_breakdowns)})")
+print(f"  buildups:     {len(buildups)}")
+print(f"  novelty peaks:     {len(novelty_peaks_bars)}  (kernel 2N={2*kernel_n} bars)")
+print(f"  novelty confirmed: {len(novelty_confirmed_bars)}  (within +/-{NOVELTY_CONFIRM_TOLERANCE_BARS} bars)")
 if not structure_detected:
     print("  WARNING: p70 - p25 < 6 dB — track has no meaningful structure.")
 
@@ -310,12 +586,22 @@ if drops_sec:
 
 if breakdowns:
     print()
-    print(f"BREAKDOWNS ({len(breakdowns)}):")
-    for bd in breakdowns:
+    print(f"BREAKDOWNS ({len(breakdowns)}) [source]:")
+    for bd, src in zip(breakdowns, breakdown_sources):
         sm, ss = int(bd["start"] // 60), bd["start"] % 60
         em, es = int(bd["end"] // 60), bd["end"] % 60
         dur = bd["end"] - bd["start"]
-        print(f"  {sm:>3d}:{ss:05.2f} -> {em:>3d}:{es:05.2f}   ({dur:.1f}s)")
+        print(f"  {sm:>3d}:{ss:05.2f} -> {em:>3d}:{es:05.2f}   "
+              f"({dur:5.1f}s)  [{src}]")
+
+if novelty_peaks_bars:
+    print()
+    print(f"NOVELTY PEAKS ({len(novelty_peaks_bars)}):")
+    for bar in novelty_peaks_bars:
+        t = float(downbeats[bar])
+        m, s = int(t // 60), t % 60
+        tag = "confirmed" if bar in novelty_confirmed_bars else "unconfirmed"
+        print(f"  bar {bar:>4d}  @ {m:>3d}:{s:05.2f}   [{tag}]")
 
 if buildups:
     print()

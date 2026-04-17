@@ -10,16 +10,24 @@ import numpy as np
 import librosa
 from scipy.ndimage import maximum_filter1d
 
+from track_config import load_config
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--audio", default="out/dubfire-sake.wav")
 parser.add_argument("--fps", type=int, default=24)
 parser.add_argument("--bands", type=int, default=16)
 parser.add_argument("--out", default="public/dubfire-spectrum-24fps.json")
+parser.add_argument("--config", default=None,
+                    help="Optional per-track config JSON; `spectrum` section "
+                    "overrides CLI defaults. See docs/track-config-schema.md.")
 args = parser.parse_args()
+
+cfg = load_config(args.config, "spectrum")
 AUDIO = args.audio
 VIDEO_FPS = args.fps
-N_BANDS = args.bands
-LOCAL_WINDOW_SEC = 3.0
+N_BANDS = int(cfg.get("bands", args.bands))
+LOCAL_WINDOW_SEC = float(cfg.get("local_window_sec", 3.0))
+FREQ_RANGE = cfg.get("freq_range_hz", [30, 10000])
 OUT = args.out
 
 print("Loading audio...", flush=True)
@@ -37,7 +45,11 @@ S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop))
 freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
 
 # Define frequency bands (logarithmic spacing for musical relevance).
-band_edges = np.logspace(np.log10(30), np.log10(10000), N_BANDS + 1)
+band_edges = np.logspace(
+    np.log10(float(FREQ_RANGE[0])),
+    np.log10(float(FREQ_RANGE[1])),
+    N_BANDS + 1,
+)
 print(f"Band edges: {[int(b) for b in band_edges]} Hz", flush=True)
 
 print("Computing band energies...", flush=True)

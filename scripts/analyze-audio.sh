@@ -19,18 +19,20 @@
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-  echo "usage: $0 <audio-path> [--fps N] [--no-intro]" >&2
+  echo "usage: $0 <audio-path> [--fps N] [--no-intro] [--librosa-beats]" >&2
   exit 1
 fi
 
 AUDIO="$1"; shift
 FPS=24
 EXTEND_INTRO="--extend-intro"
+DOWNBEAT_BACKEND="--use-madmom"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --fps) FPS="$2"; shift 2 ;;
     --no-intro) EXTEND_INTRO=""; shift ;;
+    --librosa-beats) DOWNBEAT_BACKEND="--librosa-beats"; shift ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -47,27 +49,40 @@ NAME="${NAME%.*}"
 BEATS_OUT="public/${NAME}-beats.json"
 ENERGY_OUT="public/${NAME}-energy-${FPS}fps.json"
 SPECTRUM_OUT="public/${NAME}-spectrum-${FPS}fps.json"
+CONFIG_PATH="public/${NAME}-config.json"
+
+# Pass the config through to every stage when it exists. Scripts use it
+# as overrides for their hardcoded defaults — never fail if absent.
+if [[ -f "$CONFIG_PATH" ]]; then
+  CONFIG_ARG="--config $CONFIG_PATH"
+  CONFIG_NOTE="$CONFIG_PATH"
+else
+  CONFIG_ARG=""
+  CONFIG_NOTE="(none — using script defaults)"
+fi
 
 echo "╭─ deep audio analysis ──────────────────────────────────────────"
 echo "│ track:    $AUDIO"
 echo "│ fps:      $FPS"
 echo "│ intro:    $([ -n "$EXTEND_INTRO" ] && echo "extended (backfill)" || echo "skip (detector-only)")"
+echo "│ downbeat: $([ "$DOWNBEAT_BACKEND" = "--use-madmom" ] && echo "madmom (DBN, authoritative phase)" || echo "librosa[::4] (fast, phase-unaware)")"
+echo "│ config:   $CONFIG_NOTE"
 echo "│ outputs:  $BEATS_OUT"
 echo "│           $ENERGY_OUT"
 echo "│           $SPECTRUM_OUT"
 echo "╰────────────────────────────────────────────────────────────────"
 
-echo "» [1/4] beats + downbeats + tempo curve"
-python3 scripts/detect-beats.py --audio "$AUDIO" --out "$BEATS_OUT" $EXTEND_INTRO
+echo "» [1/5] beats + downbeats + tempo curve"
+python3 scripts/detect-beats.py --audio "$AUDIO" --out "$BEATS_OUT" $EXTEND_INTRO $DOWNBEAT_BACKEND $CONFIG_ARG
 
-echo "» [2/4] drops + breakdowns + bass energy"
-python3 scripts/detect-drops.py --audio "$AUDIO" --beats-json "$BEATS_OUT"
+echo "» [2/5] drops + breakdowns + bass energy"
+python3 scripts/detect-drops.py --audio "$AUDIO" --beats-json "$BEATS_OUT" $CONFIG_ARG
 
-echo "» [3/4] per-frame onset flash @ ${FPS}fps"
-python3 scripts/hires-energy.py --audio "$AUDIO" --fps "$FPS" --out "$ENERGY_OUT"
+echo "» [3/5] per-frame onset flash @ ${FPS}fps"
+python3 scripts/hires-energy.py --audio "$AUDIO" --fps "$FPS" --out "$ENERGY_OUT" $CONFIG_ARG
 
 echo "» [4/5] per-frame 16-band spectrum @ ${FPS}fps"
-python3 scripts/compute-spectrum.py --audio "$AUDIO" --fps "$FPS" --out "$SPECTRUM_OUT"
+python3 scripts/compute-spectrum.py --audio "$AUDIO" --fps "$FPS" --out "$SPECTRUM_OUT" $CONFIG_ARG
 
 echo "» [5/5] verifying detector output"
 python3 scripts/verify-detector.py "$BEATS_OUT"

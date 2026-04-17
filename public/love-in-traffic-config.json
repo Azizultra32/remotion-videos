@@ -1,0 +1,25 @@
+{
+  "track": "love-in-traffic",
+  "notes": "Deep-house default profile. All fields are optional — if this file is absent the scripts use their builtin defaults.",
+  "beats": {
+    "extend_intro": true,
+    "use_madmom": true
+  },
+  "drops": {
+    "bass_band_hz": [80, 250],
+    "highs_band_hz": [2000, 8000],
+    "air_band_hz": [8000, 16000],
+    "bars_per_breakdown_min": 8,
+    "bars_per_buildup_min": 4,
+    "structure_delta_db_min": 6.0
+  },
+  "energy": {
+    "decay": 2.5,
+    "onset_hop_ms": 11.6
+  },
+  "spectrum": {
+    "bands": 16,
+    "freq_range_hz": [30, 10000],
+    "local_window_sec": 3.0
+  }
+}

@@ -78,7 +78,10 @@ const handleRender = async (
     outPath,
     `--props=${JSON.stringify(props)}`,
   ];
-  const child = spawn("npx", args, { cwd: REPO_ROOT });
+  const child = spawn("npx", args, {
+    cwd: REPO_ROOT,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
   const pushLine = (channel: "stdout" | "stderr", chunk: Buffer) => {
     const lines = chunk.toString("utf8").split("\n").filter(Boolean);
@@ -186,7 +189,13 @@ const handleChat = async (
     userPrompt,
   ];
 
-  const child = spawn("claude", args, { cwd: REPO_ROOT });
+  // stdin:"ignore" is load-bearing: without it claude waits 3s for piped
+  // stdin, prints a warning, then never emits output in the Vite subprocess
+  // context. Closing stdin up-front lets it move straight to the API call.
+  const child = spawn("claude", args, {
+    cwd: REPO_ROOT,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   const out: Buffer[] = [];
   const err: Buffer[] = [];
   child.stdout.on("data", (c) => out.push(c));

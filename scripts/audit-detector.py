@@ -447,6 +447,42 @@ def test_t6_madmom_halftime_sanity(data: dict[str, Any]) -> list[str]:
 # Driver
 # --------------------------------------------------------------------------- #
 
+def test_t7_buildup_breakdown_disjoint(data: dict) -> list[str]:
+    """Buildups and breakdowns must not overlap. A buildup is a riser
+    section that leads INTO a drop — it's a different kind of section
+    from a breakdown. Simultaneous "breaking down AND building up" is
+    contradictory and usually means a gradual intro was double-classified.
+    Tolerate up to 20% overlap (risers sometimes nudge into the trailing
+    edge of a breakdown) but flag anything higher."""
+    failures: list[str] = []
+    breakdowns = data.get("breakdowns", [])
+    buildups = data.get("buildups", [])
+    for i, bu in enumerate(buildups):
+        bu_len = bu["end"] - bu["start"]
+        if bu_len <= 0:
+            continue
+        overlap = 0.0
+        worst_bd = None
+        worst_overlap = 0.0
+        for bd in breakdowns:
+            lo = max(bu["start"], bd["start"])
+            hi = min(bu["end"], bd["end"])
+            if hi > lo:
+                overlap += hi - lo
+                if hi - lo > worst_overlap:
+                    worst_overlap = hi - lo
+                    worst_bd = bd
+        frac = overlap / bu_len
+        if frac > 0.20:
+            bd_str = f"[{worst_bd['start']:.1f}, {worst_bd['end']:.1f}]" if worst_bd else "?"
+            failures.append(
+                f"T7: buildups[{i}] {bu_len:.1f}s overlaps breakdowns by "
+                f"{frac*100:.0f}% (worst: {bd_str}) — buildup + breakdown "
+                "are mutually exclusive by definition"
+            )
+    return failures
+
+
 TESTS = [
     ("T1 downbeat grid regularity", test_t1_downbeat_regularity),
     ("T2 bar-index ↔ time consistency", test_t2_bar_index_time_consistency),
@@ -454,6 +490,7 @@ TESTS = [
     ("T4 unconfirmed novelty peak positioning", test_t4_unconfirmed_peak_positioning),
     ("T5 drop phrase alignment", test_t5_drop_phrase_alignment),
     ("T6 madmom half-time sanity", test_t6_madmom_halftime_sanity),
+    ("T7 buildup/breakdown disjoint", test_t7_buildup_breakdown_disjoint),
 ]
 
 

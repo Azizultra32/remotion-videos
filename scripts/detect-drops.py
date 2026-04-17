@@ -565,6 +565,28 @@ for i, bd in enumerate(merged_breakdowns):
 breakdowns = merged_breakdowns
 breakdown_sources = merged_sources
 
+# A buildup that sits inside (or mostly inside) a breakdown is nonsensical
+# — the detector would be saying the track is simultaneously stripping
+# down AND ramping up. This happens on gradual EDM intros where the full
+# first ~30s is both quiet (qualifies as breakdown) and monotonically
+# rising (qualifies as buildup). A real buildup is a distinct riser,
+# 8–16 bars, right before a drop. Discard buildups whose overlap with any
+# breakdown exceeds 50% of their own duration.
+def _overlap_fraction(bu: dict, breakdowns_list: list[dict]) -> float:
+    bu_len = bu["end"] - bu["start"]
+    if bu_len <= 0:
+        return 0.0
+    overlap = 0.0
+    for bd in breakdowns_list:
+        lo = max(bu["start"], bd["start"])
+        hi = min(bu["end"], bd["end"])
+        if hi > lo:
+            overlap += hi - lo
+    return overlap / bu_len
+
+
+buildups = [b for b in buildups if _overlap_fraction(b, breakdowns) < 0.5]
+
 bar_rank = percentile_rank(struct_per_bar) if num_bars else np.array([])
 energy = [
     {"t": round(float(downbeats[i]), 3), "rel": round(float(bar_rank[i]), 4)}

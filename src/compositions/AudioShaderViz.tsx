@@ -282,13 +282,19 @@ export const AudioShaderViz: React.FC<z.infer<typeof audioShaderVizSchema>> = ({
     const beatPulse = sinceBeat >= 0 ? Math.exp(-sinceBeat * 8) * beatSensitivity : 0;
     const downbeatFlash = sinceDown >= 0 ? Math.exp(-sinceDown * 5) * beatSensitivity : 0;
 
-    // Get bass energy from energy curve
+    // Get bass energy from energy curve. The adaptive detector emits
+    // `rel` (0..1 percentile rank per bar); the legacy detector emitted
+    // `db` (absolute dB). Support either so this composition works
+    // across both detector versions without a breaking rebuild.
     let bassEnergy = 0.5;
     if (beats.energy && beats.energy.length > 0) {
-      const energyPoint = beats.energy.find((e) => Math.abs(e.t - timeSec) < 0.5);
+      const energyPoint: any = beats.energy.find((e: any) => Math.abs(e.t - timeSec) < 0.5);
       if (energyPoint) {
-        // Normalize -20dB to 0dB → 0.0 to 1.0
-        bassEnergy = Math.max(0, Math.min(1, (energyPoint.db + 20) / 20));
+        if (typeof energyPoint.rel === "number") {
+          bassEnergy = Math.max(0, Math.min(1, energyPoint.rel));
+        } else if (typeof energyPoint.db === "number") {
+          bassEnergy = Math.max(0, Math.min(1, (energyPoint.db + 20) / 20));
+        }
       }
     }
 

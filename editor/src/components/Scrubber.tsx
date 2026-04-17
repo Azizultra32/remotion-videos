@@ -44,12 +44,21 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
       setReady(true);
       const d = ws.getDuration();
       setDuration(d);
-      // If composition is still at its default short duration, expand it to
-      // cover the whole audio so the user can scrub the full track.
-      const { compositionDuration: cd } = useEditorStore.getState();
-      if (d && cd < d) {
+      // Always defer to the actual decoded audio length. Prevents a stale
+      // (persisted or default) value from clamping seeks past its bound.
+      if (d) {
         useEditorStore.setState({ compositionDuration: Math.ceil(d) });
       }
+      // Hard-mute wavesurfer's own MediaElement — we only use its waveform
+      // rendering, playback is owned by the Remotion Player. Without this
+      // both audio paths fight and nothing audible comes out.
+      try {
+        ws.setVolume(0);
+      } catch {
+        /* older wavesurfer — fall back to muting the underlying element */
+      }
+      const media = ws.getMediaElement?.();
+      if (media) media.muted = true;
     });
     ws.on("click", (progress: number) => {
       const t = progress * ws.getDuration();
@@ -63,17 +72,10 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
     };
   }, [audioUrl, height, setCurrentTime]);
 
-  // Mirror store play/pause into wavesurfer so its progress fill tracks
-  // the Player. We don't rely on it for timing — just for the blue fill.
-  useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws || !ready) return;
-    if (isPlaying) {
-      ws.play().catch(() => {});
-    } else {
-      ws.pause();
-    }
-  }, [isPlaying, ready]);
+  // Do NOT call ws.play()/pause() here. WaveSurfer's internal MediaElement
+  // would play its own audio in parallel with the Remotion Player, which
+  // either doubles up or (more often) kills both. The progress fill is
+  // already driven by the `setTime` effect below, which is sufficient.
 
   // Keep wavesurfer's playhead in sync with the canonical store time.
   useEffect(() => {

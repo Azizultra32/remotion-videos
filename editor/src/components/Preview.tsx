@@ -1,4 +1,9 @@
 // src/components/Preview.tsx
+//
+// Minimal Remotion Player host. Store is source of truth for isPlaying
+// and currentTimeSec; Player is a controlled output. No two-way event
+// mirroring — it caused "Maximum update depth" when combined with a
+// re-render storm from the destructure-everything subscription pattern.
 import { Player, PlayerRef } from "@remotion/player";
 import { useRef, useEffect, useCallback, useMemo } from "react";
 import { useEditorStore } from "../store";
@@ -6,18 +11,18 @@ import { MusicVideo, defaultMusicVideoProps } from "@compositions/MusicVideo";
 
 export const Preview = () => {
   const playerRef = useRef<PlayerRef>(null);
-  const {
-    currentTimeSec,
-    fps,
-    isPlaying,
-    setCurrentTime,
-    setPlaying,
-    elements,
-    compositionDuration,
-    loopPlayback,
-    audioSrc,
-    beatsSrc,
-  } = useEditorStore();
+
+  // Granular selectors. Destructuring the whole store caused this component
+  // to re-render on every frameupdate (24 Hz), which cascaded into the
+  // Player and bricked pause.
+  const fps = useEditorStore((s) => s.fps);
+  const isPlaying = useEditorStore((s) => s.isPlaying);
+  const elements = useEditorStore((s) => s.elements);
+  const compositionDuration = useEditorStore((s) => s.compositionDuration);
+  const loopPlayback = useEditorStore((s) => s.loopPlayback);
+  const audioSrc = useEditorStore((s) => s.audioSrc);
+  const beatsSrc = useEditorStore((s) => s.beatsSrc);
+  const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
 
   const inputProps = useMemo(
     () => ({
@@ -29,100 +34,47 @@ export const Preview = () => {
     [audioSrc, beatsSrc, elements],
   );
 
-  // Seek when the store time diverges meaningfully from the player's clock.
-  // During playback, onFrameUpdate writes currentTimeSec ≈ player frame, so
-  // this compare skips those. External writes (scrubber click, snap, Reset)
-  // produce a big delta and seek through.
+  // One-way control: store → Player. The store is the source of truth;
+  // we never mirror the Player's events back.
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
-    const desired = Math.round(currentTimeSec * fps);
-    const actual = player.getCurrentFrame();
-    if (Math.abs(desired - actual) > 2) {
-      player.seekTo(desired);
-    }
-  }, [currentTimeSec, fps]);
-
-  // Drive the Player from isPlaying. Kept separate from the event listener
-  // below to avoid a loop (the listener writes the store, this reads it).
-  // Only acts when the Player disagrees with the store, so a stray event
-  // doesn't bounce us back.
-  useEffect(() => {
-    const player = playerRef.current;
-    if (!player) return;
-    if (isPlaying && !player.isPlaying()) player.play();
-    else if (!isPlaying && player.isPlaying()) player.pause();
-
-    // Transport seatbelt: when the store says paused, ensure every audio
-    // and video element in the document is actually paused. Remotion
-    // Player.pause() *should* stop all its <Audio> tags, but if any media
-    // element escapes its control (dev-mode prefetch, leaked wavesurfer,
-    // Remotion shared-audio-context bug), this is the reliable kill.
-    // We do NOT force-play anything on the true branch — start-of-playback
-    // is Remotion's job and it needs the user-gesture context.
-    if (!isPlaying) {
-      document
-        .querySelectorAll<HTMLMediaElement>("audio, video")
-        .forEach((el) => {
-          if (!el.paused) el.pause();
-        });
-    }
+    if (isPlaying) player.play();
+    else player.pause();
   }, [isPlaying]);
 
-  // Panic-stop: press Escape to force-pause all media in the DOM. Useful
-  // when a runaway audio element survives the normal pause path.
+  // External seeks (scrubber click, snap, Reset) write currentTimeSec; the
+  // Player's own frameupdate also writes it. To avoid fighting the Player's
+  // clock, we subscribe to currentTimeSec via getState() inside a listener
+  // and only seek when the gap is large. This effect runs once.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setPlaying(false);
-      document
-        .querySelectorAll<HTMLMediaElement>("audio, video")
-        .forEach((el) => el.pause());
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [setPlaying]);
+    const player = playerRef.current;
+    if (!player) return;
+    const unsub = useEditorStore.subscribe((state, prev) => {
+      if (state.currentTimeSec === prev.currentTimeSec) return;
+      const desired = Math.round(state.currentTimeSec * fps);
+      const actual = player.getCurrentFrame();
+      if (Math.abs(desired - actual) > 2) {
+        player.seekTo(desired);
+      }
+    });
+    return unsub;
+  }, [fps]);
 
-  // Mirror the Player's actual state into the store. This is the critical
-  // fix for "pause doesn't work": the Player owns playback state, and the
-  // store merely reflects it. A Pause click writes false → effect above
-  // calls player.pause() → Player fires 'pause' event → store confirms
-  // false. If the Player ever pauses on its own (end, error), the UI
-  // updates to match instead of lying about its state.
+  // Player → store: write currentTimeSec on every frame so the scrubber
+  // playhead tracks playback. This is the ONLY Player → store path.
   const onFrameUpdate = useCallback(
     (e: { detail: { frame: number } }) => {
       setCurrentTime(e.detail.frame / fps);
     },
     [fps, setCurrentTime],
   );
-  // Guard dispatches against the store's current value. Without this, rapid
-  // play/pause events from Remotion during seek or mount transitions would
-  // bounce through setPlaying → re-render → effect #2 → player.play/pause →
-  // another event → ... until React trips "Maximum update depth exceeded".
-  const onPlay = useCallback(() => {
-    if (!useEditorStore.getState().isPlaying) setPlaying(true);
-  }, [setPlaying]);
-  const onPause = useCallback(() => {
-    if (useEditorStore.getState().isPlaying) setPlaying(false);
-  }, [setPlaying]);
-  const onEnded = useCallback(() => {
-    if (useEditorStore.getState().isPlaying) setPlaying(false);
-  }, [setPlaying]);
-
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
     player.addEventListener("frameupdate", onFrameUpdate as any);
-    player.addEventListener("play", onPlay as any);
-    player.addEventListener("pause", onPause as any);
-    player.addEventListener("ended", onEnded as any);
-    return () => {
-      player.removeEventListener("frameupdate", onFrameUpdate as any);
-      player.removeEventListener("play", onPlay as any);
-      player.removeEventListener("pause", onPause as any);
-      player.removeEventListener("ended", onEnded as any);
-    };
-  }, [onFrameUpdate, onPlay, onPause, onEnded]);
+    return () => player.removeEventListener("frameupdate", onFrameUpdate as any);
+  }, [onFrameUpdate]);
 
   return (
     <Player

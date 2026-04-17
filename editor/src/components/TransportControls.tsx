@@ -1,5 +1,6 @@
 // src/components/TransportControls.tsx
 import { useEditorStore } from "../store";
+import { ProjectActions } from "./ProjectActions";
 
 const toggleButtonStyle = (active: boolean) => ({
   padding: "4px 12px",
@@ -150,6 +151,8 @@ export const TransportControls = () => {
       )}
 
       <div style={{ flex: 1 }} />
+
+      <ProjectActions />
 
       <button
         onClick={() => setSnapToBeat(!snapToBeat)}

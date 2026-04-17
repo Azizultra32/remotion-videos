@@ -162,44 +162,117 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
       <div style={{ position: "relative", width: "100%", height }}>
         <div ref={containerRef} style={{ width: "100%", height }} />
 
-        {/* Overlays drawn in the same coordinate space as the waveform */}
+        {/* Overlays. Split across two layers:
+             - The SVG beneath handles the breakdown fill (coordinate-space
+               boxes). Its stroke-width is viewBox-scaled, which is why the
+               old drop markers at stroke 0.15 were invisible.
+             - The HTML layer on top renders drop markers as absolutely-
+               positioned divs at percentage lefts, so they get real pixel
+               widths and can carry labels. Much more readable than a
+               vector-effect stroke. */}
         {ready && beatData && (
-          <svg
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              pointerEvents: "none",
-            }}
-            preserveAspectRatio="none"
-            viewBox={`0 0 ${totalSec} 100`}
-          >
-            {/* Breakdown regions */}
-            {beatData.breakdowns.map((b, i) => (
-              <rect
-                key={`bd${i}`}
-                x={b.start}
-                width={Math.max(0.01, b.end - b.start)}
-                y={0}
-                height={100}
-                fill="rgba(255,80,80,0.08)"
-              />
-            ))}
-            {/* Drop markers */}
-            {beatData.drops.map((t, i) => (
-              <line
-                key={`d${i}`}
-                x1={t}
-                x2={t}
-                y1={0}
-                y2={100}
-                stroke="#ff4444"
-                strokeWidth={0.15}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-          </svg>
+          <>
+            <svg
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                pointerEvents: "none",
+              }}
+              preserveAspectRatio="none"
+              viewBox={`0 0 ${totalSec} 100`}
+            >
+              {beatData.breakdowns.map((b, i) => (
+                <rect
+                  key={`bd${i}`}
+                  x={b.start}
+                  width={Math.max(0.01, b.end - b.start)}
+                  y={0}
+                  height={100}
+                  fill="rgba(122,184,255,0.12)"
+                />
+              ))}
+            </svg>
+            {beatData.breakdowns.map((b, i) => {
+              const leftPct = (b.start / totalSec) * 100;
+              const widthPct = Math.max(0.5, ((b.end - b.start) / totalSec) * 100);
+              return (
+                <div
+                  key={`bdl${i}`}
+                  style={{
+                    position: "absolute",
+                    left: `${leftPct}%`,
+                    width: `${widthPct}%`,
+                    top: 0,
+                    height: "100%",
+                    pointerEvents: "none",
+                    borderTop: "1px solid rgba(122,184,255,0.55)",
+                    borderBottom: "1px solid rgba(122,184,255,0.55)",
+                  }}
+                  title={`Breakdown ${i + 1}: ${b.start.toFixed(1)}s → ${b.end.toFixed(1)}s`}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      left: 4,
+                      padding: "1px 4px",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: "#0a1628",
+                      background: "#7ab8ff",
+                      borderRadius: 2,
+                      letterSpacing: "0.04em",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    B{i + 1}
+                  </span>
+                </div>
+              );
+            })}
+            {beatData.drops.map((t, i) => {
+              const leftPct = (t / totalSec) * 100;
+              const mm = Math.floor(t / 60);
+              const ss = (t - mm * 60).toFixed(1);
+              return (
+                <div
+                  key={`drop${i}`}
+                  style={{
+                    position: "absolute",
+                    left: `${leftPct}%`,
+                    top: 0,
+                    bottom: 0,
+                    width: 2,
+                    background: "#ff6b7a",
+                    boxShadow: "0 0 4px rgba(255,107,122,0.8)",
+                    transform: "translateX(-1px)",
+                    pointerEvents: "none",
+                  }}
+                  title={`Drop ${i + 1} @ ${mm}:${ss}`}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      left: 4,
+                      padding: "1px 4px",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: "#fff",
+                      background: "#ff3838",
+                      borderRadius: 2,
+                      letterSpacing: "0.04em",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    D{i + 1}
+                  </span>
+                </div>
+              );
+            })}
+          </>
         )}
 
         {/* Playhead — canonical store time. `left` is set imperatively by

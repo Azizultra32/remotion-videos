@@ -33,7 +33,9 @@ export const TimelineBeatMarkers = ({ beatData, pxPerSec, height }: Props) => {
             width: Math.max(1, (b.end - b.start) * pxPerSec),
             top: 0,
             height,
-            background: "rgba(255,80,80,0.05)",
+            background: "rgba(122,184,255,0.12)",
+            borderLeft: "1px solid rgba(122,184,255,0.4)",
+            borderRight: "1px solid rgba(122,184,255,0.4)",
           }}
         />
       ))}

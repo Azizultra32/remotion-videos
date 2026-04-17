@@ -7,9 +7,23 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useBeatData } from "./hooks/useBeatData";
 import { usePlaybackSync } from "./hooks/usePlaybackSync";
 
+const DEFAULT_BEATS_URL = "/dubfire-beats.json";
+
+// Allow overriding beats JSON via ?beats=/path/to/beats.json so the editor
+// isn't locked to the dubfire mix. Falls back to the default on any error.
+const getBeatsUrl = (): string => {
+  if (typeof window === "undefined") return DEFAULT_BEATS_URL;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("beats") ?? DEFAULT_BEATS_URL;
+  } catch {
+    return DEFAULT_BEATS_URL;
+  }
+};
+
 export const App = () => {
-  // Load beat data
-  useBeatData("/dubfire-beats.json");
+  // Load beat data (overridable via ?beats=... query param)
+  useBeatData(getBeatsUrl());
 
   // Sync playback
   usePlaybackSync();

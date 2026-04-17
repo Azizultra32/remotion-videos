@@ -15,6 +15,7 @@ Augments public/dubfire-beats.json with:
   "energy":     [{t, bass_db}, ...]   # sampled every 1s for plotting
 """
 import json
+import os
 import numpy as np
 import librosa
 from scipy.signal import medfilt
@@ -189,8 +190,12 @@ data["drop_detection"] = {
     "min_silence_sec": MIN_SILENCE_SEC,
     "min_gap_sec": MIN_GAP_BETWEEN_DROPS_SEC,
 }
-with open(BEATS_JSON, "w") as f:
+# Atomic write: write to temp file, then os.replace to avoid corrupting
+# the existing beats JSON if this script is killed mid-write.
+tmp_path = BEATS_JSON + ".tmp"
+with open(tmp_path, "w") as f:
     json.dump(data, f)
+os.replace(tmp_path, BEATS_JSON)
 
 print(f"Updated {BEATS_JSON}", flush=True)
 print()

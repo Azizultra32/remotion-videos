@@ -55,12 +55,29 @@ grep -q "coreSizeBase + beatPulse \* coreSizePulse" src/compositions/VideoWithTi
 
 echo ""
 echo "7. Default Props Check:"
-COUNT=$(grep -c "fadeInStartSec: 0.5" src/compositions/VideoWithTitle.tsx)
-if [ $COUNT -eq 2 ]; then
-  echo "   ✓ All 12 timing props in defaultVideoWithTitleProps"
-else
-  echo "   ✗ Default props incomplete (expected 2 occurrences, found $COUNT)"
-fi
+# Extract the defaultVideoWithTitleProps block and check each prop individually.
+# This is more robust than counting occurrences of a single prop across the file.
+DEFAULTS_BLOCK=$(awk '/defaultVideoWithTitleProps.*=.*{/,/^};/' src/compositions/VideoWithTitle.tsx)
+check_default() {
+  local prop="$1"
+  if echo "$DEFAULTS_BLOCK" | grep -q "^[[:space:]]*${prop}:"; then
+    echo "   ✓ ${prop} in defaults"
+  else
+    echo "   ✗ ${prop} missing from defaults"
+  fi
+}
+check_default fadeInStartSec
+check_default fadeInEndSec
+check_default lineGrowStartSec
+check_default lineGrowEndSec
+check_default lineGrowWidth
+check_default titleScaleAmount
+check_default videoOpacityBase
+check_default videoScaleAmount
+check_default sonarRing1ScaleMax
+check_default sonarRing2ScaleMax
+check_default sonarCoreSizeBase
+check_default sonarCoreSizePulse
 
 echo ""
 echo "8. TypeScript Compilation:"

@@ -1,0 +1,24 @@
+{
+  "autoApproveTools": true,
+  "autoExecute": true,
+  "skipConfirmations": true,
+  "automation": {
+    "enabled": true,
+    "mode": "full",
+    "requireConfirmation": false,
+    "tools": {
+      "bash": {
+        "autoApprove": true
+      },
+      "write": {
+        "autoApprove": true
+      },
+      "edit": {
+        "autoApprove": true
+      },
+      "read": {
+        "autoApprove": true
+      }
+    }
+  }
+}

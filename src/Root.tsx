@@ -47,6 +47,32 @@ import {
   calculateTIDExplainerMetadata,
   defaultTIDExplainerProps,
 } from "./compositions/TIDExplainer";
+import {
+  IranUpdate,
+  iranUpdateSchema,
+  defaultIranUpdateProps,
+  IRAN_UPDATE_DURATION,
+} from "./compositions/IranUpdate";
+import {
+  VideoWithTitle,
+  videoWithTitleSchema,
+  defaultVideoWithTitleProps,
+} from "./compositions/VideoWithTitle";
+import {
+  BeatDrop,
+  beatDropSchema,
+  defaultBeatDropProps,
+} from "./compositions/BeatDrop";
+import {
+  PublicCut,
+  publicCutSchema,
+  defaultPublicCutProps,
+} from "./compositions/PublicCut";
+import {
+  AudioShaderViz,
+  audioShaderVizSchema,
+  defaultAudioShaderVizProps,
+} from "./compositions/AudioShaderViz";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -328,6 +354,56 @@ export const RemotionRoot: React.FC = () => {
         width={1920}
         height={1080}
         defaultProps={defaultTIDExplainerProps}
+      />
+      <Composition
+        id="VideoWithTitle"
+        component={VideoWithTitle}
+        schema={videoWithTitleSchema}
+        durationInFrames={175704}
+        fps={24}
+        width={848}
+        height={480}
+        defaultProps={defaultVideoWithTitleProps}
+      />
+      <Composition
+        id="PublicCut"
+        component={PublicCut}
+        schema={publicCutSchema}
+        durationInFrames={175704}
+        fps={24}
+        width={848}
+        height={480}
+        defaultProps={defaultPublicCutProps}
+      />
+      <Composition
+        id="BeatDrop"
+        component={BeatDrop}
+        schema={beatDropSchema}
+        durationInFrames={24 * 30}
+        fps={24}
+        width={848}
+        height={480}
+        defaultProps={defaultBeatDropProps}
+      />
+      <Composition
+        id="IranUpdate"
+        component={IranUpdate}
+        schema={iranUpdateSchema}
+        durationInFrames={IRAN_UPDATE_DURATION}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={defaultIranUpdateProps}
+      />
+      <Composition
+        id="AudioShaderViz"
+        component={AudioShaderViz}
+        schema={audioShaderVizSchema}
+        durationInFrames={14400}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={defaultAudioShaderVizProps}
       />
     </>
   );

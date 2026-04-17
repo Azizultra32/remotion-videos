@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(using-superpowers)",
+      "Skill(subagent-driven-development)",
+      "Skill(using-git-worktrees)",
+      "Skill(writing-plans)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "remotion-documentation"
+  ]
+}

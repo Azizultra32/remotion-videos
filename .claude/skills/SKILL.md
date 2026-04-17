@@ -59,3 +59,4 @@ Read individual rule files for detailed explanations and code examples:
 - [rules/parameters.md](rules/parameters.md) - Make a video parametrizable by adding a Zod schema
 - [rules/maps.md](rules/maps.md) - Add a map using Mapbox and animate it
 - [rules/voiceover.md](rules/voiceover.md) - Adding AI-generated voiceover to Remotion compositions using ElevenLabs TTS
+- [rules/music-video-creator.md](rules/music-video-creator.md) - Beat-matched music video framework — zeta points, beat-mapped animations, audio analysis pipeline

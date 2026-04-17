@@ -10,6 +10,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import { z } from "zod";
+import { WaveformViz } from "../components/WaveformViz";
 
 export const videoWithTitleSchema = z.object({
   videoSrc: z.string(),
@@ -35,6 +36,12 @@ export const videoWithTitleSchema = z.object({
   sonarRing2ScaleMax: z.number().default(2.6),
   sonarCoreSizeBase: z.number().default(14),
   sonarCoreSizePulse: z.number().default(6),
+
+  // Waveform visualization
+  showWaveform: z.boolean().default(false),
+  waveformColor: z.string().default("rgba(255,255,255,0.6)"),
+  waveformHeight: z.number().default(60),
+  waveformPosition: z.enum(["top", "bottom"]).default("bottom"),
 });
 
 type BeatsFile = {
@@ -212,6 +219,10 @@ export const VideoWithTitle: React.FC<z.infer<typeof videoWithTitleSchema>> = ({
   sonarRing2ScaleMax,
   sonarCoreSizeBase,
   sonarCoreSizePulse,
+  showWaveform,
+  waveformColor,
+  waveformHeight,
+  waveformPosition,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -353,6 +364,16 @@ export const VideoWithTitle: React.FC<z.infer<typeof videoWithTitleSchema>> = ({
           ) : null}
         </div>
       </AbsoluteFill>
+      {showWaveform && beats && (
+        <WaveformViz
+          beats={beats.beats}
+          duration={beats.duration}
+          color={waveformColor}
+          height={waveformHeight}
+          position={waveformPosition}
+          opacity={fadeIn}
+        />
+      )}
     </AbsoluteFill>
   );
 };
@@ -375,4 +396,8 @@ export const defaultVideoWithTitleProps: z.infer<typeof videoWithTitleSchema> = 
   sonarRing2ScaleMax: 2.6,
   sonarCoreSizeBase: 14,
   sonarCoreSizePulse: 6,
+  showWaveform: false,
+  waveformColor: "rgba(255,255,255,0.6)",
+  waveformHeight: 60,
+  waveformPosition: "bottom",
 };

@@ -15,7 +15,7 @@ Create videos by writing React components that render frame-by-frame.
 ```
 src/
   index.ts          → registerRoot() entry point
-  Root.tsx          → All <Composition> registrations (10 compositions)
+  Root.tsx          → All <Composition> registrations (18 compositions)
   compositions/     → Video component files
   components/       → Reusable UI components
 public/             → Static assets (images, fonts, audio)
@@ -57,7 +57,7 @@ out/                 → Rendered output (gitignored)
 - `<Series>` — sequential playback (used in VideoStitcher)
 - `<AbsoluteFill>` — full-canvas layer
 
-## Compositions (10 registered)
+## Compositions (18 registered)
 
 ### Core / Demo
 - **TextOverlay** — Animated text with spring physics (5s, 30fps). Props: title, subtitle, backgroundColor, textColor, accentColor
@@ -68,16 +68,24 @@ out/                 → Rendered output (gitignored)
 
 ### Brand System
 - **BrandedDemo** — Brand-aware 3-section narrative (13.5s, 30fps). Props: brandName, brandConfig, features[], ctaText, showLogo. Reads from brands/<name>/brand-config.json
+- **LogoReveal** — Animated logo reveal with customizable effects. Props: logoPath, backgroundColor, revealType, durationInFrames
 
 ### Video Production
 - **VideoStitcher** — Scene-chaining composition (16s, 30fps). Props: scenes[] with type (title/feature/cta/transition), title, content, durationInFrames, colors. Uses `<Series>` for sequential playback with lower-third progress indicator.
 - **AdCreative** — Ecom/agency ad (15s, 30fps, 1920x1080). Props: productName, productImage, price, features[], ctaText, colors, orientation. 4 phases: product reveal → feature highlights → price tag → CTA.
 - **AdCreativeVertical** — Same as AdCreative but 1080x1920 for stories/reels.
+- **CaptionedVideo** — Video with animated captions overlay. Props: videoPath, captions[], styling options
+- **VideoWithTitle** — Simple video with title overlay. Props: videoPath, title, styling (848x480, 24fps)
+- **PublicCut** — Video cut/trim composition. Props: videoPath, startTime, endTime (848x480, 24fps)
+- **BeatDrop** — Music-synced visual effects on beat drops. Props: audioPath, beatTimestamps[], visualStyle (848x480, 24fps)
 
 ### Marketing / Social
 - **MapAnimation** — SVG world map with animated network connections (10s, 30fps). Props: locations[] (name, x, y, color), connectionSpeed, backgroundColor. Bezier paths, traveling particles, pulsing dots.
 - **ExplainerVideo** — Multi-scene motion explainer with slide transitions (12s, 30fps). Props: scenes[] (title, description, iconEmoji, backgroundColor). Progress bar, scene counter.
 - **SocialProof** — Testimonial showcase with typewriter quote reveal (12s, 30fps). Props: testimonials[] (quote, author, role, rating), accentColor. Star ratings, indicator dots.
+- **CountdownTimer** — Animated countdown with customizable styling. Props: targetDate, title, backgroundColor
+- **TIDExplainer** — 7-scene Terminal Identity System explainer video. Props: scenes[], styling, branding
+- **IranUpdate** — News update composition with dynamic content. Props: headline, content, sources[], timestamp
 
 ## MMX Visualization Guidelines
 When creating MMX-related videos:

@@ -193,6 +193,16 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
                   fill="rgba(122,184,255,0.12)"
                 />
               ))}
+              {(beatData.buildups ?? []).map((b, i) => (
+                <rect
+                  key={`bu${i}`}
+                  x={b.start}
+                  width={Math.max(0.01, b.end - b.start)}
+                  y={0}
+                  height={100}
+                  fill="rgba(255,184,107,0.10)"
+                />
+              ))}
             </svg>
             {beatData.breakdowns.map((b, i) => {
               const leftPct = (b.start / totalSec) * 100;
@@ -228,6 +238,44 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
                     }}
                   >
                     B{i + 1}
+                  </span>
+                </div>
+              );
+            })}
+            {(beatData.buildups ?? []).map((b, i) => {
+              const leftPct = (b.start / totalSec) * 100;
+              const widthPct = Math.max(0.5, ((b.end - b.start) / totalSec) * 100);
+              return (
+                <div
+                  key={`bul${i}`}
+                  style={{
+                    position: "absolute",
+                    left: `${leftPct}%`,
+                    width: `${widthPct}%`,
+                    top: 0,
+                    height: "100%",
+                    pointerEvents: "none",
+                    borderLeft: "1.5px dashed rgba(255,184,107,0.6)",
+                    borderRight: "1.5px dashed rgba(255,184,107,0.6)",
+                  }}
+                  title={`Buildup ${i + 1}: ${b.start.toFixed(1)}s → ${b.end.toFixed(1)}s`}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      left: 4,
+                      padding: "1px 4px",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: "#1a1000",
+                      background: "#ffb86b",
+                      borderRadius: 2,
+                      letterSpacing: "0.04em",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    U{i + 1}
                   </span>
                 </div>
               );

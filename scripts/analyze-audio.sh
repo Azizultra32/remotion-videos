@@ -66,8 +66,11 @@ python3 scripts/detect-drops.py --audio "$AUDIO" --beats-json "$BEATS_OUT"
 echo "» [3/4] per-frame onset flash @ ${FPS}fps"
 python3 scripts/hires-energy.py --audio "$AUDIO" --fps "$FPS" --out "$ENERGY_OUT"
 
-echo "» [4/4] per-frame 16-band spectrum @ ${FPS}fps"
+echo "» [4/5] per-frame 16-band spectrum @ ${FPS}fps"
 python3 scripts/compute-spectrum.py --audio "$AUDIO" --fps "$FPS" --out "$SPECTRUM_OUT"
+
+echo "» [5/5] verifying detector output"
+python3 scripts/verify-detector.py "$BEATS_OUT"
 
 echo
 echo "✓ done. Point the editor at it with ?beats=/${NAME}-beats.json"

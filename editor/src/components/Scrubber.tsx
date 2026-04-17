@@ -49,16 +49,24 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
       if (d) {
         useEditorStore.setState({ compositionDuration: Math.ceil(d) });
       }
-      // Hard-mute wavesurfer's own MediaElement — we only use its waveform
-      // rendering, playback is owned by the Remotion Player. Without this
-      // both audio paths fight and nothing audible comes out.
+      // Kill wavesurfer's playback path entirely. We only want the waveform
+      // render — playback is owned by the Remotion Player. Merely muting the
+      // element isn't enough: HMR can leak detached audio elements that keep
+      // playing after unmount (that's the "mashed noise after closing the
+      // tab" symptom). Stripping src + pause is the reliable kill.
       try {
         ws.setVolume(0);
-      } catch {
-        /* older wavesurfer — fall back to muting the underlying element */
-      }
+      } catch {}
+      try {
+        (ws as any).stop?.();
+      } catch {}
       const media = ws.getMediaElement?.();
-      if (media) media.muted = true;
+      if (media) {
+        media.muted = true;
+        media.pause();
+        media.removeAttribute("src");
+        media.load();
+      }
     });
     ws.on("click", (progress: number) => {
       const t = progress * ws.getDuration();

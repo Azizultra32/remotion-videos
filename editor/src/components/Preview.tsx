@@ -6,7 +6,6 @@ import { MusicVideo, defaultMusicVideoProps } from "@compositions/MusicVideo";
 
 export const Preview = () => {
   const playerRef = useRef<PlayerRef>(null);
-  const suppressSeekRef = useRef(false);
   const {
     currentTimeSec,
     fps,
@@ -29,20 +28,19 @@ export const Preview = () => {
     [audioSrc, beatsSrc, elements],
   );
 
-  // Only seek when the store time came from outside the player (scrubber,
-  // snap-to-beat, Reset button). Skip seeks that we just wrote from the
-  // player's own frameupdate — those would fight the player's clock and
-  // stall playback.
+  // Only seek when the store time diverges meaningfully from the player's
+  // own clock. During playback, onFrameUpdate writes currentTimeSec ≈ the
+  // player's current frame, so this comparison skips those updates.
+  // External writes (scrubber click, snap, Reset) produce a big delta and
+  // seek through. Previously we used a ref-flag to distinguish origins,
+  // but React batching could swallow a user click that landed in the same
+  // tick as a frameupdate.
   useEffect(() => {
-    if (suppressSeekRef.current) {
-      suppressSeekRef.current = false;
-      return;
-    }
     const player = playerRef.current;
     if (!player) return;
     const desired = Math.round(currentTimeSec * fps);
     const actual = player.getCurrentFrame();
-    if (Math.abs(desired - actual) > 1) {
+    if (Math.abs(desired - actual) > 2) {
       player.seekTo(desired);
     }
   }, [currentTimeSec, fps]);
@@ -56,7 +54,6 @@ export const Preview = () => {
 
   const onFrameUpdate = useCallback(
     (e: { detail: { frame: number } }) => {
-      suppressSeekRef.current = true;
       setCurrentTime(e.detail.frame / fps);
     },
     [fps, setCurrentTime],

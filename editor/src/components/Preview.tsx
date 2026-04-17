@@ -95,9 +95,19 @@ export const Preview = () => {
     },
     [fps, setCurrentTime],
   );
-  const onPlay = useCallback(() => setPlaying(true), [setPlaying]);
-  const onPause = useCallback(() => setPlaying(false), [setPlaying]);
-  const onEnded = useCallback(() => setPlaying(false), [setPlaying]);
+  // Guard dispatches against the store's current value. Without this, rapid
+  // play/pause events from Remotion during seek or mount transitions would
+  // bounce through setPlaying → re-render → effect #2 → player.play/pause →
+  // another event → ... until React trips "Maximum update depth exceeded".
+  const onPlay = useCallback(() => {
+    if (!useEditorStore.getState().isPlaying) setPlaying(true);
+  }, [setPlaying]);
+  const onPause = useCallback(() => {
+    if (useEditorStore.getState().isPlaying) setPlaying(false);
+  }, [setPlaying]);
+  const onEnded = useCallback(() => {
+    if (useEditorStore.getState().isPlaying) setPlaying(false);
+  }, [setPlaying]);
 
   useEffect(() => {
     const player = playerRef.current;

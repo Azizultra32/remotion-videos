@@ -15,8 +15,8 @@ export const useEditorStore = create<EditorState>()(
       fps: 24,
       snapToBeat: true,
       loopPlayback: false,
-      audioSrc: "dubfire-sake-audio.mp3",
-      beatsSrc: "dubfire-beats.json",
+      audioSrc: "love-in-traffic.mp3",
+      beatsSrc: "love-in-traffic-beats.json",
       setCurrentTime: (t) =>
         set((s) => ({
           currentTimeSec: typeof t === "function" ? t(s.currentTimeSec) : t,
@@ -42,17 +42,19 @@ export const useEditorStore = create<EditorState>()(
     {
       name: "music-video-editor",
       storage: createJSONStorage(() => localStorage),
-      // Persist only user-editable fields — exclude transient playback state
+      // Persist only user-editable fields — exclude transient playback state.
+      // compositionDuration is intentionally NOT persisted: it's derived from
+      // whatever audio is currently loaded, and a stale value (e.g. 90s held
+      // over from an earlier session) silently clamps seeks past that bound.
       partialize: (s) => ({
         elements: s.elements,
-        compositionDuration: s.compositionDuration,
         fps: s.fps,
         snapToBeat: s.snapToBeat,
         loopPlayback: s.loopPlayback,
         audioSrc: s.audioSrc,
         beatsSrc: s.beatsSrc,
       }),
-      version: 2,
+      version: 3,
     },
   ),
 );

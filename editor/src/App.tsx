@@ -9,7 +9,7 @@ import { useBeatData } from "./hooks/useBeatData";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useEditorStore } from "./store";
 
-const DEFAULT_BEATS_URL = "/dubfire-beats.json";
+const DEFAULT_BEATS_URL = "/love-in-traffic-beats.json";
 
 // Allow overriding beats JSON via ?beats=/path/to/beats.json so the editor
 // isn't locked to the dubfire mix. Falls back to the default on any error.

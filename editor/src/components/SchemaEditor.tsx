@@ -1,6 +1,13 @@
 // src/components/SchemaEditor.tsx
-// Introspects a zod ZodObject and renders a form control per field.
-// Handles: ZodString, ZodNumber, ZodBoolean, ZodEnum, ZodArray<ZodString>.
+// Introspects a Zod 4 object schema and renders a form control per field.
+// Handles: string, number, boolean, enum, array<string>. Transparently
+// unwraps optional/default/nullable wrappers.
+//
+// Zod 4 API notes (different from v3):
+//   z.object({...}).shape         is a plain object (not a function)
+//   schema._def.type              is a lowercase string like "string", "number"
+//   schema.options                is the public array of enum values
+//   wrapper._def.innerType        is the wrapped schema (optional/default/nullable)
 import type { z } from "zod";
 
 const fieldStyle: React.CSSProperties = {
@@ -26,7 +33,16 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
 const isColorField = (name: string): boolean =>
   /color|stroke|fill|background/i.test(name);
 
-const typeName = (schema: any): string => schema?._def?.typeName ?? "";
+// Peel optional/default/nullable off so we render the inner type.
+const unwrap = (schema: any): any => {
+  let s = schema;
+  while (s && (s._def?.type === "optional" || s._def?.type === "default" || s._def?.type === "nullable")) {
+    s = s._def.innerType;
+  }
+  return s;
+};
+
+const defType = (schema: any): string => schema?._def?.type ?? "";
 
 type FieldProps = {
   name: string;
@@ -36,12 +52,13 @@ type FieldProps = {
 };
 
 const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
-  const tn = typeName(schema);
+  const inner = unwrap(schema);
+  const tn = defType(inner);
   const prettyName = name
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (c) => c.toUpperCase());
 
-  if (tn === "ZodString") {
+  if (tn === "string") {
     if (isColorField(name)) {
       return (
         <Row label={prettyName}>
@@ -66,7 +83,7 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
     );
   }
 
-  if (tn === "ZodNumber") {
+  if (tn === "number") {
     const num = typeof value === "number" ? value : 0;
     return (
       <Row label={`${prettyName} (${num})`}>
@@ -81,7 +98,7 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
     );
   }
 
-  if (tn === "ZodBoolean") {
+  if (tn === "boolean") {
     return (
       <Row label={prettyName}>
         <input
@@ -93,8 +110,12 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
     );
   }
 
-  if (tn === "ZodEnum") {
-    const options: string[] = schema._def.values ?? [];
+  if (tn === "enum") {
+    // Zod 4: `.options` is the public array of enum values; fall back to
+    // deriving from `_def.entries` for exotic schemas.
+    const options: string[] =
+      (inner.options as string[]) ??
+      (inner._def?.entries ? Object.values(inner._def.entries) : []);
     return (
       <Row label={prettyName}>
         <select
@@ -110,7 +131,7 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
     );
   }
 
-  if (tn === "ZodArray") {
+  if (tn === "array") {
     const arr = Array.isArray(value) ? value : [];
     return (
       <Row label={`${prettyName} (one per line)`}>
@@ -127,7 +148,7 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
   }
 
   return (
-    <Row label={`${prettyName} (${tn})`}>
+    <Row label={`${prettyName} (${tn || "unknown"})`}>
       <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap" }}>
         {JSON.stringify(value)}
       </pre>
@@ -142,8 +163,9 @@ type Props = {
 };
 
 export const SchemaEditor: React.FC<Props> = ({ schema, value, onChange }) => {
-  const anySchema = schema as any;
-  const shape: Record<string, any> = anySchema?._def?.shape?.() ?? anySchema?.shape ?? {};
+  const anySchema = unwrap(schema as any);
+  // Zod 4: `.shape` is a plain object on ZodObject (no function call).
+  const shape: Record<string, any> = anySchema?.shape ?? {};
   const keys = Object.keys(shape);
   if (keys.length === 0) {
     return (

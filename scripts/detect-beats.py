@@ -1,21 +1,30 @@
-"""Detect beats and downbeats in a long DJ mix using librosa.
+"""Detect beats and downbeats in an audio file using librosa.
 
-Outputs public/dubfire-beats.json:
+Usage: python3 scripts/detect-beats.py [--audio PATH] [--out PATH]
+
+Defaults match the dubfire mix for backward compatibility. Output JSON:
 {
   "duration": seconds,
   "bpm_global": float,
   "beats": [seconds, ...],
   "downbeats": [seconds, ...],   # every 4th beat starting from detected phase
   "tempo_curve": [{t, bpm}, ...] # local BPM sampled every 10s
+  "drops": [],        # populated later by detect-drops.py
+  "breakdowns": [],   # populated later by detect-drops.py
+  "energy": []        # populated later by hires-energy.py
 }
 """
+import argparse
 import json
-import sys
 import numpy as np
 import librosa
 
-AUDIO = "out/dubfire-sake.wav"
-OUT = "public/dubfire-beats.json"
+parser = argparse.ArgumentParser()
+parser.add_argument("--audio", default="out/dubfire-sake.wav")
+parser.add_argument("--out", default="public/dubfire-beats.json")
+args = parser.parse_args()
+AUDIO = args.audio
+OUT = args.out
 
 print("Loading audio...", flush=True)
 y, sr = librosa.load(AUDIO, sr=22050, mono=True)
@@ -54,6 +63,11 @@ out = {
     "beats": [round(float(t), 4) for t in beat_times],
     "downbeats": [round(t, 4) for t in downbeats],
     "tempo_curve": tempo_curve,
+    # Empty placeholders so the BeatData type is satisfied without having to
+    # run detect-drops.py and hires-energy.py. Those scripts augment this file.
+    "drops": [],
+    "breakdowns": [],
+    "energy": [],
 }
 
 with open(OUT, "w") as f:

@@ -82,8 +82,8 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
 };
 
 export const defaultMusicVideoProps: MusicVideoProps = {
-  audioSrc: "dubfire-sake-audio.mp3",
-  beatsSrc: "dubfire-beats.json",
+  audioSrc: "love-in-traffic.mp3",
+  beatsSrc: "love-in-traffic-beats.json",
   backgroundColor: "#000000",
   elements: [],
 };

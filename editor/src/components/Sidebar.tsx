@@ -11,6 +11,9 @@ type Preset = {
   trackIndex: number;
   props: Record<string, unknown>;
   description: string;
+  // True if this preset currently has no visible effect on the preview
+  // (element is added to timeline but propsBuilder has no mapping for it yet).
+  notWiredYet?: boolean;
 };
 
 const presets: Preset[] = [
@@ -21,6 +24,7 @@ const presets: Preset[] = [
     trackIndex: 0,
     props: { word: "HELLO", fontSize: 72, color: "#ffffff" },
     description: "Animated title word",
+    notWiredYet: true,
   },
   {
     label: "Image",
@@ -29,6 +33,7 @@ const presets: Preset[] = [
     trackIndex: 1,
     props: { src: "public-cut.jpeg", opacity: 1, scale: 1 },
     description: "Static image reveal",
+    notWiredYet: true,
   },
   {
     label: "Effect",
@@ -37,6 +42,7 @@ const presets: Preset[] = [
     trackIndex: 2,
     props: { effect: "zoom", intensity: 1 },
     description: "Generic visual effect",
+    notWiredYet: true,
   },
   {
     label: "Beat Flash",
@@ -45,6 +51,7 @@ const presets: Preset[] = [
     trackIndex: 2,
     props: { color: "#ffffff", intensity: 0.8 },
     description: "Brief flash on a beat",
+    notWiredYet: true,
   },
 ];
 
@@ -95,13 +102,22 @@ export const Sidebar = () => {
               gap: 2,
             }}
           >
-            <span style={{ fontWeight: 600 }}>+ {p.label}</span>
+            <span style={{ fontWeight: 600 }}>
+              + {p.label}
+              {p.notWiredYet && (
+                <span style={{ fontWeight: 400, color: "#c88", marginLeft: 6 }}>
+                  (not wired yet)
+                </span>
+              )}
+            </span>
             <span style={{ fontSize: 10, color: "#888" }}>{p.description}</span>
           </button>
         ))}
       </div>
       <div style={{ marginTop: 16, fontSize: 10, color: "#666", lineHeight: 1.4 }}>
         Click to add at current playhead time. Drag on timeline to move. Configure in right panel.
+        Presets marked "(not wired yet)" appear on the timeline but don't affect the preview until
+        the composition supports generic overlays.
       </div>
     </div>
   );

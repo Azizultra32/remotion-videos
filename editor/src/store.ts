@@ -26,7 +26,10 @@ export const useEditorStore = create<EditorState>()(
           elements: s.elements.map((e) => (e.id === id ? { ...e, ...partial } : e)),
         })),
       removeElement: (id) =>
-        set((s) => ({ elements: s.elements.filter((e) => e.id !== id) })),
+        set((s) => ({
+          elements: s.elements.filter((e) => e.id !== id),
+          selectedElementId: s.selectedElementId === id ? null : s.selectedElementId,
+        })),
       selectElement: (id) => set({ selectedElementId: id }),
       setBeatData: (d) => set({ beatData: d }),
       setSnapToBeat: (s) => set({ snapToBeat: s }),

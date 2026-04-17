@@ -121,6 +121,34 @@ brands/acme-corp/
 ```
 To create a branded video: load brand-config.json → pass as `brandConfig` prop to BrandedDemo or any composition.
 
+## Editor (`editor/`) — Current Limitations
+
+The timeline editor at `editor/` is wired to the **PublicCut** composition only. Current state:
+
+**Fully wired** (Sidebar presets that update the preview):
+- None yet. The Sidebar's 4 presets (Text Block, Image, Effect, Beat Flash) are
+  marked `(not wired yet)` — they add elements to the timeline, but the preview
+  does not change because `propsBuilder` has no mapping from these types into
+  `PublicCut`'s schema.
+
+**Wired paths that work today:**
+- Well-known labels (`AHURA`, `DUBFIRE`, `OMEGA`, `T-MINUS-12:12`) on any
+  element map to specific PublicCut props (see `editor/src/utils/propsBuilder.ts`).
+- Any element with `props.mapTo: "<publicCutFieldName>"` sets that field to
+  `startSec`; `props.mapToDuration` sets it to `durationSec`.
+
+**To wire new element types end-to-end**, either:
+1. Extend PublicCut to accept generic overlay props (preferred for keeping
+   PublicCut's focused design), OR
+2. Create a new composition (`CustomMusicVideo`) that accepts an overlay array
+   and repoint `editor/src/components/Preview.tsx` at it, OR
+3. Require every Sidebar preset to declare `mapTo` / `mapToDuration`.
+
+Open design questions (for a future plan):
+- What does each "effect" (zoom/fade/shake/glow/blur) actually render?
+- How should images be positioned/scaled/animated?
+- Should text overlays use spring physics by default?
+
 ## Skill Stacking (Level 2+)
 When I teach you a new skill or give you a new API key:
 1. Update THIS file with the new capability

@@ -11,6 +11,21 @@ Create videos by writing React components that render frame-by-frame.
 4. **Register compositions** in `src/Root.tsx` using `<Composition>`.
 5. **Static assets** go in `public/` and are referenced with `staticFile()`.
 
+## Parallel Agent Coordination
+If you suspect another Claude Code / coding-agent session is running on this
+repo, claim files before editing:
+
+```bash
+scripts/agents.py claim <your-id> <file>...   # grab
+scripts/agents.py status                       # see everyone's claims
+scripts/agents.py release <your-id>            # let go when done
+```
+
+A `PreToolUse` hook in `.claude/settings.json` auto-claims on every Edit/Write
+using the session id, so in practice you rarely need to call `claim` manually
+— but `status` before starting work is still a good sanity check. Full docs:
+`docs/AGENT-COORDINATION.md`.
+
 ## Project Structure
 ```
 src/

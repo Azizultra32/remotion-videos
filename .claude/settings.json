@@ -18,5 +18,20 @@
       "Agent",
       "mcp__remotion-documentation__*"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/agents-claim-hook.py",
+            "timeout": 10,
+            "statusMessage": "Claiming file for parallel-agent coordination"
+          }
+        ]
+      }
+    ]
   }
 }

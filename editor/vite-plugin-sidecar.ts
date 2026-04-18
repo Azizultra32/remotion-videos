@@ -513,6 +513,86 @@ Rules:
 - If you are unsure what the user wants, emit an empty mutations array and explain in reply.
 `.trim();
 
+// ---------------------------------------------------------------------------
+// /api/timeline/watch/:stem  (GET — SSE stream of external edits to timeline.json)
+// ---------------------------------------------------------------------------
+//
+// Pushes a `change` event whenever projects/<stem>/timeline.json is modified
+// by something OTHER than the autosave round-trip (e.g. Claude Code's Edit
+// tool touching the file, or the user editing it in vim). The editor's
+// useTimelineSync hook consumes this stream and re-hydrates the store so
+// the preview reflects the external change without a manual refresh.
+//
+// Watches the PARENT DIRECTORY and filters on filename because our own
+// /api/timeline/save writes a tmp file then renames — fs.watch on the
+// file itself loses the inode during that rename. Dir-watch + filter is
+// race-free.
+
+const handleTimelineWatch = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  // Connect strips "/api/timeline/watch/"; req.url is "/love-in-traffic".
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a dir");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project not found", stem }));
+    return;
+  }
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no", // disable nginx-style buffering if ever behind a proxy
+  });
+  res.write(`event: hello\ndata: ${JSON.stringify({ stem })}\n\n`);
+
+  const { watch } = await import("node:fs");
+  let watcher: import("node:fs").FSWatcher | null = null;
+  try {
+    watcher = watch(projectDir, { persistent: false }, (eventType, filename) => {
+      if (filename !== "timeline.json") return;
+      if (eventType !== "change" && eventType !== "rename") return;
+      try {
+        res.write(
+          `event: change\ndata: ${JSON.stringify({ stem, ts: Date.now() })}\n\n`,
+        );
+      } catch {
+        // connection closed; ignore
+      }
+    });
+  } catch (err) {
+    // Directory watch failed (unlikely). Surface as a one-off SSE error
+    // and hold the connection so the client doesn't reconnect-storm.
+    res.write(
+      `event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`,
+    );
+  }
+
+  // SSE keep-alive — some intermediaries close idle connections at 30s.
+  const keepalive = setInterval(() => {
+    try { res.write(":keepalive\n\n"); } catch { /* closed */ }
+  }, 20000);
+
+  req.on("close", () => {
+    clearInterval(keepalive);
+    if (watcher) watcher.close();
+  });
+};
+
 const handleChat = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -659,6 +739,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/out/", wrap("GET", handleOut));
     server.middlewares.use("/api/projects/", wrap("GET", handleProjectFile));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
+    server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
     server.middlewares.use("/api/current-project", wrap("GET", handleCurrentGet));
     server.middlewares.use("/api/current-project", wrap("POST", handleCurrentSave));

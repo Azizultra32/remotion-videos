@@ -74,13 +74,37 @@ const handleSongs = async (
     return;
   }
 
-  const entrySet = new Set(entries);
+  // Collect beats-file stems (strip trailing "-beats.json"). Audio pairs
+  // with the LONGEST beats stem that is a hyphen-bounded prefix of the
+  // audio stem (or exact match). Exact match wins over prefix.
+  // Examples in this repo:
+  //   dubfire-beats.json + dubfire-sake.wav           -> pair (prefix)
+  //   dubfire-beats.json + dubfire-sake-audio.mp3     -> pair (prefix)
+  //   love-in-traffic-beats.json + love-in-traffic.mp3 -> pair (exact)
+  const beatsStems = entries
+    .filter((f) => /-beats\.json$/i.test(f))
+    .map((f) => f.replace(/-beats\.json$/i, ""));
+
+  const pickBeats = (audioStem: string): string | null => {
+    let best: string | null = null;
+    for (const bs of beatsStems) {
+      const isExact = bs === audioStem;
+      const isPrefix = audioStem.startsWith(bs + "-");
+      if (!isExact && !isPrefix) continue;
+      if (best === null || bs.length > best.length) best = bs;
+    }
+    return best;
+  };
+
   const audio = entries.filter((f) => /\.(mp3|wav)$/i.test(f));
   const songs: SongEntry[] = [];
   for (const audioSrc of audio) {
     const stem = audioSrc.replace(/\.(mp3|wav)$/i, "");
-    const beatsSrc = `${stem}-beats.json`;
-    const hasBeats = entrySet.has(beatsSrc);
+    const beatsStem = pickBeats(stem);
+    const beatsSrc = beatsStem
+      ? `${beatsStem}-beats.json`
+      : `${stem}-beats.json`; // keep a sensible default for UI display
+    const hasBeats = beatsStem !== null;
     let sizeBytes = 0;
     try {
       const st = await fs.stat(path.join(PUBLIC_DIR, audioSrc));

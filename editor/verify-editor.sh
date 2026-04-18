@@ -112,8 +112,9 @@ else
 fi
 
 echo ""
-echo "9. usePlaybackSync respects loopPlayback (Task 7):"
-grep -q "loopPlayback" src/hooks/usePlaybackSync.ts && pass "loopPlayback consulted in playback advance" || fail "usePlaybackSync ignores loopPlayback"
+echo "9. usePlaybackSync clamps-and-stops at composition end (Task 7):"
+# Loop was removed as useless; playback now always clamps + stops at the end.
+grep -q "compositionDuration" src/hooks/usePlaybackSync.ts && pass "playback advance checks compositionDuration" || fail "usePlaybackSync missing end-of-track handling"
 
 echo ""
 echo "10. ElementDetail spring-curve preview (Task 6):"

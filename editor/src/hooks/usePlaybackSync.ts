@@ -8,7 +8,6 @@ export const usePlaybackSync = () => {
     setCurrentTime,
     fps,
     compositionDuration,
-    loopPlayback,
     setPlaying,
   } = useEditorStore();
 
@@ -19,11 +18,7 @@ export const usePlaybackSync = () => {
       setCurrentTime((t) => {
         const next = t + 1 / fps;
         if (next >= compositionDuration) {
-          // End of composition: loop back to 0 or clamp + stop.
-          if (loopPlayback) {
-            return 0;
-          }
-          // Clamp to end and stop playback so the interval can clear.
+          // End of composition: clamp + stop so the interval clears.
           setPlaying(false);
           return compositionDuration;
         }
@@ -36,7 +31,6 @@ export const usePlaybackSync = () => {
     isPlaying,
     fps,
     compositionDuration,
-    loopPlayback,
     setCurrentTime,
     setPlaying,
   ]);

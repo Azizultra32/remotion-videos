@@ -2,7 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { useChat, type ChatMessage } from "../hooks/useChat";
 
 export const ChatPane = () => {
-  const { messages, pending, send, cancel, clear } = useChat();
+  const {
+    messages,
+    pending,
+    cooldown,
+    undoableIndex,
+    send,
+    cancel,
+    clear,
+    undoLastTurn,
+  } = useChat();
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -12,9 +21,12 @@ export const ChatPane = () => {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, pending]);
 
+  const cooling = Boolean(cooldown && cooldown.remainingSec > 0);
+  const inputDisabled = pending || cooling;
+
   const submit = () => {
     const text = input.trim();
-    if (!text || pending) return;
+    if (!text || inputDisabled) return;
     setInput("");
     void send(text);
     inputRef.current?.focus();
@@ -67,6 +79,26 @@ export const ChatPane = () => {
         </button>
       </div>
 
+      {cooling && (
+        <div
+          style={{
+            padding: "8px 12px",
+            background: "#3a2a0f",
+            borderBottom: "1px solid #7a5a1a",
+            color: "#fbbf24",
+            fontSize: 11,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 13 }}>&#9888;</span>
+          <span>
+            Claude CLI rate-limited — retry in {cooldown!.remainingSec}s
+          </span>
+        </div>
+      )}
+
       <div
         ref={listRef}
         style={{
@@ -88,12 +120,17 @@ export const ChatPane = () => {
             </ul>
           </div>
         )}
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+        {messages.map((m, i) => (
+          <MessageBubble
+            key={m.id}
+            message={m}
+            showUndo={i === undoableIndex}
+            onUndo={undoLastTurn}
+          />
         ))}
         {pending && (
           <div style={{ color: "#888", fontStyle: "italic", fontSize: 11 }}>
-            Thinking…
+            Thinking&#8230;
           </div>
         )}
       </div>
@@ -104,14 +141,18 @@ export const ChatPane = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Describe what you want — Enter to send, Shift+Enter for newline"
+          placeholder={
+            cooling
+              ? `Cooling down — ${cooldown!.remainingSec}s remaining`
+              : "Describe what you want — Enter to send, Shift+Enter for newline"
+          }
           rows={3}
-          disabled={pending}
+          disabled={inputDisabled}
           style={{
             width: "100%",
             boxSizing: "border-box",
-            background: "#1a1a1a",
-            color: "#fff",
+            background: inputDisabled ? "#111" : "#1a1a1a",
+            color: inputDisabled ? "#666" : "#fff",
             border: "1px solid #333",
             borderRadius: 4,
             padding: 8,
@@ -140,14 +181,15 @@ export const ChatPane = () => {
           ) : (
             <button
               onClick={submit}
-              disabled={!input.trim()}
+              disabled={!input.trim() || inputDisabled}
               style={{
-                background: input.trim() ? "#1a3a1a" : "#222",
+                background: input.trim() && !inputDisabled ? "#1a3a1a" : "#222",
                 border: "1px solid #2a5",
-                color: input.trim() ? "#8f8" : "#555",
+                color: input.trim() && !inputDisabled ? "#8f8" : "#555",
                 padding: "4px 12px",
                 fontSize: 11,
-                cursor: input.trim() ? "pointer" : "not-allowed",
+                cursor:
+                  input.trim() && !inputDisabled ? "pointer" : "not-allowed",
                 borderRadius: 3,
               }}
             >
@@ -170,7 +212,15 @@ const roleStyle = (role: ChatMessage["role"]): React.CSSProperties => {
   return { alignSelf: "flex-start", background: "#1a1a1a", color: "#e5e5e5", maxWidth: "90%" };
 };
 
-const MessageBubble = ({ message }: { message: ChatMessage }) => {
+const MessageBubble = ({
+  message,
+  showUndo,
+  onUndo,
+}: {
+  message: ChatMessage;
+  showUndo: boolean;
+  onUndo: () => void;
+}) => {
   const { mutationResult } = message;
   return (
     <div
@@ -196,16 +246,35 @@ const MessageBubble = ({ message }: { message: ChatMessage }) => {
             display: "flex",
             gap: 10,
             flexWrap: "wrap",
+            alignItems: "center",
           }}
         >
           <span>
             {mutationResult.applied} applied
             {mutationResult.skipped > 0 ? `, ${mutationResult.skipped} skipped` : ""}
+            {message.undone ? " — undone" : ""}
           </span>
           {mutationResult.errors.length > 0 && (
             <span style={{ color: "#f87171" }} title={mutationResult.errors.join("\n")}>
               {mutationResult.errors.length} error{mutationResult.errors.length === 1 ? "" : "s"}
             </span>
+          )}
+          {showUndo && !message.undone && (
+            <button
+              onClick={onUndo}
+              style={{
+                marginLeft: "auto",
+                background: "transparent",
+                border: "1px solid #555",
+                color: "#d1d5db",
+                padding: "2px 8px",
+                fontSize: 10,
+                cursor: "pointer",
+                borderRadius: 3,
+              }}
+            >
+              Undo
+            </button>
           )}
         </div>
       )}

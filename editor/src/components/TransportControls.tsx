@@ -1,17 +1,32 @@
 // src/components/TransportControls.tsx
 import { useEditorStore } from "../store";
 import { ProjectActions } from "./ProjectActions";
+import type { SnapMode } from "../types";
 
-const toggleButtonStyle = (active: boolean) => ({
-  padding: "4px 12px",
-  background: active ? "#2196F3" : "#222",
-  border: `1px solid ${active ? "#2196F3" : "#444"}`,
-  borderRadius: 4,
-  color: "#fff",
-  fontSize: 11,
-  cursor: "pointer" as const,
-  fontWeight: 500,
-});
+// Click cycles through the modes in this order. "off" is the only "inactive"
+// state — the other three show the active-blue chrome.
+const SNAP_CYCLE: SnapMode[] = ["off", "beat", "half-beat", "downbeat"];
+const SNAP_LABEL: Record<SnapMode, string> = {
+  "off": "OFF",
+  "beat": "BEAT",
+  "half-beat": "\u00bdBEAT",
+  "downbeat": "DOWN",
+};
+const snapButtonStyle = (mode: SnapMode) => {
+  const active = mode !== "off";
+  return {
+    padding: "4px 12px",
+    background: active ? "#2196F3" : "#222",
+    border: `1px solid ${active ? "#2196F3" : "#444"}`,
+    borderRadius: 4,
+    color: "#fff",
+    fontSize: 11,
+    cursor: "pointer" as const,
+    fontWeight: 500,
+    minWidth: 96,
+    fontFamily: "monospace",
+  };
+};
 
 export const TransportControls = () => {
   // Granular selectors. A full destructure re-renders this component on
@@ -25,10 +40,14 @@ export const TransportControls = () => {
   const compositionDuration = useEditorStore((s) => s.compositionDuration);
   const fps = useEditorStore((s) => s.fps);
   const beatData = useEditorStore((s) => s.beatData);
-  const snapToBeat = useEditorStore((s) => s.snapToBeat);
-  const setSnapToBeat = useEditorStore((s) => s.setSnapToBeat);
-  const loopPlayback = useEditorStore((s) => s.loopPlayback);
-  const setLoopPlayback = useEditorStore((s) => s.setLoopPlayback);
+  const snapMode = useEditorStore((s) => s.snapMode);
+  const setSnapMode = useEditorStore((s) => s.setSnapMode);
+
+  const cycleSnapMode = () => {
+    const i = SNAP_CYCLE.indexOf(snapMode);
+    const next = SNAP_CYCLE[(i + 1) % SNAP_CYCLE.length];
+    setSnapMode(next);
+  };
 
   const jump = (delta: number) => {
     setCurrentTime(
@@ -157,19 +176,14 @@ export const TransportControls = () => {
       <ProjectActions />
 
       <button
-        onClick={() => setSnapToBeat(!snapToBeat)}
-        style={toggleButtonStyle(snapToBeat)}
-        title="Snap dragged elements to beats (shift inverts)"
+        onClick={cycleSnapMode}
+        style={snapButtonStyle(snapMode)}
+        title={
+          "Snap dragged elements. Click to cycle: OFF → BEAT → \u00bdBEAT → DOWNBEAT. " +
+          "Shift during drag inverts (off+shift = beat snap; any mode+shift = no snap)."
+        }
       >
-        Snap: {snapToBeat ? "ON" : "OFF"}
-      </button>
-
-      <button
-        onClick={() => setLoopPlayback(!loopPlayback)}
-        style={toggleButtonStyle(loopPlayback)}
-        title="Loop playback at end of composition"
-      >
-        Loop: {loopPlayback ? "ON" : "OFF"}
+        Snap: {SNAP_LABEL[snapMode]}
       </button>
 
       <button

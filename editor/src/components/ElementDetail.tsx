@@ -48,7 +48,7 @@ export const ElementDetail = () => {
     updateElement,
     removeElement,
     beatData,
-    snapToBeat,
+    snapMode,
   } = useEditorStore();
   const element = elements.find((e) => e.id === selectedElementId);
 
@@ -142,7 +142,7 @@ export const ElementDetail = () => {
             style={fieldStyle}
           />
         </Field>
-        {beatData && snapToBeat && (
+        {beatData && snapMode !== "off" && (
           <button
             onClick={snapStart}
             title="Snap start time to nearest detected beat"

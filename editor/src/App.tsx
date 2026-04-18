@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Preview } from "./components/Preview";
 import { Timeline } from "./components/Timeline";
 import { ElementDetail } from "./components/ElementDetail";
 import { Sidebar } from "./components/Sidebar";
+import { SongPicker } from "./components/SongPicker";
 import { TransportControls } from "./components/TransportControls";
 import { Scrubber } from "./components/Scrubber";
 import { ChatPane } from "./components/ChatPane";
@@ -12,26 +14,46 @@ import { useEditorStore } from "./store";
 
 const DEFAULT_BEATS_URL = "/love-in-traffic-beats.json";
 
-// Allow overriding beats JSON via ?beats=/path/to/beats.json so the editor
-// isn't locked to the dubfire mix. Falls back to the default on any error.
-const getBeatsUrl = (): string => {
-  if (typeof window === "undefined") return DEFAULT_BEATS_URL;
+// Mount-time ?beats=... override. Historically this was the only way to
+// switch tracks; now SongPicker handles runtime switching via store.setTrack.
+// This remains only as a seed for initial state when the store was empty.
+const getQueryBeatsUrl = (): string | null => {
+  if (typeof window === "undefined") return null;
   try {
     const params = new URLSearchParams(window.location.search);
-    return params.get("beats") ?? DEFAULT_BEATS_URL;
+    return params.get("beats");
   } catch {
-    return DEFAULT_BEATS_URL;
+    return null;
   }
 };
 
 export const App = () => {
-  // Load beat data (overridable via ?beats=... query param)
-  useBeatData(getBeatsUrl());
-
   // Keyboard shortcuts (space, arrows, home/end, etc.)
   useKeyboardShortcuts();
 
   const audioSrc = useEditorStore((s) => s.audioSrc);
+  const beatsSrc = useEditorStore((s) => s.beatsSrc);
+  const setBeatsSrc = useEditorStore((s) => s.setBeatsSrc);
+
+  // One-shot seed from ?beats=... if the store has no beatsSrc yet. After
+  // this the SongPicker / store is the single source of truth.
+  useEffect(() => {
+    if (!beatsSrc) {
+      const q = getQueryBeatsUrl();
+      if (q) setBeatsSrc(q.replace(/^\//, ""));
+    }
+    // Intentionally run once — we only want to hydrate missing state, not
+    // fight the user's later picks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reactive beats load: re-fetches whenever the store's beatsSrc changes
+  // (i.e. when SongPicker calls setTrack).
+  const beatsUrl = beatsSrc
+    ? `/${beatsSrc.replace(/^\//, "")}`
+    : (getQueryBeatsUrl() ?? DEFAULT_BEATS_URL);
+  useBeatData(beatsUrl);
+
   const audioUrl = audioSrc ? `/${audioSrc.replace(/^\//, "")}` : null;
 
   return (
@@ -40,6 +62,9 @@ export const App = () => {
       <div style={{ gridRow: "1/5", borderRight: "1px solid #333", padding: 0, overflowY: "auto" }}>
         <div style={{ padding: 16, borderBottom: "1px solid #333" }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Music Video Editor</h2>
+          <ErrorBoundary name="Song Picker">
+            <SongPicker />
+          </ErrorBoundary>
         </div>
         <ErrorBoundary name="Sidebar">
           <Sidebar />

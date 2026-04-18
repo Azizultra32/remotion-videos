@@ -1,5 +1,6 @@
 import type { TimelineElement } from "../types";
 import { useEditorStore } from "../store";
+import { ELEMENT_REGISTRY } from "@compositions/elements/registry";
 
 // Mutations the chat layer emits. These mirror the 5 store actions the sidecar
 // CHAT_SYSTEM prompt documents. Everything is validated defensively because
@@ -17,10 +18,22 @@ export type ChatMutation =
   | { op: "seekTo"; sec: number }
   | { op: "setPlaying"; playing: boolean };
 
+// Snapshot taken BEFORE a batch of mutations is applied, sufficient to revert
+// that batch via useChat's undoLastTurn. We capture:
+//   - addedIds:    ids that did not exist before (revert = remove)
+//   - priorById:   pre-mutation elements for ids that were updated/removed
+//                  (revert = upsert the original back into elements[])
+// seekTo / setPlaying are NOT undone — they're navigation, not content.
+export type UndoSnapshot = {
+  addedIds: string[];
+  priorById: Record<string, TimelineElement>;
+};
+
 export type MutationResult = {
   applied: number;
   skipped: number;
   errors: string[];
+  undo: UndoSnapshot;
 };
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -56,14 +69,41 @@ const validateElement = (raw: unknown): TimelineElement | null => {
 // Applies a list of mutations to the store. Unknown ops / malformed entries
 // are skipped with a recorded error; valid ops go through even if earlier
 // entries were bad.
+//
+// Gap A: an addElement whose `type` is not present in ELEMENT_REGISTRY is
+// rejected with a useful error so the chat UI can surface "unknown element
+// type 'RainbowBeam' — pick from: text.typingText, ..." rather than silently
+// crashing at render time.
+//
+// Gap B: result.undo captures everything needed to revert this batch.
 export const applyMutations = (mutations: unknown): MutationResult => {
-  const result: MutationResult = { applied: 0, skipped: 0, errors: [] };
+  const result: MutationResult = {
+    applied: 0,
+    skipped: 0,
+    errors: [],
+    undo: { addedIds: [], priorById: {} },
+  };
   if (!Array.isArray(mutations)) {
     result.errors.push("mutations is not an array");
     return result;
   }
 
   const s = useEditorStore.getState();
+
+  // Record a pre-mutation snapshot of an element id we're about to touch.
+  // First-write-wins: if the same id is touched twice in one batch, we want
+  // the ORIGINAL state, not the intermediate.
+  const rememberPrior = (id: string) => {
+    if (id in result.undo.priorById) return;
+    const existing = useEditorStore.getState().elements.find((x) => x.id === id);
+    if (existing) {
+      // Deep-enough clone: TimelineElement has a props bag of unknowns.
+      result.undo.priorById[id] = {
+        ...existing,
+        props: { ...existing.props },
+      };
+    }
+  };
 
   for (let i = 0; i < mutations.length; i++) {
     const m = mutations[i];
@@ -81,12 +121,24 @@ export const applyMutations = (mutations: unknown): MutationResult => {
             result.errors.push(`[${i}] addElement: invalid element`);
             break;
           }
+          // Gap A — reject unknown element types. This is the LAST line of
+          // defense before the renderer tries to look up the module.
+          if (!(el.type in ELEMENT_REGISTRY)) {
+            result.skipped++;
+            const known = Object.keys(ELEMENT_REGISTRY).join(", ");
+            result.errors.push(
+              `[${i}] addElement: unknown element type "${el.type}". Known types: ${known}`,
+            );
+            break;
+          }
           // De-dupe by id — if an id collides, swap to update semantics.
           const existing = useEditorStore.getState().elements.find((x) => x.id === el.id);
           if (existing) {
+            rememberPrior(el.id);
             s.updateElement(el.id, el);
           } else {
             s.addElement(el);
+            result.undo.addedIds.push(el.id);
           }
           result.applied++;
           break;
@@ -112,6 +164,7 @@ export const applyMutations = (mutations: unknown): MutationResult => {
           if (typeof patch.label === "string") merged.label = patch.label;
           if (isObject(patch.props))
             merged.props = { ...current.props, ...patch.props };
+          rememberPrior(m.id);
           s.updateElement(m.id, merged);
           result.applied++;
           break;
@@ -122,6 +175,7 @@ export const applyMutations = (mutations: unknown): MutationResult => {
             result.errors.push(`[${i}] removeElement: missing id`);
             break;
           }
+          rememberPrior(m.id);
           s.removeElement(m.id);
           result.applied++;
           break;
@@ -159,3 +213,32 @@ export const applyMutations = (mutations: unknown): MutationResult => {
 
   return result;
 };
+
+// Reverts a batch of mutations using the snapshot captured by applyMutations.
+// Order matters: remove the things we added first (in case an update later
+// collides), then re-insert/restore the things we updated or removed.
+export const revertMutations = (undo: UndoSnapshot): void => {
+  const s = useEditorStore.getState();
+
+  // Step 1: remove anything we added fresh.
+  for (const id of undo.addedIds) {
+    s.removeElement(id);
+  }
+
+  // Step 2: for each prior snapshot, either restore-in-place (still exists)
+  // or re-add (was removed). addedIds were already handled above and won't
+  // appear in priorById because rememberPrior is only called before update/
+  // remove.
+  for (const id of Object.keys(undo.priorById)) {
+    const prior = undo.priorById[id];
+    const exists = useEditorStore.getState().elements.some((x) => x.id === id);
+    if (exists) {
+      s.updateElement(id, prior);
+    } else {
+      s.addElement(prior);
+    }
+  }
+};
+
+export const hasUndo = (undo: UndoSnapshot): boolean =>
+  undo.addedIds.length > 0 || Object.keys(undo.priorById).length > 0;

@@ -13,8 +13,7 @@ export const useEditorStore = create<EditorState>()(
       beatData: null,
       compositionDuration: 90,
       fps: 24,
-      snapToBeat: true,
-      loopPlayback: false,
+      snapMode: "beat",
       audioSrc: "love-in-traffic.mp3",
       beatsSrc: "love-in-traffic-beats.json",
       setCurrentTime: (t) =>
@@ -34,10 +33,24 @@ export const useEditorStore = create<EditorState>()(
         })),
       selectElement: (id) => set({ selectedElementId: id }),
       setBeatData: (d) => set({ beatData: d }),
-      setSnapToBeat: (s) => set({ snapToBeat: s }),
-      setLoopPlayback: (l) => set({ loopPlayback: l }),
+      setSnapMode: (m) => set({ snapMode: m }),
       setAudioSrc: (s) => set({ audioSrc: s }),
       setBeatsSrc: (s) => set({ beatsSrc: s }),
+      // Convenience: switch tracks atomically. Clears timeline elements
+      // (they're tied to beats/drops of the previous track) and resets the
+      // playhead so we don't seek past the new track's unknown duration.
+      // beatData is nulled so Scrubber's beat overlay doesn't flash the old
+      // track's markers over the new waveform during the re-fetch.
+      setTrack: (audioSrc, beatsSrc) =>
+        set({
+          audioSrc,
+          beatsSrc,
+          elements: [],
+          currentTimeSec: 0,
+          isPlaying: false,
+          selectedElementId: null,
+          beatData: null,
+        }),
     }),
     {
       name: "music-video-editor",
@@ -49,12 +62,26 @@ export const useEditorStore = create<EditorState>()(
       partialize: (s) => ({
         elements: s.elements,
         fps: s.fps,
-        snapToBeat: s.snapToBeat,
-        loopPlayback: s.loopPlayback,
+        snapMode: s.snapMode,
         audioSrc: s.audioSrc,
         beatsSrc: s.beatsSrc,
       }),
-      version: 3,
+      // v4: snapToBeat:boolean + loopPlayback:boolean → snapMode:SnapMode
+      // (loopPlayback dropped entirely — the button was useless).
+      version: 4,
+      migrate: (persisted, version) => {
+        if (!persisted || typeof persisted !== "object") return persisted as any;
+        const p = persisted as Record<string, unknown>;
+        if (version < 4) {
+          // Old shape carried snapToBeat (bool) and loopPlayback (bool).
+          // Map snapToBeat → snapMode, drop loopPlayback.
+          const prev = p.snapToBeat;
+          const snapMode = prev === false ? "off" : "beat";
+          const { snapToBeat: _drop1, loopPlayback: _drop2, ...rest } = p;
+          return { ...rest, snapMode };
+        }
+        return p as any;
+      },
     },
   ),
 );

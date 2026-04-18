@@ -16,6 +16,15 @@ export const musicVideoSchema = z.object({
   beatsSrc: z.string().nullable(),
   backgroundColor: z.string().default("#000000"),
   elements: z.array(z.any()).default([]),
+  // When true, suppress the internal <Audio> tag but still expose audioSrc
+  // to elements via RenderCtx so audio-reactive visualizers (FFT, waveform)
+  // keep working. Used by the editor preview, which owns audio playback
+  // via its own <audio> element.
+  muteAudioTag: z.boolean().default(false),
+  // Optional override: URL that analysis hooks (useFFT, useWindowedAudioData)
+  // should fetch from. Falls back to audioSrc when not set. Lets the editor
+  // pass the real audio URL to visualizers even when audioSrc is null.
+  analysisAudioSrc: z.string().nullable().default(null),
 });
 
 export type MusicVideoProps = {
@@ -23,6 +32,8 @@ export type MusicVideoProps = {
   beatsSrc: string | null;
   backgroundColor: string;
   elements: TimelineElement[];
+  muteAudioTag?: boolean;
+  analysisAudioSrc?: string | null;
 };
 
 const isActive = (el: TimelineElement, t: number): boolean =>
@@ -33,6 +44,8 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
   beatsSrc,
   backgroundColor,
   elements,
+  muteAudioTag = false,
+  analysisAudioSrc = null,
 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -44,9 +57,14 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
     (a, b) => (a.trackIndex ?? 0) - (b.trackIndex ?? 0),
   );
 
+  // audioSrc that audio-reactive elements see via RenderCtx. Prefer an
+  // explicit override (editor preview passes the real URL here while
+  // keeping audioSrc=null to silence <Audio>), otherwise use audioSrc.
+  const ctxAudioSrc = analysisAudioSrc ?? audioSrc;
+
   return (
     <AbsoluteFill style={{ backgroundColor }}>
-      {audioSrc && <Audio src={audioSrc.startsWith("http") || audioSrc.startsWith("/") ? audioSrc : staticFile(audioSrc)} />}
+      {audioSrc && !muteAudioTag && <Audio src={audioSrc.startsWith("http") || audioSrc.startsWith("/") ? audioSrc : staticFile(audioSrc)} />}
 
       {sorted.map((el) => {
         if (!isActive(el, absTimeSec)) return null;
@@ -63,7 +81,7 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
           Math.min(1, elementLocalSec / Math.max(0.0001, el.durationSec)),
         );
         const ctx: RenderCtx = {
-          audioSrc,
+          audioSrc: ctxAudioSrc,
           beatsSrc,
           beats,
           width,

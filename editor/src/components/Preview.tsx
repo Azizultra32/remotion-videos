@@ -21,21 +21,8 @@ export const Preview = () => {
   const isPlaying = useEditorStore((s) => s.isPlaying);
   const elements = useEditorStore((s) => s.elements);
   const compositionDuration = useEditorStore((s) => s.compositionDuration);
-  const loopPlayback = useEditorStore((s) => s.loopPlayback);
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);
-
-  // Visuals only: force audioSrc=null for the Player so MusicVideo skips
-  // its <Audio> tag. The separate <audio> element below owns playback.
-  const inputProps = useMemo(
-    () => ({
-      ...defaultMusicVideoProps,
-      audioSrc: null,
-      beatsSrc: beatsSrc ?? defaultMusicVideoProps.beatsSrc,
-      elements,
-    }),
-    [beatsSrc, elements],
-  );
 
   // Resolve audio URL same way MusicVideo did.
   const audioUrl = useMemo(() => {
@@ -43,6 +30,24 @@ export const Preview = () => {
     if (audioSrc.startsWith("http") || audioSrc.startsWith("/")) return audioSrc;
     return `/${audioSrc}`;
   }, [audioSrc]);
+
+  // Visuals only: force audioSrc=null + muteAudioTag so MusicVideo skips
+  // its <Audio> tag. The separate <audio> element below owns playback.
+  // But we still hand the audio URL to analysis hooks via analysisAudioSrc
+  // so audio-reactive elements (SpectrumBars, WaveformPath, BassGlow) keep
+  // working — they fetch/decode via useWindowedAudioData, independent of
+  // any mounted <Audio> tag.
+  const inputProps = useMemo(
+    () => ({
+      ...defaultMusicVideoProps,
+      audioSrc: null,
+      beatsSrc: beatsSrc ?? defaultMusicVideoProps.beatsSrc,
+      elements,
+      muteAudioTag: true,
+      analysisAudioSrc: audioUrl,
+    }),
+    [audioUrl, beatsSrc, elements],
+  );
 
   // Transport: isPlaying drives BOTH the Player (visuals) and the <audio>
   // element (audio). Two separate, direct calls — no framework magic.
@@ -106,7 +111,6 @@ export const Preview = () => {
         controls={false}
         style={{ width: "100%", maxHeight: "100%" }}
         clickToPlay={false}
-        loop={loopPlayback}
       errorFallback={({ error }) => (
         <div
           style={{

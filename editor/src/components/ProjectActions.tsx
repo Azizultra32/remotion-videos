@@ -1,11 +1,11 @@
 // src/components/ProjectActions.tsx
-// Top-bar actions: Export project.json / Import project.json. Eventually
-// also Render to MP4 once the sidecar lands.
+// Top-bar actions: Render to MP4, Export project.json, Import project.json.
 import { useRef, useState } from "react";
 import {
   downloadProjectFile,
   importProjectFromFile,
 } from "../utils/projectJson";
+import { RenderButton } from "./RenderButton";
 
 const btn: React.CSSProperties = {
   padding: "4px 10px",
@@ -36,6 +36,7 @@ export const ProjectActions = () => {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <RenderButton />
       <button
         onClick={() => downloadProjectFile()}
         title="Download current timeline as .musicvideo.json (feeds `remotion render --props=...`)"

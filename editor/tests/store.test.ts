@@ -22,8 +22,7 @@ describe("editor store", () => {
       beatData: null,
       compositionDuration: 90,
       fps: 24,
-      snapToBeat: true,
-      loopPlayback: false,
+      snapMode: "beat",
     });
   });
 
@@ -53,11 +52,13 @@ describe("editor store", () => {
     expect(useEditorStore.getState().currentTimeSec).toBe(15);
   });
 
-  it("snapToBeat and loopPlayback toggles flip state", () => {
-    useEditorStore.getState().setSnapToBeat(false);
-    expect(useEditorStore.getState().snapToBeat).toBe(false);
-    useEditorStore.getState().setLoopPlayback(true);
-    expect(useEditorStore.getState().loopPlayback).toBe(true);
+  it("setSnapMode cycles through all 4 modes", () => {
+    useEditorStore.getState().setSnapMode("off");
+    expect(useEditorStore.getState().snapMode).toBe("off");
+    useEditorStore.getState().setSnapMode("half-beat");
+    expect(useEditorStore.getState().snapMode).toBe("half-beat");
+    useEditorStore.getState().setSnapMode("downbeat");
+    expect(useEditorStore.getState().snapMode).toBe("downbeat");
   });
 
   it("selectElement sets and clears selection", () => {

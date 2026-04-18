@@ -25,6 +25,13 @@ export type BeatData = {
   energy: { t: number; db: number }[];
 };
 
+// Snap quantization modes for drag/resize operations.
+//   off       — no snapping
+//   beat      — snap to the nearest detected beat
+//   half-beat — snap to nearest half-beat (midpoint between adjacent beats)
+//   downbeat  — snap to nearest downbeat (BeatData.downbeats, or every 4th beat)
+export type SnapMode = "off" | "beat" | "half-beat" | "downbeat";
+
 export type EditorState = {
   elements: TimelineElement[];
   currentTimeSec: number;
@@ -33,8 +40,7 @@ export type EditorState = {
   beatData: BeatData | null;
   compositionDuration: number; // seconds
   fps: number;
-  snapToBeat: boolean;
-  loopPlayback: boolean;
+  snapMode: SnapMode;
   audioSrc: string | null;
   beatsSrc: string | null;
   // Actions
@@ -45,8 +51,8 @@ export type EditorState = {
   removeElement: (id: string) => void;
   selectElement: (id: string | null) => void;
   setBeatData: (d: BeatData) => void;
-  setSnapToBeat: (s: boolean) => void;
-  setLoopPlayback: (l: boolean) => void;
+  setSnapMode: (m: SnapMode) => void;
   setAudioSrc: (s: string | null) => void;
   setBeatsSrc: (s: string | null) => void;
+  setTrack: (audioSrc: string, beatsSrc: string) => void;
 };

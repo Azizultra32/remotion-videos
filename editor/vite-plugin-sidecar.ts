@@ -17,6 +17,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(REPO_ROOT, "out");
+const PUBLIC_DIR = path.join(REPO_ROOT, "public");
 
 const readJsonBody = (req: IncomingMessage): Promise<any> =>
   new Promise((resolve, reject) => {
@@ -39,6 +40,61 @@ const sanitizeName = (n: string): string =>
 const sendSseEvent = (res: ServerResponse, event: string, data: unknown) => {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
+};
+
+// ---------------------------------------------------------------------------
+// /api/songs   (GET — list audio tracks in public/)
+// ---------------------------------------------------------------------------
+//
+// Scans public/ for *.mp3 / *.wav and reports whether a sibling
+// "<stem>-beats.json" exists. Read-only: never touches public/*.json — those
+// are produced by a separate analysis pipeline that another terminal owns.
+
+type SongEntry = {
+  stem: string;
+  audioSrc: string;
+  beatsSrc: string;
+  hasBeats: boolean;
+  sizeBytes: number;
+};
+
+const handleSongs = async (
+  _req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(PUBLIC_DIR);
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({ error: "failed-to-read-public", detail: String(err) }),
+    );
+    return;
+  }
+
+  const entrySet = new Set(entries);
+  const audio = entries.filter((f) => /\.(mp3|wav)$/i.test(f));
+  const songs: SongEntry[] = [];
+  for (const audioSrc of audio) {
+    const stem = audioSrc.replace(/\.(mp3|wav)$/i, "");
+    const beatsSrc = `${stem}-beats.json`;
+    const hasBeats = entrySet.has(beatsSrc);
+    let sizeBytes = 0;
+    try {
+      const st = await fs.stat(path.join(PUBLIC_DIR, audioSrc));
+      sizeBytes = st.size;
+    } catch {
+      // symlinks or other issues — report 0 and keep going
+    }
+    songs.push({ stem, audioSrc, beatsSrc, hasBeats, sizeBytes });
+  }
+
+  songs.sort((a, b) => a.stem.localeCompare(b.stem));
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(songs));
 };
 
 // ---------------------------------------------------------------------------
@@ -208,6 +264,31 @@ const handleChat = async (
   const stderr = Buffer.concat(err).toString("utf8");
 
   if (code !== 0) {
+    // Detect Max-plan rate limiting so the client can show a cooldown banner
+    // instead of a generic error. The CLI surfaces these as non-zero exits
+    // with known markers in stderr/stdout.
+    const combined = `${stderr}\n${stdout}`.toLowerCase();
+    const rateLimited =
+      /rate[- ]?limit/.test(combined) ||
+      /too many requests/.test(combined) ||
+      /429/.test(combined);
+    if (rateLimited) {
+      // Try to pull "retry in Ns" / "retry after Ns" out of the message.
+      const match = combined.match(/retry[^0-9]{0,20}(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes)?/);
+      let retryAfter = 60;
+      if (match) {
+        const n = Number(match[1]);
+        const unit = (match[2] || "s").toLowerCase();
+        if (Number.isFinite(n) && n > 0) {
+          retryAfter = unit.startsWith("m") ? n * 60 : n;
+        }
+      }
+      res.statusCode = 429;
+      res.setHeader("Retry-After", String(retryAfter));
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "claude-cli-rate-limited", retryAfter }));
+      return;
+    }
     res.statusCode = 500;
     res.end(JSON.stringify({ error: "claude-cli-failed", code, stderr }));
     return;
@@ -246,10 +327,11 @@ const handleChat = async (
 // ---------------------------------------------------------------------------
 
 const wrap = (
+  method: "GET" | "POST",
   handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
 ): Connect.NextHandleFunction =>
   (req, res, next) => {
-    if (req.method !== "POST") {
+    if (req.method !== method) {
       next();
       return;
     }
@@ -265,7 +347,8 @@ const wrap = (
 export const sidecarPlugin = (): Plugin => ({
   name: "music-video-editor-sidecar",
   configureServer(server: ViteDevServer) {
-    server.middlewares.use("/api/render", wrap(handleRender));
-    server.middlewares.use("/api/chat", wrap(handleChat));
+    server.middlewares.use("/api/render", wrap("POST", handleRender));
+    server.middlewares.use("/api/chat", wrap("POST", handleChat));
+    server.middlewares.use("/api/songs", wrap("GET", handleSongs));
   },
 });

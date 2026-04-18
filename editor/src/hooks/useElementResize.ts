@@ -1,6 +1,6 @@
 import { useCallback, useRef } from "react";
 import { useEditorStore } from "../store";
-import { snapToBeat } from "../utils/time";
+import { snapTime } from "../utils/time";
 
 const MIN_DURATION = 0.05;
 
@@ -29,8 +29,6 @@ export const useElementResize = (elementId: string, pxPerSec: number, edge: "lef
       const onMove = (ev: MouseEvent) => {
         if (!dragStart.current) return;
         const s = useEditorStore.getState();
-        const beats = s.beatData?.beats ?? [];
-        const shouldSnap = ev.shiftKey ? !s.snapToBeat : s.snapToBeat;
         const compDur = s.compositionDuration;
         const dx = ev.clientX - dragStart.current.x;
         const dSec = dx / pxPerSec;
@@ -39,7 +37,7 @@ export const useElementResize = (elementId: string, pxPerSec: number, edge: "lef
           const origEnd = dragStart.current.origStart + dragStart.current.origDuration;
           let newStart = dragStart.current.origStart + dSec;
           newStart = Math.max(0, Math.min(origEnd - MIN_DURATION, newStart));
-          if (shouldSnap) newStart = snapToBeat(newStart, beats);
+          newStart = snapTime(newStart, s.snapMode, s.beatData, ev.shiftKey);
           newStart = Math.max(0, Math.min(origEnd - MIN_DURATION, newStart));
           s.updateElement(elementId, {
             startSec: newStart,
@@ -48,7 +46,7 @@ export const useElementResize = (elementId: string, pxPerSec: number, edge: "lef
         } else {
           let newEnd = dragStart.current.origStart + dragStart.current.origDuration + dSec;
           newEnd = Math.max(dragStart.current.origStart + MIN_DURATION, Math.min(compDur, newEnd));
-          if (shouldSnap) newEnd = snapToBeat(newEnd, beats);
+          newEnd = snapTime(newEnd, s.snapMode, s.beatData, ev.shiftKey);
           newEnd = Math.max(dragStart.current.origStart + MIN_DURATION, Math.min(compDur, newEnd));
           s.updateElement(elementId, {
             durationSec: newEnd - dragStart.current.origStart,

@@ -182,6 +182,38 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
             preserveAspectRatio="none"
             viewBox={`0 0 ${totalSec} 100`}
           >
+            {/* Phase-1 event markers (new-pipeline intermediate events).
+                Shown only when phase-2 isn't yet present — once phase-2 is
+                merged we don't want both layers competing visually. */}
+            {!beatData.phase2_events_sec?.length &&
+              beatData.phase1_events_sec?.map((t, i) => (
+                <line
+                  key={`ph1-${i}`}
+                  x1={t}
+                  x2={t}
+                  y1={0}
+                  y2={100}
+                  stroke="#ffaa44"
+                  strokeWidth={0.22}
+                  vectorEffect="non-scaling-stroke"
+                  opacity={0.7}
+                />
+              ))}
+            {/* Phase-2 event markers (final confirmed events from the
+                waveform-analysis-protocol workflow). Bright yellow, full
+                opacity — these are the canonical event lines. */}
+            {beatData.phase2_events_sec?.map((t, i) => (
+              <line
+                key={`ph2-${i}`}
+                x1={t}
+                x2={t}
+                y1={0}
+                y2={100}
+                stroke="#ffcc00"
+                strokeWidth={0.28}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
             {/* Breakdown regions */}
             {beatData.breakdowns.map((b, i) => (
               <rect

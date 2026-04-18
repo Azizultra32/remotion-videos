@@ -17,7 +17,15 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(REPO_ROOT, "out");
-const PUBLIC_DIR = path.join(REPO_ROOT, "public");
+const PROJECTS_DIR = path.join(REPO_ROOT, "projects");
+const PUBLIC_DIR = path.join(REPO_ROOT, "public"); // kept for legacy engine assets (fonts, etc.)
+
+// Per-stem in-process lock so concurrent /api/timeline/save calls don't
+// interleave their writes. Each write waits for the previous one on the
+// same stem. Writes across different stems run independently.
+const TIMELINE_LOCK = new Map<string, Promise<void>>();
+
+const STEM_RE = /^[a-z0-9_-]+$/i;
 
 const readJsonBody = (req: IncomingMessage): Promise<any> =>
   new Promise((resolve, reject) => {
@@ -43,18 +51,20 @@ const sendSseEvent = (res: ServerResponse, event: string, data: unknown) => {
 };
 
 // ---------------------------------------------------------------------------
-// /api/songs   (GET — list audio tracks in public/)
+// /api/songs   (GET — list projects under projects/<stem>/)
 // ---------------------------------------------------------------------------
 //
-// Scans public/ for *.mp3 / *.wav and reports whether a sibling
-// "<stem>-beats.json" exists. Read-only: never touches public/*.json — those
-// are produced by a separate analysis pipeline that another terminal owns.
+// Each direct subdirectory of projects/ is treated as one project (= one
+// track). A project is "complete" if it has audio.mp3 (or audio.wav) plus
+// analysis.json; it may also have timeline.json (editor state). Sizes
+// reflect the audio file only.
 
 type SongEntry = {
   stem: string;
-  audioSrc: string;
-  beatsSrc: string;
-  hasBeats: boolean;
+  audioSrc: string;   // path under projects/, e.g. "projects/love-in-traffic/audio.mp3"
+  beatsSrc: string;   // path under projects/, e.g. "projects/love-in-traffic/analysis.json"
+  hasBeats: boolean;  // true iff analysis.json exists
+  hasTimeline: boolean;
   sizeBytes: number;
 };
 
@@ -62,63 +72,234 @@ const handleSongs = async (
   _req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> => {
-  let entries: string[];
+  let projectEntries: Array<{ name: string; isDir: boolean }>;
   try {
-    entries = await fs.readdir(PUBLIC_DIR);
+    const ds = await fs.readdir(PROJECTS_DIR, { withFileTypes: true });
+    projectEntries = ds.map((d) => ({ name: d.name, isDir: d.isDirectory() }));
   } catch (err) {
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
     res.end(
-      JSON.stringify({ error: "failed-to-read-public", detail: String(err) }),
+      JSON.stringify({ error: "failed-to-read-projects", detail: String(err) }),
     );
     return;
   }
 
-  // Collect beats-file stems (strip trailing "-beats.json"). Audio pairs
-  // with the LONGEST beats stem that is a hyphen-bounded prefix of the
-  // audio stem (or exact match). Exact match wins over prefix.
-  // Examples in this repo:
-  //   dubfire-beats.json + dubfire-sake.wav           -> pair (prefix)
-  //   dubfire-beats.json + dubfire-sake-audio.mp3     -> pair (prefix)
-  //   love-in-traffic-beats.json + love-in-traffic.mp3 -> pair (exact)
-  const beatsStems = entries
-    .filter((f) => /-beats\.json$/i.test(f))
-    .map((f) => f.replace(/-beats\.json$/i, ""));
-
-  const pickBeats = (audioStem: string): string | null => {
-    let best: string | null = null;
-    for (const bs of beatsStems) {
-      const isExact = bs === audioStem;
-      const isPrefix = audioStem.startsWith(bs + "-");
-      if (!isExact && !isPrefix) continue;
-      if (best === null || bs.length > best.length) best = bs;
-    }
-    return best;
-  };
-
-  const audio = entries.filter((f) => /\.(mp3|wav)$/i.test(f));
   const songs: SongEntry[] = [];
-  for (const audioSrc of audio) {
-    const stem = audioSrc.replace(/\.(mp3|wav)$/i, "");
-    const beatsStem = pickBeats(stem);
-    const beatsSrc = beatsStem
-      ? `${beatsStem}-beats.json`
-      : `${stem}-beats.json`; // keep a sensible default for UI display
-    const hasBeats = beatsStem !== null;
-    let sizeBytes = 0;
+  for (const entry of projectEntries) {
+    if (!entry.isDir) continue;
+    const stem = entry.name;
+    const projectDir = path.join(PROJECTS_DIR, stem);
+    let files: string[];
     try {
-      const st = await fs.stat(path.join(PUBLIC_DIR, audioSrc));
-      sizeBytes = st.size;
+      files = await fs.readdir(projectDir);
     } catch {
-      // symlinks or other issues — report 0 and keep going
+      continue;
     }
-    songs.push({ stem, audioSrc, beatsSrc, hasBeats, sizeBytes });
+    const audioFile = files.find((f) => /^audio\.(mp3|wav)$/i.test(f));
+    const hasBeats = files.includes("analysis.json");
+    const hasTimeline = files.includes("timeline.json");
+    let sizeBytes = 0;
+    if (audioFile) {
+      try {
+        const st = await fs.stat(path.join(projectDir, audioFile));
+        sizeBytes = st.size;
+      } catch {
+        // broken symlink / permissions — treat as 0 and surface the stem anyway
+      }
+    }
+    songs.push({
+      stem,
+      audioSrc: audioFile ? `projects/${stem}/${audioFile}` : "",
+      beatsSrc: `projects/${stem}/analysis.json`,
+      hasBeats,
+      hasTimeline,
+      sizeBytes,
+    });
   }
 
   songs.sort((a, b) => a.stem.localeCompare(b.stem));
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(songs));
+};
+
+// ---------------------------------------------------------------------------
+// /api/projects/*  (GET — stream any file from projects/<stem>/<rest>)
+// ---------------------------------------------------------------------------
+//
+// Replaces Vite's publicDir-based serving for per-project content. Supports
+// nested paths inside a project (e.g. analysis/phase1-events.json). Path
+// traversal is defended by resolving and comparing against PROJECTS_DIR.
+//
+// Honors HTTP Range for audio scrubbing — browsers require this for seekable
+// audio elements to work smoothly.
+
+const handleProjectFile = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  // Connect strips the "/api/projects/" mount; req.url here is
+  // "/love-in-traffic/audio.mp3" or "/love-in-traffic/analysis/foo.json".
+  const raw = (req.url ?? "").split("?")[0];
+  const relPath = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (
+    !relPath ||
+    relPath.includes("\0") ||
+    relPath.includes("\\") ||
+    relPath.split("/").some((seg) => seg === "" || seg === "." || seg === "..")
+  ) {
+    res.statusCode = 400;
+    res.end("bad path");
+    return;
+  }
+  const full = path.resolve(PROJECTS_DIR, relPath);
+  if (!full.startsWith(PROJECTS_DIR + path.sep)) {
+    res.statusCode = 403;
+    res.end("forbidden");
+    return;
+  }
+  let stat;
+  try {
+    stat = await fs.stat(full);
+  } catch {
+    res.statusCode = 404;
+    res.end("not found");
+    return;
+  }
+  if (stat.isDirectory()) {
+    res.statusCode = 400;
+    res.end("path is a directory");
+    return;
+  }
+  const ext = path.extname(relPath).toLowerCase();
+  const mime =
+    ext === ".mp3" ? "audio/mpeg" :
+    ext === ".wav" ? "audio/wav" :
+    ext === ".m4a" ? "audio/mp4" :
+    ext === ".json" ? "application/json" :
+    ext === ".png" ? "image/png" :
+    ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
+    ext === ".md" ? "text/markdown; charset=utf-8" :
+    ext === ".txt" ? "text/plain; charset=utf-8" :
+    "application/octet-stream";
+  res.setHeader("Content-Type", mime);
+  res.setHeader("Accept-Ranges", "bytes");
+
+  const { createReadStream } = await import("node:fs");
+  const rangeHeader = req.headers.range;
+  if (rangeHeader && /^bytes=\d*-\d*$/.test(rangeHeader)) {
+    const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
+    const startStr = match?.[1] ?? "";
+    const endStr = match?.[2] ?? "";
+    const start = startStr === "" ? Math.max(0, stat.size - Number(endStr || 0)) : Number(startStr);
+    const end = endStr === "" ? stat.size - 1 : Number(endStr);
+    if (start >= stat.size || end >= stat.size || start > end) {
+      res.statusCode = 416;
+      res.setHeader("Content-Range", `bytes */${stat.size}`);
+      res.end();
+      return;
+    }
+    res.statusCode = 206;
+    res.setHeader("Content-Range", `bytes ${start}-${end}/${stat.size}`);
+    res.setHeader("Content-Length", String(end - start + 1));
+    createReadStream(full, { start, end }).pipe(res);
+    return;
+  }
+  res.setHeader("Content-Length", String(stat.size));
+  createReadStream(full).pipe(res);
+};
+
+// ---------------------------------------------------------------------------
+// /api/timeline/*  (GET + POST — read and write projects/<stem>/timeline.json)
+// ---------------------------------------------------------------------------
+//
+// All writes to a project's timeline go through POST /api/timeline/save so
+// the sidecar can serialize concurrent writers (GUI autosave + external
+// Claude edits). Atomic write via tmp + rename.
+
+const handleTimelineGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  // req.url is "/love-in-traffic" (the Connect mount strips "/api/timeline/")
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  const full = path.join(PROJECTS_DIR, stem, "timeline.json");
+  let content: string;
+  try {
+    content = await fs.readFile(full, "utf8");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "timeline not found", stem }));
+    return;
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(content);
+};
+
+const handleTimelineSave = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const stem = String(body?.stem ?? "");
+  const timeline = body?.timeline;
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  if (!timeline || typeof timeline !== "object") {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.timeline required" }));
+    return;
+  }
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a directory");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project not found", stem }));
+    return;
+  }
+
+  // Serialize writes per-stem.
+  const prev = TIMELINE_LOCK.get(stem) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    const dest = path.join(projectDir, "timeline.json");
+    const tmp = dest + ".tmp";
+    await fs.writeFile(tmp, JSON.stringify(timeline, null, 2));
+    await fs.rename(tmp, dest);
+  });
+  TIMELINE_LOCK.set(
+    stem,
+    next.catch(() => {
+      // swallow — failure is surfaced through `await next` below
+    }),
+  );
+  try {
+    await next;
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "timeline-write-failed", detail: String(err) }));
+    return;
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ ok: true }));
 };
 
 // ---------------------------------------------------------------------------
@@ -407,7 +588,10 @@ const wrap = (
   handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
 ): Connect.NextHandleFunction =>
   (req, res, next) => {
-    if (req.method !== method) {
+    // Accept HEAD wherever GET is allowed — browsers preload audio via HEAD
+    // and falling through to Vite's SPA fallback would 200 with HTML.
+    const ok = method === "GET" ? req.method === "GET" || req.method === "HEAD" : req.method === method;
+    if (!ok) {
       next();
       return;
     }
@@ -427,5 +611,8 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/chat", wrap("POST", handleChat));
     server.middlewares.use("/api/songs", wrap("GET", handleSongs));
     server.middlewares.use("/api/out/", wrap("GET", handleOut));
+    server.middlewares.use("/api/projects/", wrap("GET", handleProjectFile));
+    server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
+    server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
   },
 });

@@ -29,6 +29,12 @@
             "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n \"$REPO\" ] && python3 \"$REPO/scripts/agents-claim-hook.py\"'",
             "timeout": 10,
             "statusMessage": "Claiming file for parallel-agent coordination"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n \"$REPO\" ] && bash \"$REPO/scripts/check-ownership.sh\"'",
+            "timeout": 5,
+            "statusMessage": "Checking engine/project ownership rules"
           }
         ]
       }

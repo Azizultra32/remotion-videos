@@ -14,6 +14,7 @@ export interface UseRenderReturn {
   progress: RenderProgress | null;
   error: string | null;
   outPath: string | null;
+  outName: string | null;
   cancel: () => void;
 }
 
@@ -52,6 +53,7 @@ export const useRender = (): UseRenderReturn => {
   const [progress, setProgress] = useState<RenderProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outPath, setOutPath] = useState<string | null>(null);
+  const [outName, setOutName] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const cancel = useCallback(() => {
@@ -73,6 +75,7 @@ export const useRender = (): UseRenderReturn => {
     setProgress(null);
     setError(null);
     setOutPath(null);
+    setOutName(null);
 
     try {
       const response = await fetch("/api/render", {
@@ -97,8 +100,9 @@ export const useRender = (): UseRenderReturn => {
         try {
           const payload = JSON.parse(data);
           if (event === "start") {
-            // outPath arrives early — store it for when done fires
+            // outPath + outName arrive early — store them for when done fires
             if (payload.outPath) setOutPath(payload.outPath as string);
+            if (payload.outName) setOutName(payload.outName as string);
           } else if (event === "progress") {
             setProgress({
               done: Number(payload.done),
@@ -107,6 +111,7 @@ export const useRender = (): UseRenderReturn => {
           } else if (event === "done") {
             if (payload.ok) {
               setOutPath(payload.outPath as string);
+              if (payload.outName) setOutName(payload.outName as string);
               setStatus("done");
             } else {
               setError(`Render exited with code ${payload.code}`);
@@ -139,5 +144,5 @@ export const useRender = (): UseRenderReturn => {
     }
   }, []);
 
-  return { render, status, progress, error, outPath, cancel };
+  return { render, status, progress, error, outPath, outName, cancel };
 };

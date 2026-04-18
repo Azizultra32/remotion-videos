@@ -98,6 +98,57 @@ const handleSongs = async (
 };
 
 // ---------------------------------------------------------------------------
+// /api/out/:file   (GET — stream a rendered MP4 back to the browser)
+// ---------------------------------------------------------------------------
+//
+// Vite's dev server doesn't publish `out/`. Without this, the editor's
+// "Rendered ✓ — click to open" link would need to 404 or prompt the OS
+// for a file URL (browsers block those). Streaming through the sidecar
+// keeps the link inside the normal http origin. Path traversal is
+// defended by rejecting anything that escapes OUT_DIR after resolve.
+
+const handleOut = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  // Connect strips the mount prefix, so req.url here is like
+  // "/musicvideo-123.mp4?x=y" (not "/api/out/..."). Strip leading slashes
+  // so path.resolve treats the name as relative to OUT_DIR.
+  const raw = (req.url ?? "").split("?")[0];
+  const name = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!name || name.includes("\0") || name.includes("/") || name.includes("\\")) {
+    res.statusCode = 400;
+    res.end("bad name");
+    return;
+  }
+  const full = path.resolve(OUT_DIR, name);
+  if (!full.startsWith(OUT_DIR + path.sep)) {
+    res.statusCode = 403;
+    res.end("forbidden");
+    return;
+  }
+  let stat;
+  try {
+    stat = await fs.stat(full);
+  } catch {
+    res.statusCode = 404;
+    res.end("not found");
+    return;
+  }
+  const ext = path.extname(name).toLowerCase();
+  const mime =
+    ext === ".mp4" ? "video/mp4" :
+    ext === ".webm" ? "video/webm" :
+    ext === ".mov" ? "video/quicktime" :
+    "application/octet-stream";
+  res.setHeader("Content-Type", mime);
+  res.setHeader("Content-Length", String(stat.size));
+  res.setHeader("Accept-Ranges", "bytes");
+  const { createReadStream } = await import("node:fs");
+  createReadStream(full).pipe(res);
+};
+
+// ---------------------------------------------------------------------------
 // /api/render
 // ---------------------------------------------------------------------------
 
@@ -115,7 +166,8 @@ const handleRender = async (
   }
 
   await fs.mkdir(OUT_DIR, { recursive: true });
-  const outPath = path.join(OUT_DIR, `${name}.mp4`);
+  const outName = `${name}.mp4`;
+  const outPath = path.join(OUT_DIR, outName);
 
   // SSE headers
   res.writeHead(200, {
@@ -124,7 +176,7 @@ const handleRender = async (
     Connection: "keep-alive",
   });
 
-  sendSseEvent(res, "start", { outPath });
+  sendSseEvent(res, "start", { outPath, outName });
 
   const args = [
     "remotion",
@@ -157,7 +209,7 @@ const handleRender = async (
   child.stderr.on("data", (c) => pushLine("stderr", c));
 
   child.on("close", (code) => {
-    sendSseEvent(res, "done", { code, outPath, ok: code === 0 });
+    sendSseEvent(res, "done", { code, outPath, outName, ok: code === 0 });
     res.end();
   });
   req.on("close", () => {
@@ -350,5 +402,6 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/render", wrap("POST", handleRender));
     server.middlewares.use("/api/chat", wrap("POST", handleChat));
     server.middlewares.use("/api/songs", wrap("GET", handleSongs));
+    server.middlewares.use("/api/out/", wrap("GET", handleOut));
   },
 });

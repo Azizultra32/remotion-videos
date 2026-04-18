@@ -76,7 +76,7 @@ const progressFill = (pct: number): React.CSSProperties => ({
 });
 
 export const RenderButton = () => {
-  const { render, status, progress, error: renderError, outPath, cancel } = useRender();
+  const { render, status, progress, error: renderError, outPath, outName, cancel } = useRender();
 
   const pct =
     progress && progress.total > 0
@@ -104,12 +104,12 @@ export const RenderButton = () => {
     );
   }
 
-  if (status === "done" && outPath) {
+  if (status === "done" && outName) {
     return (
       <button
         style={done}
-        onClick={() => window.open(`/${outPath}`, "_blank")}
-        title={`Render complete: ${outPath}`}
+        onClick={() => window.open(`/api/out/${encodeURIComponent(outName)}`, "_blank")}
+        title={`Render complete: ${outPath ?? outName}`}
       >
         Rendered ✓ — click to open
       </button>

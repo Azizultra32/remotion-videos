@@ -49,6 +49,14 @@ export const useUndoHistory = () => {
     const unsubRecord = useEditorStore.subscribe((state, prev) => {
       if (applyingRef.current) return;
       if (state.elements === prev.elements) return;
+      // Skip ref-different-but-content-equal setState calls. These come from
+      // useTimelineSync.hydrate() echoing our own autosave back to the store
+      // (POST save -> fs.watch -> SSE change -> GET load -> setState with a
+      // fresh-from-JSON.parse array). Treating them as user actions causes a
+      // dupe push + redoStack wipe, which breaks Cmd-Z: 1 of every N presses
+      // is a no-op and redo is lost. Verified via browser verification on
+      // 2026-04-18.
+      if (JSON.stringify(state.elements) === JSON.stringify(prev.elements)) return;
       undoStackRef.current.push(prev.elements);
       if (undoStackRef.current.length > MAX_HISTORY) {
         undoStackRef.current.shift();

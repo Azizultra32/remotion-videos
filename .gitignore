@@ -26,3 +26,7 @@ estimations/
 
 # tsc incremental build cache
 *.tsbuildinfo
+
+# current-project marker — bridges editor's SongPicker state to Claude Code
+# sessions via `npm run mv:current`. Per-machine UI state, not versioned.
+.current-project

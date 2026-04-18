@@ -246,6 +246,52 @@ const handleTimelineGet = async (
   res.end(content);
 };
 
+// ---------------------------------------------------------------------------
+// /api/current-project  (GET + POST — the "which project is active" pointer)
+// ---------------------------------------------------------------------------
+//
+// The editor's SongPicker writes this file on every track switch. It's the
+// bridge that lets an external Claude Code session (via `npm run mv:current`)
+// know which project the user is working on without needing browser state.
+// File is at repo root, gitignored, single-line (just the stem).
+
+const CURRENT_PROJECT_FILE = path.join(REPO_ROOT, ".current-project");
+
+const handleCurrentGet = async (
+  _req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  let content: string;
+  try {
+    content = (await fs.readFile(CURRENT_PROJECT_FILE, "utf8")).trim();
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "no current project" }));
+    return;
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify({ stem: content }));
+};
+
+const handleCurrentSave = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const stem = String(body?.stem ?? "");
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  await fs.writeFile(CURRENT_PROJECT_FILE, stem + "\n");
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ ok: true, stem }));
+};
+
 const handleTimelineSave = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -614,5 +660,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/projects/", wrap("GET", handleProjectFile));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
+    server.middlewares.use("/api/current-project", wrap("GET", handleCurrentGet));
+    server.middlewares.use("/api/current-project", wrap("POST", handleCurrentSave));
   },
 });

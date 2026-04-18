@@ -10,6 +10,7 @@ import { ChatPane } from "./components/ChatPane";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useBeatData } from "./hooks/useBeatData";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useTimelineSync } from "./hooks/useTimelineSync";
 import { useEditorStore } from "./store";
 import { toEditorUrl } from "./utils/url";
 
@@ -31,6 +32,9 @@ const getQueryBeatsUrl = (): string | null => {
 export const App = () => {
   // Keyboard shortcuts (space, arrows, home/end, etc.)
   useKeyboardShortcuts();
+  // Hydrate timeline.json on project switch + debounced autosave on mutations
+  // + .current-project signal file for external Claude Code sessions.
+  useTimelineSync();
 
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);

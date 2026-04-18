@@ -158,7 +158,7 @@ export const ElementDetail = () => {
               height: 30,
             }}
           >
-            Snap ♪
+            Snap
           </button>
         )}
       </div>
@@ -205,7 +205,7 @@ export const ElementDetail = () => {
             cursor: "pointer",
           }}
         >
-          Tune spring in Timing Editor ↗
+          Tune spring in Timing Editor
         </button>
       )}
 

@@ -9,7 +9,7 @@ const SNAP_CYCLE: SnapMode[] = ["off", "beat", "half-beat", "downbeat"];
 const SNAP_LABEL: Record<SnapMode, string> = {
   "off": "OFF",
   "beat": "BEAT",
-  "half-beat": "\u00bdBEAT",
+  "half-beat": "HALF",
   "downbeat": "DOWN",
 };
 const snapButtonStyle = (mode: SnapMode) => {
@@ -110,7 +110,7 @@ export const TransportControls = () => {
           fontFamily: "monospace",
         }}
       >
-        ⏮
+        HOME
       </button>
 
       {jumpButton("-5s", -5, "Shift+Left · jump back 5s")}
@@ -154,7 +154,7 @@ export const TransportControls = () => {
           fontFamily: "monospace",
         }}
       >
-        ⏭
+        END
       </button>
 
       <div style={{ fontSize: 12, color: "#aaa", fontFamily: "monospace" }}>
@@ -179,7 +179,7 @@ export const TransportControls = () => {
         onClick={cycleSnapMode}
         style={snapButtonStyle(snapMode)}
         title={
-          "Snap dragged elements. Click to cycle: OFF → BEAT → \u00bdBEAT → DOWNBEAT. " +
+          "Snap dragged elements. Click to cycle: OFF / BEAT / HALF / DOWNBEAT. " +
           "Shift during drag inverts (off+shift = beat snap; any mode+shift = no snap)."
         }
       >

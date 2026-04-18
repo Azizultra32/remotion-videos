@@ -111,7 +111,7 @@ export const RenderButton = () => {
         onClick={() => window.open(`/api/out/${encodeURIComponent(outName)}`, "_blank")}
         title={`Render complete: ${outPath ?? outName}`}
       >
-        Rendered ✓ — click to open
+        Rendered — click to open
       </button>
     );
   }

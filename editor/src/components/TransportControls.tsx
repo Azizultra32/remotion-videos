@@ -165,7 +165,7 @@ export const TransportControls = () => {
         Frame: {Math.round(currentTimeSec * fps)}
       </div>
 
-      {beatData && (
+      {beatData && beatData.bpm_global > 0 && (
         <div style={{ fontSize: 11, color: "#666" }}>
           BPM: {beatData.bpm_global.toFixed(1)}
         </div>

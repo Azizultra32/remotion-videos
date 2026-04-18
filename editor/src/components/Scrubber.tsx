@@ -153,9 +153,16 @@ export const Scrubber = ({ audioUrl, height = 72 }: Props) => {
           Waveform{trackName ? ` — ${trackName}` : ""}
         </span>
         <span>
-          {beatData
-            ? `${beatData.beats.length} beats · ${beatData.drops.length} drops · ${beatData.bpm_global.toFixed(1)} bpm`
-            : "loading beats…"}
+          {(() => {
+            if (!beatData) return "loading beats…";
+            const parts: string[] = [];
+            if (beatData.beats.length > 0) parts.push(`${beatData.beats.length} beats`);
+            if (beatData.drops.length > 0) parts.push(`${beatData.drops.length} drops`);
+            if (beatData.phase1_events_sec?.length)
+              parts.push(`${beatData.phase1_events_sec.length} events`);
+            if (beatData.bpm_global > 0) parts.push(`${beatData.bpm_global.toFixed(1)} bpm`);
+            return parts.length > 0 ? parts.join(" · ") : "no analysis loaded";
+          })()}
         </span>
       </div>
 

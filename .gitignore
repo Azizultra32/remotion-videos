@@ -12,8 +12,8 @@ brands/*/fonts/
 *.mp4
 *.webm
 *.mov
-public/*.mp3
-public/*.wav
+# audio files used to be gitignored here; they are now tracked via git-LFS
+# (see .gitattributes). Keeping this comment as a navigation marker.
 .DS_Store
 .worktrees/
 

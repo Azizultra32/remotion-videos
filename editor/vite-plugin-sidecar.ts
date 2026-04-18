@@ -9,7 +9,7 @@
 // Lives inside editor/ but shells out from the repo root.
 import type { Plugin, ViteDevServer, Connect } from "vite";
 import { spawn } from "node:child_process";
-import { promises as fs } from "node:fs";
+import { promises as fs, watch as fsWatch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -558,12 +558,24 @@ const handleTimelineWatch = async (
     Connection: "keep-alive",
     "X-Accel-Buffering": "no", // disable nginx-style buffering if ever behind a proxy
   });
+
+  // Resources get created below; cleanup is registered FIRST so a client
+  // abort between writeHead and watcher/interval creation can't leak them.
+  let watcher: FSWatcher | null = null;
+  let keepalive: ReturnType<typeof setInterval> | null = null;
+  const cleanup = () => {
+    if (keepalive) { clearInterval(keepalive); keepalive = null; }
+    if (watcher) { watcher.close(); watcher = null; }
+  };
+  req.on("close", cleanup);
+
+  // If the client already closed during the 404/stat path, bail now.
+  if (req.destroyed) { cleanup(); return; }
+
   res.write(`event: hello\ndata: ${JSON.stringify({ stem })}\n\n`);
 
-  const { watch } = await import("node:fs");
-  let watcher: import("node:fs").FSWatcher | null = null;
   try {
-    watcher = watch(projectDir, { persistent: false }, (eventType, filename) => {
+    watcher = fsWatch(projectDir, { persistent: false }, (eventType, filename) => {
       if (filename !== "timeline.json") return;
       if (eventType !== "change" && eventType !== "rename") return;
       try {
@@ -583,14 +595,9 @@ const handleTimelineWatch = async (
   }
 
   // SSE keep-alive — some intermediaries close idle connections at 30s.
-  const keepalive = setInterval(() => {
+  keepalive = setInterval(() => {
     try { res.write(":keepalive\n\n"); } catch { /* closed */ }
   }, 20000);
-
-  req.on("close", () => {
-    clearInterval(keepalive);
-    if (watcher) watcher.close();
-  });
 };
 
 const handleChat = async (

@@ -32,9 +32,9 @@
           },
           {
             "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n \"$REPO\" ] && bash \"$REPO/scripts/check-ownership.sh\"'",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n \"$REPO\" ] && ENGINE_LOCK_ENFORCE=1 bash \"$REPO/scripts/check-ownership.sh\"'",
             "timeout": 5,
-            "statusMessage": "Checking engine/project ownership rules"
+            "statusMessage": "Enforcing engine/project ownership rules"
           }
         ]
       }

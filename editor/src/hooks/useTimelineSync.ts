@@ -43,6 +43,30 @@ export const useTimelineSync = () => {
   const lastSavedJsonRef = useRef<string>("");
   const currentStemRef = useRef<string | null>(null);
 
+  // Long-lived EventSource that notifies us when projects/<stem>/timeline.json
+  // is changed by something other than our own autosave (e.g. Claude Code's
+  // Edit tool, or vim). Closed and re-opened on every stem change.
+  const watchRef = useRef<EventSource | null>(null);
+
+  const openWatcher = (stem: string, onRemoteChange: () => void) => {
+    if (watchRef.current) {
+      watchRef.current.close();
+      watchRef.current = null;
+    }
+    try {
+      const es = new EventSource(`/api/timeline/watch/${stem}`);
+      es.addEventListener("change", () => onRemoteChange());
+      es.addEventListener("error", () => {
+        // Browser auto-reconnects on transient drops (3s default backoff);
+        // nothing to do here.
+      });
+      watchRef.current = es;
+    } catch {
+      // EventSource unavailable (very old browser) — autosave still works;
+      // only live-reload from external edits is lost.
+    }
+  };
+
   // ---- (1) Hydrate on stem change + bootstrap on mount ----
   useEffect(() => {
     // Re-run whenever audioSrc changes (project switch).
@@ -88,6 +112,7 @@ export const useTimelineSync = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ stem: nextStem }),
         }).catch(() => {});
+        openWatcher(nextStem, () => void hydrate(nextStem));
       }
     });
 
@@ -103,11 +128,16 @@ export const useTimelineSync = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stem: initialStem }),
       }).catch(() => {});
+      openWatcher(initialStem, () => void hydrate(initialStem));
     }
 
     return () => {
       cancelled = true;
       unsubSwitch();
+      if (watchRef.current) {
+        watchRef.current.close();
+        watchRef.current = null;
+      }
     };
   }, []);
 

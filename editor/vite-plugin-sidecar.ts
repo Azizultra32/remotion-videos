@@ -88,6 +88,8 @@ const handleSongs = async (
   const songs: SongEntry[] = [];
   for (const entry of projectEntries) {
     if (!entry.isDir) continue;
+    // Skip scratch/hidden dirs (e.g. _plans, .DS_Store) — they're not projects.
+    if (entry.name.startsWith("_") || entry.name.startsWith(".")) continue;
     const stem = entry.name;
     const projectDir = path.join(PROJECTS_DIR, stem);
     let files: string[];

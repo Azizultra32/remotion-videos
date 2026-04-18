@@ -87,7 +87,9 @@ export const TransportControls = () => {
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 16,
+        flexWrap: "wrap",
+        gap: 12,
+        rowGap: 8,
         padding: "8px 16px",
         borderBottom: "1px solid #333",
         background: "#0a0a0a",
@@ -171,9 +173,11 @@ export const TransportControls = () => {
         </div>
       )}
 
-      <div style={{ flex: 1 }} />
+      <div style={{ flex: "1 1 0", minWidth: 0 }} />
 
-      <ProjectActions />
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: "auto" }}>
+        <ProjectActions />
+      </div>
 
       <button
         onClick={cycleSnapMode}

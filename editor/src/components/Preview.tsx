@@ -12,6 +12,7 @@ import { Player, PlayerRef } from "@remotion/player";
 import { useRef, useEffect, useMemo } from "react";
 import { useEditorStore } from "../store";
 import { MusicVideo, defaultMusicVideoProps } from "@compositions/MusicVideo";
+import { toEditorUrl } from "../utils/url";
 
 export const Preview = () => {
   const playerRef = useRef<PlayerRef>(null);
@@ -24,12 +25,9 @@ export const Preview = () => {
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);
 
-  // Resolve audio URL same way MusicVideo did.
-  const audioUrl = useMemo(() => {
-    if (!audioSrc) return null;
-    if (audioSrc.startsWith("http") || audioSrc.startsWith("/")) return audioSrc;
-    return `/${audioSrc}`;
-  }, [audioSrc]);
+  // Resolve audio URL via the canonical helper (routes projects/<stem>/... to
+  // /api/projects/<stem>/... under the sidecar's serving).
+  const audioUrl = useMemo(() => toEditorUrl(audioSrc), [audioSrc]);
 
   // Visuals only: force audioSrc=null + muteAudioTag so MusicVideo skips
   // its <Audio> tag. The separate <audio> element below owns playback.

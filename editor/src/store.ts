@@ -14,8 +14,8 @@ export const useEditorStore = create<EditorState>()(
       compositionDuration: 90,
       fps: 24,
       snapMode: "beat",
-      audioSrc: "love-in-traffic.mp3",
-      beatsSrc: "love-in-traffic-beats.json",
+      audioSrc: "projects/love-in-traffic/audio.mp3",
+      beatsSrc: "projects/love-in-traffic/analysis.json",
       setCurrentTime: (t) =>
         set((s) => ({
           currentTimeSec: typeof t === "function" ? t(s.currentTimeSec) : t,
@@ -67,18 +67,30 @@ export const useEditorStore = create<EditorState>()(
         beatsSrc: s.beatsSrc,
       }),
       // v4: snapToBeat:boolean + loopPlayback:boolean → snapMode:SnapMode
-      // (loopPlayback dropped entirely — the button was useless).
-      version: 4,
+      // v5: bare-filename audioSrc/beatsSrc → projects/<stem>/... paths
+      //     Legacy values are nulled so the initial-state defaults (which
+      //     point at projects/love-in-traffic/...) win on next load.
+      version: 5,
       migrate: (persisted, version) => {
         if (!persisted || typeof persisted !== "object") return persisted as any;
-        const p = persisted as Record<string, unknown>;
+        let p = persisted as Record<string, unknown>;
         if (version < 4) {
-          // Old shape carried snapToBeat (bool) and loopPlayback (bool).
-          // Map snapToBeat → snapMode, drop loopPlayback.
           const prev = p.snapToBeat;
           const snapMode = prev === false ? "off" : "beat";
           const { snapToBeat: _drop1, loopPlayback: _drop2, ...rest } = p;
-          return { ...rest, snapMode };
+          p = { ...rest, snapMode };
+        }
+        if (version < 5) {
+          const audioSrc = typeof p.audioSrc === "string" ? p.audioSrc : null;
+          const beatsSrc = typeof p.beatsSrc === "string" ? p.beatsSrc : null;
+          const needsReset =
+            (audioSrc && !audioSrc.startsWith("projects/")) ||
+            (beatsSrc && !beatsSrc.startsWith("projects/"));
+          if (needsReset) {
+            // Drop the stale values; initial-state defaults kick in. SongPicker
+            // will then surface the right track after the user clicks.
+            p = { ...p, audioSrc: null, beatsSrc: null };
+          }
         }
         return p as any;
       },

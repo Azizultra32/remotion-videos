@@ -11,12 +11,14 @@
 
 import { useEffect, useState } from "react";
 import { useEditorStore } from "../store";
+import { stemFromAudioSrc } from "../utils/url";
 
 type SongEntry = {
   stem: string;
-  audioSrc: string;
-  beatsSrc: string;
+  audioSrc: string;   // "projects/<stem>/audio.mp3"
+  beatsSrc: string;   // "projects/<stem>/analysis.json"
   hasBeats: boolean;
+  hasTimeline?: boolean;
   sizeBytes: number;
 };
 
@@ -26,11 +28,6 @@ const humanize = (stem: string): string =>
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-
-const currentStem = (audioSrc: string | null): string | null => {
-  if (!audioSrc) return null;
-  return audioSrc.replace(/^\//, "").replace(/\.(mp3|wav)$/i, "");
-};
 
 export const SongPicker = () => {
   const audioSrc = useEditorStore((s) => s.audioSrc);
@@ -56,7 +53,7 @@ export const SongPicker = () => {
     };
   }, []);
 
-  const stem = currentStem(audioSrc);
+  const stem = stemFromAudioSrc(audioSrc);
   const current = songs?.find((s) => s.stem === stem) ?? null;
 
   const onChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

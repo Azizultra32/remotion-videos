@@ -11,8 +11,9 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useBeatData } from "./hooks/useBeatData";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useEditorStore } from "./store";
+import { toEditorUrl } from "./utils/url";
 
-const DEFAULT_BEATS_URL = "/love-in-traffic-beats.json";
+const DEFAULT_BEATS_URL = "/api/projects/love-in-traffic/analysis.json";
 
 // Mount-time ?beats=... override. Historically this was the only way to
 // switch tracks; now SongPicker handles runtime switching via store.setTrack.
@@ -48,13 +49,13 @@ export const App = () => {
   }, []);
 
   // Reactive beats load: re-fetches whenever the store's beatsSrc changes
-  // (i.e. when SongPicker calls setTrack).
-  const beatsUrl = beatsSrc
-    ? `/${beatsSrc.replace(/^\//, "")}`
-    : (getQueryBeatsUrl() ?? DEFAULT_BEATS_URL);
+  // (i.e. when SongPicker calls setTrack). toEditorUrl routes
+  // "projects/<stem>/analysis.json" -> "/api/projects/<stem>/analysis.json".
+  const beatsUrl =
+    toEditorUrl(beatsSrc) ?? getQueryBeatsUrl() ?? DEFAULT_BEATS_URL;
   useBeatData(beatsUrl);
 
-  const audioUrl = audioSrc ? `/${audioSrc.replace(/^\//, "")}` : null;
+  const audioUrl = toEditorUrl(audioSrc);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "240px minmax(0, 1fr) 320px", gridTemplateRows: "auto auto minmax(0, 1fr) 360px", height: "100vh", width: "100vw", overflow: "hidden", background: "#111", color: "#fff" }}>

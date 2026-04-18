@@ -1,0 +1,59 @@
+{
+  "source_png": "/Users/ali/remotion-videos/public/waveform-phase1/love-in-traffic-phase1-confirmed-full.png",
+  "source_width_px": 3785,
+  "source_height_px": 590,
+  "source_duration_sec": 616.045714,
+  "pixel_to_time_linear": {
+    "a": -5.775827,
+    "b": 0.165604,
+    "formula": "t_sec = a + b * pixel_col"
+  },
+  "phase1_line_pixel_columns": [
+    205,
+    385,
+    2272
+  ],
+  "phase1_line_times_sec": [
+    28.26,
+    58.06,
+    370.56
+  ],
+  "segments": [
+    {
+      "filename": "love-in-traffic-phase2-segment-01.png",
+      "path": "/Users/ali/remotion-videos/public/waveform-phase1/love-in-traffic-phase2-segment-01.png",
+      "pixel_col_start_inclusive": 0,
+      "pixel_col_end_exclusive": 205,
+      "width_px": 205,
+      "start_sec": 0.0,
+      "end_sec": 28.26
+    },
+    {
+      "filename": "love-in-traffic-phase2-segment-02.png",
+      "path": "/Users/ali/remotion-videos/public/waveform-phase1/love-in-traffic-phase2-segment-02.png",
+      "pixel_col_start_inclusive": 207,
+      "pixel_col_end_exclusive": 385,
+      "width_px": 178,
+      "start_sec": 28.26,
+      "end_sec": 58.06
+    },
+    {
+      "filename": "love-in-traffic-phase2-segment-03.png",
+      "path": "/Users/ali/remotion-videos/public/waveform-phase1/love-in-traffic-phase2-segment-03.png",
+      "pixel_col_start_inclusive": 387,
+      "pixel_col_end_exclusive": 2272,
+      "width_px": 1885,
+      "start_sec": 58.06,
+      "end_sec": 370.56
+    },
+    {
+      "filename": "love-in-traffic-phase2-segment-04.png",
+      "path": "/Users/ali/remotion-videos/public/waveform-phase1/love-in-traffic-phase2-segment-04.png",
+      "pixel_col_start_inclusive": 2274,
+      "pixel_col_end_exclusive": 3785,
+      "width_px": 1511,
+      "start_sec": 370.56,
+      "end_sec": 616.046
+    }
+  ]
+}

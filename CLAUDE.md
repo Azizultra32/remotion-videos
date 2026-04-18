@@ -11,6 +11,36 @@ Create videos by writing React components that render frame-by-frame.
 4. **Register compositions** in `src/Root.tsx` using `<Composition>`.
 5. **Static assets** go in `public/` and are referenced with `staticFile()`.
 
+## Engine / Project Split (CRITICAL)
+This repo is split into **engine** (reusable infrastructure) and **projects** (per-track content). Read `OWNERSHIP.md` for the authoritative path tables; `ENGINE.md` for why each engine path is locked.
+
+**TL;DR for agents:**
+- Write freely to: `projects/<stem>/**`, `brands/**`, `out/**`, `.current-project`
+- Write-LOCKED (require `ENGINE_UNLOCK=1` in shell env): `src/**`, `editor/**`, `scripts/**`, `public/fonts/**`, `.claude/**`, `docs/**`, `package.json`, `tsconfig.json`, `CLAUDE.md`, `ENGINE.md`, `OWNERSHIP.md`, `.gitignore`, `.gitattributes`, `remotion.config.ts`
+- Read + execute engine code is always fine; only writes are blocked.
+
+**Music-video workflow:** use the `music-video-workflow` and `analyze-music` skills (both project-scoped, auto-available in this repo).
+
+**CLI commands (run from repo root):**
+```bash
+npm run mv:current                                     # echo active project stem
+npm run mv:render   -- --project <stem>                # render MP4 from timeline.json + audio
+npm run mv:scaffold -- --audio /abs/path/track.mp3     # create projects/<stem>/ from an audio file
+npm run mv:analyze  -- --project <stem>                # run Setup + print master prompt
+```
+
+**Per-project layout:**
+```
+projects/<stem>/
+  audio.mp3          ← via git-LFS (MP3 only; WAVs live externally)
+  analysis.json      ← canonical event list (editor reads this)
+  timeline.json      ← editor state (elements, fps, compositionDuration)
+  notes.md           ← cut direction, zeta points, vocabulary
+  analysis/          ← pipeline artifacts (source.json, PNGs, manifest)
+```
+
+All edits — from the editor GUI, from the ChatPane, from an external Claude Code session's Edit on `timeline.json` — converge on the same on-disk JSON at `projects/<stem>/timeline.json`. Autosave writes within 500 ms; `.current-project` at repo root tracks the active stem so external sessions can discover it via `mv:current`.
+
 ## Parallel Agent Coordination
 If you suspect another Claude Code / coding-agent session is running on this
 repo, claim files before editing:

@@ -41,5 +41,11 @@ export default defineConfig({
   optimizeDeps: {
     include: ["react", "react-dom", "react/jsx-runtime", "remotion"],
   },
-  server: { port: 4000 },
+  server: {
+    port: 4000,
+    // Allow any Host header — needed for cloudflared / ngrok tunnels.
+    // Safe in dev: the dev server doesn't expose secrets; sidecar has its
+    // own path-traversal guards on /api/projects/*.
+    allowedHosts: true,
+  },
 });

@@ -37,14 +37,34 @@ export const StageStrip = () => {
   const [status, setStatus] = useState<Status | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
+  const hideTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
     if (!stem) { setStatus(null); return; }
     try {
       const es = new EventSource(`/api/analyze/status/${stem}`);
       es.addEventListener("status", (e: MessageEvent) => {
         try {
-          setStatus(e.data === "null" ? null : JSON.parse(e.data));
+          const parsed = e.data === "null" ? null : (JSON.parse(e.data) as Status);
+          setStatus(parsed);
+          // Auto-hide 20s after the run ends. Without this the "DONE" strip
+          // would stick forever since no more SSE events arrive after endedAt.
+          if (hideTimerRef.current !== null) {
+            window.clearTimeout(hideTimerRef.current);
+            hideTimerRef.current = null;
+          }
+          if (parsed && parsed.endedAt) {
+            const remaining = Math.max(0, 20000 - (Date.now() - parsed.endedAt));
+            hideTimerRef.current = window.setTimeout(() => {
+              setStatus(null);
+              hideTimerRef.current = null;
+            }, remaining);
+          }
         } catch {
           /* ignore malformed */
         }
@@ -55,6 +75,10 @@ export const StageStrip = () => {
     }
     return () => {
       if (esRef.current) { esRef.current.close(); esRef.current = null; }
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
     };
   }, [stem]);
 
@@ -62,8 +86,39 @@ export const StageStrip = () => {
   if (!status) return null;
   if (status.endedAt && Date.now() - status.endedAt > 20000) return null;
 
+  // Phase "failed" isn't in STAGES; render a single red FAILED chip so the
+  // user sees the run ended badly instead of all-pending chips.
+  if (status.phase === "failed") {
+    return (
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          padding: "4px 16px",
+          borderBottom: "1px solid #222",
+          background: "#0a0a0a",
+        }}
+      >
+        <span
+          style={{
+            padding: "3px 8px",
+            fontSize: 9,
+            fontFamily: "monospace",
+            background: "#c33",
+            color: "#fff",
+            border: "1px solid #c33",
+            borderRadius: 3,
+            letterSpacing: "0.06em",
+          }}
+        >
+          ANALYSIS FAILED
+        </span>
+      </div>
+    );
+  }
+
   const currentIdx = STAGES.indexOf(status.phase);
-  const isFailed = status.phase === "failed";
+  const isFailed = false;
 
   return (
     <div

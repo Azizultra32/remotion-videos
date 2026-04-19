@@ -1406,6 +1406,171 @@ const handleChat = async (
   res.end(JSON.stringify(payload));
 };
 
+// POST /api/chat/stream
+// Same contract as /api/chat but streams the turn incrementally:
+//   - Spawns `claude -p --output-format stream-json --verbose` so each
+//     assistant message / tool_use / tool_result arrives as its own JSON
+//     line instead of all-at-once at the end.
+//   - Response body is a line-delimited JSON stream (not SSE; the client
+//     uses fetch + getReader rather than EventSource so we can keep the
+//     POST body for {message, state}).
+//   - Emits events: {type:"text", delta}, {type:"tool_use", id, name, input},
+//                    {type:"tool_result", tool_use_id, content, is_error},
+//                    {type:"done", reply, mutations} OR {type:"error", ...}
+//   - Final `done` event parses the accumulated text for <final>{...}</final>
+//     the same way /api/chat does, so the client can still apply mutations.
+const handleChatStream = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const message: string = String(body?.message ?? "").slice(0, 4000);
+  const state = body?.state ?? {};
+  if (!message) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: "body.message required" }));
+    return;
+  }
+
+  const userPrompt = `Current editor state (for your reference):\n${JSON.stringify(
+    {
+      currentTimeSec: state.currentTimeSec,
+      compositionDuration: state.compositionDuration,
+      fps: state.fps,
+      audioSrc: state.audioSrc,
+      beatsSrc: state.beatsSrc,
+      elements: state.elements,
+    },
+    null,
+    2,
+  )}\n\nUser request:\n${message}\n\nInvestigate with tools as needed, then end with the <final>{...}</final> block.`;
+
+  res.writeHead(200, {
+    "Content-Type": "application/x-ndjson",
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+  });
+
+  const send = (obj: unknown) => {
+    try { res.write(JSON.stringify(obj) + "\n"); } catch { /* closed */ }
+  };
+
+  const child = spawn(
+    "claude",
+    [
+      "-p",
+      "--output-format", "stream-json",
+      "--verbose",
+      "--permission-mode", "bypassPermissions",
+      "--append-system-prompt", CHAT_SYSTEM,
+      userPrompt,
+    ],
+    { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"] },
+  );
+
+  // Stitch stdout lines: claude emits one JSON per newline, but a line may
+  // arrive across multiple data chunks.
+  let buf = "";
+  let fullText = ""; // for <final> extraction on done
+  const stderrBuf: Buffer[] = [];
+
+  const processLine = (line: string) => {
+    if (!line.trim()) return;
+    let ev: Record<string, unknown>;
+    try { ev = JSON.parse(line); } catch { return; /* skip malformed */ }
+    const t = ev.type;
+    if (t === "assistant") {
+      const m = ev.message as { content?: Array<Record<string, unknown>> } | undefined;
+      const content = Array.isArray(m?.content) ? m!.content : [];
+      for (const c of content) {
+        const ct = c.type;
+        if (ct === "text" && typeof c.text === "string") {
+          fullText += c.text;
+          send({ type: "text", delta: c.text });
+        } else if (ct === "tool_use") {
+          send({
+            type: "tool_use",
+            id: typeof c.id === "string" ? c.id : "",
+            name: typeof c.name === "string" ? c.name : "unknown",
+            input: c.input ?? {},
+          });
+        }
+      }
+    } else if (t === "user") {
+      const m = ev.message as { content?: Array<Record<string, unknown>> } | undefined;
+      const content = Array.isArray(m?.content) ? m!.content : [];
+      for (const c of content) {
+        if (c.type === "tool_result") {
+          const raw = c.content;
+          const text = Array.isArray(raw)
+            ? raw.map((x: unknown) => typeof x === "object" && x && "text" in x ? (x as { text: string }).text : "").join("")
+            : typeof raw === "string" ? raw : "";
+          send({
+            type: "tool_result",
+            tool_use_id: typeof c.tool_use_id === "string" ? c.tool_use_id : "",
+            content: text.slice(0, 2000),
+            is_error: !!c.is_error,
+          });
+        }
+      }
+    } else if (t === "result") {
+      // Final event from claude — parse <final>{...}</final> out of the
+      // accumulated text, same as the non-streaming endpoint.
+      const result = typeof ev.result === "string" ? ev.result : fullText;
+      const tryParse = (s: string): { reply: string; mutations: unknown[] } | null => {
+        const start = s.indexOf("{");
+        const end = s.lastIndexOf("}");
+        if (start === -1 || end <= start) return null;
+        try {
+          const parsed = JSON.parse(s.slice(start, end + 1));
+          if (parsed && typeof parsed === "object" && typeof parsed.reply === "string" && Array.isArray(parsed.mutations)) {
+            return { reply: parsed.reply, mutations: parsed.mutations };
+          }
+        } catch { /* not JSON */ }
+        return null;
+      };
+      const finalRe = /<final>([\s\S]*?)<\/final>/g;
+      let lastFinal: string | null = null;
+      let m: RegExpExecArray | null;
+      while ((m = finalRe.exec(result)) !== null) lastFinal = m[1];
+      const primary = lastFinal !== null ? tryParse(lastFinal) : null;
+      const payload = primary ?? tryParse(result) ?? { reply: result.trim() || "(no output)", mutations: [] };
+      send({ type: "done", reply: payload.reply, mutations: payload.mutations });
+    }
+    // other types (system, rate_limit_event, thinking) are dropped client-side
+  };
+
+  child.stdout.on("data", (chunk: Buffer) => {
+    buf += chunk.toString("utf8");
+    let idx: number;
+    while ((idx = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, idx);
+      buf = buf.slice(idx + 1);
+      processLine(line);
+    }
+  });
+  child.stderr.on("data", (c: Buffer) => stderrBuf.push(c));
+
+  child.on("close", (code) => {
+    // Flush any trailing partial line (rare but possible).
+    if (buf.trim()) processLine(buf);
+    if (code !== 0) {
+      const err = Buffer.concat(stderrBuf).toString("utf8");
+      const combined = err.toLowerCase();
+      const rateLimited =
+        /rate[- ]?limit/.test(combined) ||
+        /too many requests/.test(combined) ||
+        /429/.test(combined);
+      send({ type: "error", code, error: rateLimited ? "claude-cli-rate-limited" : "claude-cli-failed", stderr: err.slice(0, 500) });
+    }
+    try { res.end(); } catch { /* already closed */ }
+  });
+
+  req.on("close", () => {
+    if (child.exitCode === null) child.kill("SIGTERM");
+  });
+};
+
 // ---------------------------------------------------------------------------
 // Vite plugin wiring
 // ---------------------------------------------------------------------------
@@ -1435,6 +1600,7 @@ export const sidecarPlugin = (): Plugin => ({
   name: "music-video-editor-sidecar",
   configureServer(server: ViteDevServer) {
     server.middlewares.use("/api/render", wrap("POST", handleRender));
+    server.middlewares.use("/api/chat/stream", wrap("POST", handleChatStream));
     server.middlewares.use("/api/chat", wrap("POST", handleChat));
     server.middlewares.use("/api/songs", wrap("GET", handleSongs));
     server.middlewares.use("/api/out/", wrap("GET", handleOut));

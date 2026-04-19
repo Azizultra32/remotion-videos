@@ -251,7 +251,15 @@ const MessageBubble = ({
   showUndo: boolean;
   onUndo: () => void;
 }) => {
-  const { mutationResult } = message;
+  const { mutationResult, toolCalls = [], streaming } = message;
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggle = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
   return (
     <div
       style={{
@@ -265,6 +273,75 @@ const MessageBubble = ({
       }}
     >
       {message.content}
+      {streaming && (
+        <span
+          style={{
+            display: "inline-block",
+            width: 6,
+            height: 12,
+            marginLeft: 2,
+            background: "#93c5fd",
+            verticalAlign: "middle",
+            animation: "pulse 1s ease-in-out infinite",
+            opacity: 0.8,
+          }}
+        />
+      )}
+      {toolCalls.length > 0 && (
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+          {toolCalls.map((tc) => {
+            const running = tc.result === undefined;
+            const isExpanded = expanded.has(tc.id || tc.name);
+            const inputSummary = (() => {
+              try {
+                const s = JSON.stringify(tc.input);
+                return s.length > 60 ? s.slice(0, 60) + "…" : s;
+              } catch { return ""; }
+            })();
+            const chipColor = tc.isError ? "#7f1d1d" : running ? "#1e3a5f" : "#1e3a2a";
+            const chipBorder = tc.isError ? "#b91c1c" : running ? "#3b82f6" : "#22c55e";
+            const chipText = tc.isError ? "#fca5a5" : running ? "#93c5fd" : "#86efac";
+            return (
+              <div
+                key={tc.id || tc.name}
+                style={{
+                  fontSize: 10,
+                  fontFamily: "monospace",
+                  background: chipColor,
+                  border: "1px solid " + chipBorder,
+                  borderRadius: 3,
+                  color: chipText,
+                  padding: "3px 6px",
+                  cursor: "pointer",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+                onClick={() => toggle(tc.id || tc.name)}
+                title={isExpanded ? "Click to collapse" : "Click to expand input + result"}
+              >
+                <div>
+                  <span style={{ fontWeight: 600 }}>{tc.name}</span>
+                  {" "}
+                  <span style={{ opacity: 0.7 }}>{running ? "running…" : tc.isError ? "error" : "done"}</span>
+                  {!isExpanded && inputSummary ? <span style={{ marginLeft: 6, opacity: 0.6 }}>{inputSummary}</span> : null}
+                </div>
+                {isExpanded && (
+                  <div style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                    <div style={{ opacity: 0.7 }}>input:</div>
+                    <div>{inputSummary.replace(/…$/, "") || "(empty)"}</div>
+                    {tc.result !== undefined && (
+                      <>
+                        <div style={{ opacity: 0.7, marginTop: 4 }}>result:</div>
+                        <div>{tc.result.slice(0, 1200) || "(empty)"}{tc.result.length > 1200 ? "… (truncated)" : ""}</div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       {mutationResult && (mutationResult.applied > 0 || mutationResult.skipped > 0) && (
         <div
           style={{

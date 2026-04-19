@@ -8,6 +8,14 @@ import {
   type UndoSnapshot,
 } from "../utils/applyMutations";
 
+export type ToolCall = {
+  id: string;
+  name: string;
+  input: unknown;
+  result?: string;
+  isError?: boolean;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -15,6 +23,13 @@ export type ChatMessage = {
   mutationResult?: MutationResult;
   // Once undone, the button on this message is hidden and the snapshot cleared.
   undone?: boolean;
+  // Tool calls made during this assistant turn. Populated incrementally from
+  // the /api/chat/stream transport; each item is a Read / Bash / Grep / etc.
+  // invocation with its input args and (eventually) its result.
+  toolCalls?: ToolCall[];
+  // True while this message is still being streamed in. Used by the UI to
+  // show a subtle pulsing indicator rather than treating it as complete.
+  streaming?: boolean;
 };
 
 const newId = () => `msg-${Math.random().toString(36).slice(2, 9)}`;
@@ -143,58 +158,129 @@ export const useChat = () => {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
 
+      // Assistant message placeholder we\'ll mutate as the stream lands.
+      const asstId = newId();
+      setMessages((ms) => [
+        ...ms,
+        { id: asstId, role: "assistant", content: "", streaming: true, toolCalls: [] },
+      ]);
+
+      // Final payload accumulators — applied to the placeholder on `done`.
+      let finalReply: string | null = null;
+      let finalMutations: unknown[] = [];
+      let rateLimited = false;
+
+      const patchAsst = (fn: (m: ChatMessage) => ChatMessage): void => {
+        setMessages((ms) => ms.map((m) => (m.id === asstId ? fn(m) : m)));
+      };
+
       try {
-        const resp = await fetch("/api/chat", {
+        const resp = await fetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: trimmed, state: snapshotState() }),
           signal: ctrl.signal,
         });
 
-        // Gap D — handle rate-limit responses from the sidecar.
+        // Rate-limit surfaces from /api/chat/stream as a 429 too.
         if (resp.status === 429) {
           const body = await resp.text().catch(() => "");
           const retrySec = parseRetryAfter(resp.headers.get("Retry-After"), body);
           const until = Date.now() + retrySec * 1000;
           setCooldown({ until, remainingSec: retrySec });
-          setMessages((ms) => [
-            ...ms,
-            {
-              id: newId(),
-              role: "system",
-              content: `Claude CLI rate-limited — retry in ${retrySec}s`,
-            },
-          ]);
+          patchAsst((m) => ({ ...m, content: `Rate-limited — retry in ${retrySec}s`, streaming: false }));
           return;
         }
 
-        if (!resp.ok) {
+        if (!resp.ok || !resp.body) {
           const body = await resp.text().catch(() => "");
           throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
         }
-        const payload = (await resp.json()) as {
-          reply?: string;
-          mutations?: unknown;
-          error?: string;
-        };
-        if (payload.error) throw new Error(payload.error);
 
-        const mutationResult = applyMutations(payload.mutations ?? []);
-        const asstMsg: ChatMessage = {
-          id: newId(),
-          role: "assistant",
-          content: payload.reply ?? "(no reply)",
-          mutationResult,
+        // Read the line-delimited JSON stream from the sidecar.
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        const handleEvent = (ev: Record<string, unknown>) => {
+          const t = ev.type;
+          if (t === "text" && typeof ev.delta === "string") {
+            const delta = ev.delta;
+            patchAsst((m) => ({ ...m, content: m.content + delta }));
+          } else if (t === "tool_use") {
+            const call: ToolCall = {
+              id: typeof ev.id === "string" ? ev.id : "",
+              name: typeof ev.name === "string" ? ev.name : "unknown",
+              input: ev.input ?? {},
+            };
+            patchAsst((m) => ({ ...m, toolCalls: [...(m.toolCalls ?? []), call] }));
+          } else if (t === "tool_result") {
+            const tid = typeof ev.tool_use_id === "string" ? ev.tool_use_id : "";
+            const content = typeof ev.content === "string" ? ev.content : "";
+            const isError = !!ev.is_error;
+            patchAsst((m) => ({
+              ...m,
+              toolCalls: (m.toolCalls ?? []).map((tc) =>
+                tc.id === tid ? { ...tc, result: content, isError } : tc,
+              ),
+            }));
+          } else if (t === "done") {
+            finalReply = typeof ev.reply === "string" ? ev.reply : null;
+            finalMutations = Array.isArray(ev.mutations) ? (ev.mutations as unknown[]) : [];
+          } else if (t === "error") {
+            const errMsg = typeof ev.error === "string" ? ev.error : "claude-cli-failed";
+            if (errMsg === "claude-cli-rate-limited") {
+              rateLimited = true;
+            }
+            throw new Error(errMsg);
+          }
         };
-        setMessages((ms) => [...ms, asstMsg]);
+
+        // Drain the body stream.
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buf.indexOf("\n")) !== -1) {
+            const line = buf.slice(0, idx);
+            buf = buf.slice(idx + 1);
+            if (!line.trim()) continue;
+            try { handleEvent(JSON.parse(line)); } catch { /* malformed line, skip */ }
+          }
+        }
+        // Flush trailing partial (rare).
+        if (buf.trim()) {
+          try { handleEvent(JSON.parse(buf)); } catch { /* ignore */ }
+        }
+
+        if (rateLimited) {
+          setCooldown({ until: Date.now() + 60_000, remainingSec: 60 });
+          patchAsst((m) => ({ ...m, content: m.content || "Rate-limited — retry in 60s", streaming: false }));
+          return;
+        }
+
+        const mutationResult = applyMutations(finalMutations);
+        const replyText = finalReply ?? "(no reply)";
+        patchAsst((m) => ({
+          ...m,
+          // If no text streamed, use the final reply. If text streamed, keep
+          // it — the streamed content often includes intermediate reasoning
+          // that the final reply summarizes; show whichever is richer.
+          content: m.content.length > replyText.length ? m.content : replyText,
+          mutationResult,
+          streaming: false,
+        }));
       } catch (err) {
-        if ((err as Error).name === "AbortError") return;
+        if ((err as Error).name === "AbortError") {
+          // User cancelled — mark the placeholder as not-streaming and keep
+          // whatever text arrived before cancel.
+          patchAsst((m) => ({ ...m, streaming: false, content: m.content || "(cancelled)" }));
+          return;
+        }
         const msg = (err as Error).message ?? String(err);
         setError(msg);
-        setMessages((ms) => [
-          ...ms,
-          { id: newId(), role: "system", content: `Error: ${msg}` },
-        ]);
+        patchAsst((m) => ({ ...m, role: "system", streaming: false, content: `Error: ${msg}` }));
       } finally {
         setPending(false);
         abortRef.current = null;

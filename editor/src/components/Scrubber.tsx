@@ -39,6 +39,21 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const playheadRef = useRef<HTMLDivElement>(null);
 
+  // Clear dragState once the beatData events array reflects our drag target.
+  // This is the coordination point between "pointer released" and "server
+  // confirmed via SSE" — until both, the line renders from dragState so it
+  // stays pinned under where the user let go instead of jumping back.
+  useEffect(() => {
+    if (!dragState) return;
+    if (!beatData) return;
+    const events = beatData.phase2_events_sec?.length
+      ? beatData.phase2_events_sec
+      : beatData.phase1_events_sec ?? [];
+    if (events.some((t) => Math.abs(t - dragState.sec) < 0.1)) {
+      setDragState(null);
+    }
+  }, [beatData, dragState]);
+
   const trackName = audioSrc
     ? audioSrc
         .replace(/^.*\//, "")
@@ -338,9 +353,17 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
               const onUp = () => {
                 window.removeEventListener("pointermove", onMove);
                 window.removeEventListener("pointerup", onUp);
-                setDragState(null);
-                if (!dragged) return;
-                if (Math.abs(newSec - startSec) < 0.05) return;
+                // Abort paths: no-drag or sub-threshold drag -> revert preview.
+                if (!dragged) { setDragState(null); return; }
+                if (Math.abs(newSec - startSec) < 0.05) { setDragState(null); return; }
+                // Commit path: DO NOT clear dragState here. A setDragState(null)
+                // at this point would render the line from beatData's STALE
+                // array for the ~100-500ms until SSE delivers the updated
+                // analysis.json, which is the visible snap-back-then-forward.
+                // Instead we leave dragState pinned at newSec; the useEffect
+                // watching beatData clears it once the array reflects our
+                // target (within 0.1s). POST failure rolls back below.
+                setDragState({ idx: i, sec: newSec });
                 const events = (beatData.phase2_events_sec?.length
                   ? beatData.phase2_events_sec
                   : beatData.phase1_events_sec) ?? [];
@@ -351,7 +374,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ stem, events: next }),
-                }).catch(() => {});
+                })
+                  .then((r) => { if (!r.ok) setDragState(null); })
+                  .catch(() => setDragState(null));
               };
               window.addEventListener("pointermove", onMove);
               window.addEventListener("pointerup", onUp);

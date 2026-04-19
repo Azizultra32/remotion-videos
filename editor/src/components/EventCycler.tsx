@@ -202,9 +202,9 @@ export const EventCycler = () => {
           </span>
           <button
             onClick={snapSelected}
-            disabled={busy || (beatData?.beats?.length ?? 0) === 0}
-            title="Snap this event to the nearest detected beat. Disabled when the track has no beat grid."
-            style={actionBtn("ghost", busy || (beatData?.beats?.length ?? 0) === 0)}
+            disabled={busy}
+            title="Snap this event to the nearest detected beat. Requires a beat grid — if none, run Seed Beats first (error inlines)."
+            style={actionBtn("ghost", busy)}
           >
             Snap to beat
           </button>

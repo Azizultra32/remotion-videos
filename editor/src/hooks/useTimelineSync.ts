@@ -85,16 +85,37 @@ export const useTimelineSync = () => {
             phase2_events_sec?: number[];
             phase1_events_sec?: number[];
           };
-          const raw =
-            (parsed.phase2_events_sec?.length
-              ? parsed.phase2_events_sec
-              : parsed.phase1_events_sec) ?? [];
-          // Defensive filter — a malformed analysis.json could contain
-          // strings or NaN/Infinity; we only want finite seconds.
-          const events = raw.filter(
-            (n): n is number => typeof n === "number" && Number.isFinite(n),
-          );
-          useEditorStore.getState().replacePipelineElements(stem, events);
+          const clean = (xs: unknown): number[] =>
+            Array.isArray(xs)
+              ? xs.filter(
+                  (n): n is number => typeof n === "number" && Number.isFinite(n),
+                )
+              : [];
+          const p1 = clean(parsed.phase1_events_sec);
+          const p2 = clean(parsed.phase2_events_sec);
+          const events = p2.length ? p2 : p1;
+
+          // Also refresh beatData so consumers that read phase1/phase2
+          // counts (StageStrip badges, Scrubber SVG overlay) update when
+          // analysis.json changes in place. useBeatData only fetches on
+          // stem change, so without this the badges stay lit after a
+          // Re-analyze wipe until the user switches tracks and back.
+          const store = useEditorStore.getState();
+          const current = store.beatData ?? {
+            duration: 0,
+            bpm_global: 0,
+            beats: [],
+            downbeats: [],
+            drops: [],
+            breakdowns: [],
+            energy: [],
+          };
+          store.setBeatData({
+            ...current,
+            phase1_events_sec: p1,
+            phase2_events_sec: p2,
+          });
+          store.replacePipelineElements(stem, events);
         } catch {
           /* malformed payload — ignore */
         }

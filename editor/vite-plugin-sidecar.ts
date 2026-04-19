@@ -8,7 +8,9 @@
 // Both live in the dev server so we don't need a separate process.
 // Lives inside editor/ but shells out from the repo root.
 import type { Plugin, ViteDevServer, Connect } from "vite";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createWriteStream } from "node:fs";
+import os from "node:os";
 import { promises as fs, watch as fsWatch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -917,6 +919,105 @@ const handleAnalyzeSeedBeats = async (
   res.end(JSON.stringify({ stem, pid: child.pid }));
 };
 
+// POST /api/projects/create
+// Upload an audio file + create a new project end-to-end with no CLI:
+//   1. Stream the raw body (audio bytes) to a tempfile.
+//   2. Run `npm run mv:scaffold` synchronously — copies into projects/<stem>/,
+//      writes starter timeline.json. Stem is derived from the original
+//      filename slug (passed via X-Audio-Filename header).
+//   3. Spawn `npm run mv:analyze --project <stem>` detached — Setup (incl.
+//      detect-beats) + Phase 1 + Phase 2. Progress streams via the existing
+//      .analyze-status.json SSE channel.
+//
+// Returns 202 with {stem, analysisPid} as soon as scaffold completes; the
+// client can immediately switch to the new stem and StageStrip picks up
+// the running analysis.
+const handleProjectCreate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const origFilename = String(req.headers["x-audio-filename"] ?? "").slice(0, 200);
+  if (!origFilename) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "X-Audio-Filename header required" }));
+    return;
+  }
+  const ext = path.extname(origFilename).toLowerCase();
+  if (![".mp3", ".wav", ".m4a"].includes(ext)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "expected .mp3/.wav/.m4a filename (got " + ext + ")" }));
+    return;
+  }
+
+  // Stream body to tempfile. Avoid buffering large audio in memory.
+  const tmpFile = path.join(os.tmpdir(), `editor-upload-${Date.now()}${ext}`);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const ws = createWriteStream(tmpFile);
+      req.pipe(ws);
+      ws.on("finish", () => resolve());
+      ws.on("error", reject);
+      req.on("error", reject);
+    });
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "upload-write-failed", detail: String(err) }));
+    try { await fs.unlink(tmpFile); } catch { /* best effort */ }
+    return;
+  }
+
+  // Run scaffold synchronously. It's a file copy + mkdir + small writeFile —
+  // fast (~100ms for a 10MB mp3 plus tsx startup ~500ms). Worth blocking the
+  // request for so we can return the concrete stem to the client.
+  const scaffold = spawnSync(
+    "npm",
+    ["run", "--silent", "mv:scaffold", "--", "--audio", tmpFile, "--stem", path.basename(origFilename, ext)],
+    { cwd: REPO_ROOT, encoding: "utf8" },
+  );
+  try { await fs.unlink(tmpFile); } catch { /* best effort */ }
+
+  if (scaffold.status !== 0) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({
+      error: "scaffold-failed",
+      stdout: scaffold.stdout,
+      stderr: scaffold.stderr,
+    }));
+    return;
+  }
+
+  // Extract the stem from scaffold stdout. mv-scaffold.ts logs
+  // `scaffolded projects/<stem>/` on success.
+  const stemMatch = (scaffold.stdout || "").match(/scaffolded projects\/([a-z0-9_-]+)\//);
+  if (!stemMatch) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({
+      error: "scaffold-succeeded-but-stem-not-parsed",
+      stdout: scaffold.stdout,
+    }));
+    return;
+  }
+  const stem = stemMatch[1];
+
+  // Fire analysis detached — same pattern as /api/analyze/run.
+  const child = spawn(
+    "npm",
+    ["run", "mv:analyze", "--", "--project", stem],
+    { cwd: REPO_ROOT, detached: true, stdio: "ignore", env: { ...process.env } },
+  );
+  child.unref();
+
+  res.statusCode = 202;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ stem, analysisPid: child.pid }));
+};
+
+// POST /api/analyze/clear  {stem}
 // POST /api/analyze/clear  {stem}
 // Sets analysis.json to an empty events list so the SSE EventSource next
 // tick pushes `{}` → replacePipelineElements(stem, []) → merge removes all
@@ -1175,6 +1276,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/analyze/status/", wrap("GET", handleAnalyzeStatus));
     server.middlewares.use("/api/analyze/run", wrap("POST", handleAnalyzeRun));
     server.middlewares.use("/api/analyze/seed-beats", wrap("POST", handleAnalyzeSeedBeats));
+    server.middlewares.use("/api/projects/create", wrap("POST", handleProjectCreate));
     server.middlewares.use("/api/analyze/clear", wrap("POST", handleAnalyzeClear));
     server.middlewares.use("/api/analyze/events/update", wrap("POST", handleAnalyzeEventsUpdate));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));

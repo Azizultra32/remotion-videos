@@ -11,6 +11,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useBeatData } from "./hooks/useBeatData";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useTimelineSync } from "./hooks/useTimelineSync";
+import { useAutoSeedBeats } from "./hooks/useAutoSeedBeats";
 import { useUndoHistory } from "./hooks/useUndoHistory";
 import { useEditorStore } from "./store";
 import { toEditorUrl } from "./utils/url";
@@ -38,6 +39,9 @@ export const App = () => {
   useTimelineSync();
   // Cmd-Z / Cmd-Shift-Z undo/redo for element mutations (50 levels deep).
   useUndoHistory();
+  // Auto-fire /api/analyze/seed-beats when a project loads without beats,
+  // so snap-to-beat starts working without a manual button click.
+  useAutoSeedBeats();
 
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);

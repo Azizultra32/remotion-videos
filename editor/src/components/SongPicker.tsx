@@ -1,15 +1,19 @@
 // src/components/SongPicker.tsx
 //
-// Dropdown for switching between audio tracks in public/. Fetches /api/songs
-// once on mount. Selecting a track calls store.setTrack() which clears the
-// timeline and resets the playhead — the beats-JSON re-fetch happens in
+// Dropdown for switching between audio tracks in projects/<stem>/. Fetches
+// /api/songs on mount. Selecting a track calls store.setTrack() which clears
+// the timeline and resets the playhead — the beats-JSON re-fetch happens in
 // App.tsx via useBeatData reacting to the new beatsSrc.
 //
-// If the picked track has no sibling "-beats.json", we still switch (so the
-// user can audition the audio), but a "no beats" badge is shown and the
-// Scrubber's beat overlay will be empty until analysis is run.
+// Also: "+ New" button to upload a local audio file and bootstrap a new
+// project with no CLI. Upload → server streams to tempfile → mv:scaffold →
+// mv:analyze detached. Progress streams to StageStrip after auto-switch.
+//
+// If the picked track has no sibling analysis.json beats, we still switch
+// (so the user can audition the audio), but a "no beats" badge is shown
+// and the Scrubber's beat overlay will be empty until analysis is run.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../store";
 import { stemFromAudioSrc } from "../utils/url";
 
@@ -34,10 +38,25 @@ export const SongPicker = () => {
   const setTrack = useEditorStore((s) => s.setTrack);
   const [songs, setSongs] = useState<SongEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<{ filename: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const refreshSongs = async (): Promise<SongEntry[] | null> => {
+    try {
+      const r = await fetch("/api/songs");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data: SongEntry[] = await r.json();
+      setSongs(data);
+      return data;
+    } catch (err) {
+      setError(String((err as Error).message ?? err));
+      return null;
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/songs")
+    void fetch("/api/songs")
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -64,6 +83,44 @@ export const SongPicker = () => {
     setTrack(next.audioSrc, next.beatsSrc);
   };
 
+  const onFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Allow re-uploading the same file later by resetting the input.
+    e.target.value = "";
+    if (!file) return;
+    setError(null);
+    setUploading({ filename: file.name });
+    try {
+      const r = await fetch("/api/projects/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-Audio-Filename": file.name,
+        },
+        body: file,
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j?.error ?? `HTTP ${r.status}`);
+      }
+      const { stem: newStem } = (await r.json()) as { stem: string };
+      // Refresh the dropdown so the new project shows up, then switch.
+      const fresh = await refreshSongs();
+      const entry = fresh?.find((s) => s.stem === newStem);
+      if (entry) {
+        setTrack(entry.audioSrc, entry.beatsSrc);
+      } else {
+        // /api/songs refresh raced with disk creation — build the URLs
+        // ourselves; next refresh will pick it up.
+        setTrack(`projects/${newStem}/audio${file.name.toLowerCase().endsWith(".wav") ? ".wav" : ".mp3"}`, `projects/${newStem}/analysis.json`);
+      }
+    } catch (err) {
+      setError(String((err as Error).message ?? err));
+    } finally {
+      setUploading(null);
+    }
+  };
+
   return (
     <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
       <label
@@ -77,7 +134,7 @@ export const SongPicker = () => {
           id="song-picker"
           value={stem ?? ""}
           onChange={onChange}
-          disabled={!songs || songs.length === 0}
+          disabled={!songs || songs.length === 0 || !!uploading}
           style={{
             flex: 1,
             minWidth: 0,
@@ -88,14 +145,11 @@ export const SongPicker = () => {
             color: "#ddd",
             fontSize: 11,
             fontFamily: "inherit",
-            cursor: songs && songs.length > 0 ? "pointer" : "default",
+            cursor: songs && songs.length > 0 && !uploading ? "pointer" : "default",
           }}
         >
           {!songs && <option value="">Loading…</option>}
           {songs && songs.length === 0 && <option value="">No tracks found</option>}
-          {/* If the persisted audioSrc isn't in the scanned list, show it
-              as a disabled option so the select doesn't silently jump to
-              the first entry. */}
           {songs && stem && !current && (
             <option value={stem} disabled>
               {humanize(stem)} (missing)
@@ -108,9 +162,36 @@ export const SongPicker = () => {
             </option>
           ))}
         </select>
-        {current && !current.hasBeats && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4"
+          onChange={onFileChosen}
+          style={{ display: "none" }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={!!uploading}
+          title="Upload a local audio file to create a new project. Copies into projects/<stem>/, then auto-runs mv:analyze (Setup with beat detection + Phase 1 + Phase 2). ~5-10 min."
+          style={{
+            padding: "4px 8px",
+            fontSize: 11,
+            fontFamily: "monospace",
+            background: uploading ? "#222" : "#1a3a1a",
+            color: uploading ? "#666" : "#afa",
+            border: "1px solid " + (uploading ? "#333" : "#386"),
+            borderRadius: 3,
+            cursor: uploading ? "not-allowed" : "pointer",
+            whiteSpace: "nowrap",
+            opacity: uploading ? 0.6 : 1,
+          }}
+        >
+          {uploading ? "Uploading…" : "+ New"}
+        </button>
+        {current && !current.hasBeats && !uploading && (
           <span
-            title="No sibling <stem>-beats.json — Scrubber beat overlay will be empty."
+            title="No sibling analysis.json beats — Scrubber beat overlay will be empty. Run mv:analyze or click Seed beats in the Analysis strip."
             style={{
               fontSize: 9,
               padding: "2px 6px",
@@ -127,6 +208,11 @@ export const SongPicker = () => {
           </span>
         )}
       </div>
+      {uploading && (
+        <div style={{ fontSize: 10, color: "#8cf", fontFamily: "monospace" }}>
+          Scaffolding {uploading.filename}… analysis will start automatically.
+        </div>
+      )}
       {error && (
         <div style={{ fontSize: 10, color: "#f66" }}>Tracks: {error}</div>
       )}

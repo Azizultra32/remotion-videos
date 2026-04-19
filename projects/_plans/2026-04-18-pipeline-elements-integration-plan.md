@@ -1,5 +1,11 @@
 # Pipeline Elements Integration Implementation Plan
 
+> **STATUS: SHIPPED 2026-04-19.** All 8 tasks completed and pushed to origin/main.
+> Final commits: `eb384ea` → `a064ea9`. End-to-end verified via headless Chrome + CDP:
+> 6 pipeline placeholders + LOCK badges, EventCycler chips, fresh phase2 PNG in Scrubber,
+> user elements preserved, zero console errors. See commit `125f60e` for three bugs
+> exposed by verification (EventCycler hooks, hydrate race, SSE multi-line JSON).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Surface analysis-pipeline outputs in the editor: events auto-populate the timeline as locked placeholder elements, analysis progress shows live, a cycler navigates events, and user edits coexist with pipeline-created ones.

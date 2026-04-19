@@ -85,10 +85,15 @@ export const useTimelineSync = () => {
             phase2_events_sec?: number[];
             phase1_events_sec?: number[];
           };
-          const events =
+          const raw =
             (parsed.phase2_events_sec?.length
               ? parsed.phase2_events_sec
               : parsed.phase1_events_sec) ?? [];
+          // Defensive filter — a malformed analysis.json could contain
+          // strings or NaN/Infinity; we only want finite seconds.
+          const events = raw.filter(
+            (n): n is number => typeof n === "number" && Number.isFinite(n),
+          );
           useEditorStore.getState().replacePipelineElements(stem, events);
         } catch {
           /* malformed payload — ignore */

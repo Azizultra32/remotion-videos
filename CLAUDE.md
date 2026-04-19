@@ -26,7 +26,7 @@ This repo is split into **engine** (reusable infrastructure) and **projects** (p
 npm run mv:current                                     # echo active project stem
 npm run mv:render   -- --project <stem>                # render MP4 from timeline.json + audio
 npm run mv:scaffold -- --audio /abs/path/track.mp3     # create projects/<stem>/ from an audio file
-npm run mv:analyze  -- --project <stem>                # run Setup + print master prompt
+npm run mv:analyze  -- --project <stem>                # run full end-to-end analysis (Setup + Phase 1 + Phase 2; writes events to projects/<stem>/analysis.json)
 ```
 
 **Per-project layout:**

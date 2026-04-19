@@ -59,11 +59,13 @@ Produces `source.json` + `full.png` and stops. Useful for checking that analysis
 npm run mv:analyze -- --project <stem>
 ```
 
-Runs Setup, then prints the master prompt with `<AUDIO_PATH>`, `<AUDIO_STEM>`, `<OUT_DIR>` substituted. Paste the printed prompt into a fresh Claude Code session (or the editor's chat pane) to run Phases 1–2.
+Runs Setup (Python `energy-bands.py` + `plot-pioneer.py`), then spawns `claude -p` with the master prompt substituted, which executes Phase 1 (candidate identification + per-candidate zoom confirmation) and Phase 2 (segment slicing + per-segment internal zoom confirmation) autonomously. On exit, copies the final `phase2-events.json` to `projects/<stem>/analysis.json` so the editor's Scrubber picks up the new event set on next refresh.
 
-**Why not one-shot?** Phases 1 and 2 spawn fresh subagents per zoom, which requires Task tool access in a live Claude Code context. `claude -p` is non-interactive and doesn't give subagents the same tool surface. So Setup is automated; the multi-agent part is driven by the user via a live session.
+Wall clock: 5-10 minutes depending on track length and candidate count. Progress streams to the terminal in real time. This is end-to-end: no prompt-pasting step.
 
 ## Driving Phases 1–2 as the main agent
+
+> In most cases, just use `mv:analyze` — this section is the fallback for when you need to invoke the protocol manually.
 
 If you're the main agent that received the master prompt:
 

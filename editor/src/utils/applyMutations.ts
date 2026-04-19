@@ -1,6 +1,7 @@
 import type { TimelineElement } from "../types";
 import { useEditorStore } from "../store";
 import { ELEMENT_REGISTRY } from "@compositions/elements/registry";
+import { stemFromAudioSrc } from "./url";
 
 // Mutations the chat layer emits. These mirror the 5 store actions the sidecar
 // CHAT_SYSTEM prompt documents. Everything is validated defensively because
@@ -16,7 +17,16 @@ export type ChatMutation =
     }
   | { op: "removeElement"; id: string }
   | { op: "seekTo"; sec: number }
-  | { op: "setPlaying"; playing: boolean };
+  | { op: "setPlaying"; playing: boolean }
+  // Project-lifecycle ops. Fire the corresponding HTTP endpoint; progress
+  // streams via the existing SSE channels (StageStrip consumes them). These
+  // are intentionally NOT captured in UndoSnapshot — a mid-session scaffold
+  // or analyze kickoff isn't something chat "undo" should try to unwind.
+  | { op: "scaffold"; audioPath: string }
+  | { op: "analyze"; stem?: string }
+  | { op: "seedBeats"; stem?: string }
+  | { op: "clearEvents"; stem?: string }
+  | { op: "switchTrack"; stem: string };
 
 // Snapshot taken BEFORE a batch of mutations is applied, sufficient to revert
 // that batch via useChat's undoLastTurn. We capture:
@@ -200,7 +210,106 @@ export const applyMutations = (mutations: unknown): MutationResult => {
           result.applied++;
           break;
         }
-        default: {
+        case "scaffold": {
+          const audioPath = typeof m.audioPath === "string" ? m.audioPath : "";
+          if (!audioPath) {
+            result.skipped++;
+            result.errors.push(`[${i}] scaffold: audioPath (string, absolute) required`);
+            break;
+          }
+          // Fire and forget — the new project's .analyze-status.json will
+          // start showing phase progress via SSE within 1-2 seconds.
+          void fetch("/api/projects/create-from-path", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ audioPath }),
+          }).then(async (r) => {
+            if (!r.ok) return; // error surfaces via /api/analyze/status if it fires
+            try {
+              const { stem } = (await r.json()) as { stem?: string };
+              // Auto-switch so the user immediately sees the new project in
+              // the editor and StageStrip tracks its analysis live.
+              if (stem) {
+                useEditorStore.getState().setTrack(
+                  `projects/${stem}/audio.mp3`,
+                  `projects/${stem}/analysis.json`,
+                );
+              }
+            } catch { /* ignore */ }
+          }).catch(() => { /* silent */ });
+          result.applied++;
+          break;
+        }
+        case "analyze": {
+          const stem =
+            typeof m.stem === "string" && m.stem
+              ? m.stem
+              : stemFromAudioSrc(useEditorStore.getState().audioSrc);
+          if (!stem) {
+            result.skipped++;
+            result.errors.push(`[${i}] analyze: no stem resolved (pass stem or switch track first)`);
+            break;
+          }
+          void fetch("/api/analyze/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stem }),
+          }).catch(() => { /* silent; StageStrip surfaces errors via status SSE */ });
+          result.applied++;
+          break;
+        }
+        case "seedBeats": {
+          const stem =
+            typeof m.stem === "string" && m.stem
+              ? m.stem
+              : stemFromAudioSrc(useEditorStore.getState().audioSrc);
+          if (!stem) {
+            result.skipped++;
+            result.errors.push(`[${i}] seedBeats: no stem resolved`);
+            break;
+          }
+          void fetch("/api/analyze/seed-beats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stem }),
+          }).catch(() => {});
+          result.applied++;
+          break;
+        }
+        case "clearEvents": {
+          const stem =
+            typeof m.stem === "string" && m.stem
+              ? m.stem
+              : stemFromAudioSrc(useEditorStore.getState().audioSrc);
+          if (!stem) {
+            result.skipped++;
+            result.errors.push(`[${i}] clearEvents: no stem resolved`);
+            break;
+          }
+          void fetch("/api/analyze/clear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stem }),
+          }).catch(() => {});
+          result.applied++;
+          break;
+        }
+        case "switchTrack": {
+          const stem = typeof m.stem === "string" ? m.stem : "";
+          if (!stem) {
+            result.skipped++;
+            result.errors.push(`[${i}] switchTrack: stem required`);
+            break;
+          }
+          // Imperfect: we don't know the exact audio extension without
+          // consulting /api/songs. Default to .mp3 — mv:scaffold normalizes
+          // mp3/m4a inputs to .mp3 container names, so this is right for
+          // everything except .wav projects.
+          s.setTrack(`projects/${stem}/audio.mp3`, `projects/${stem}/analysis.json`);
+          result.applied++;
+          break;
+        }
+                default: {
           result.skipped++;
           result.errors.push(`[${i}] unknown op: ${String(m.op)}`);
         }

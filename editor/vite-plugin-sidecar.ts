@@ -485,11 +485,20 @@ The user will describe what they want. You respond with a JSON object:
 }
 
 Mutation shapes:
+
+  Element ops (edit the timeline):
   { "op": "addElement",    "element": { id, type, trackIndex, startSec, durationSec, label, props } }
   { "op": "updateElement", "id": "<elementId>", "patch": { startSec?, durationSec?, trackIndex?, label?, props? (shallow merge) } }
   { "op": "removeElement", "id": "<elementId>" }
   { "op": "seekTo",        "sec": <number> }
   { "op": "setPlaying",    "playing": <boolean> }
+
+  Project-lifecycle ops (no-CLI alternatives to npm run mv:*):
+  { "op": "scaffold",      "audioPath": "/abs/path/to/track.mp3" }   # Create new project + auto-run analysis. Use when the user says "add this track", "bring in /path/to/song.mp3", "new project from ...". Progress visible in StageStrip after automatic switch to the new stem.
+  { "op": "analyze",       "stem": "<optional; current track if omitted>" }   # Re-run mv:analyze (Setup + Phase 1 + Phase 2). ~5-10 min. For "analyze again", "re-run analysis", "redo phase 2".
+  { "op": "seedBeats",     "stem": "<optional>" }   # Run detect-beats.py only (~45s). Use for "just detect beats", "fix the beat grid", "snap-to-beat isn't working".
+  { "op": "clearEvents",   "stem": "<optional>" }   # Remove Phase 1 + Phase 2 events. Keeps beats/bands. For "clear the pipeline events", "start over with events".
+  { "op": "switchTrack",   "stem": "<required>" }   # Switch the editor to a different existing project. For "open <track>", "switch to <name>", "load the other one".
 
 Element types and their main props (all props optional; reasonable defaults used if omitted):
   text.typingText        { text, cps, textColor, fontSize, fontWeight, fontFamily, x, y }
@@ -919,6 +928,95 @@ const handleAnalyzeSeedBeats = async (
   res.end(JSON.stringify({ stem, pid: child.pid }));
 };
 
+// Shared tail for byte-upload and path-based scaffold endpoints.
+// Runs mv:scaffold synchronously (fast: file copy + starter json), parses
+// the stem from stdout, spawns mv:analyze detached, and writes a 202
+// response. If cleanupTmp is true, unlinks audioPath after scaffold copies
+// the bytes into projects/<stem>/ (it's a tempfile we own).
+const runScaffoldAndAnalyze = async (
+  audioPath: string,
+  stemHint: string,
+  cleanupTmp: boolean,
+  res: ServerResponse,
+): Promise<void> => {
+  const scaffoldArgs = ["run", "--silent", "mv:scaffold", "--", "--audio", audioPath];
+  if (stemHint) scaffoldArgs.push("--stem", stemHint);
+  const scaffold = spawnSync("npm", scaffoldArgs, { cwd: REPO_ROOT, encoding: "utf8" });
+  if (cleanupTmp) {
+    try { await fs.unlink(audioPath); } catch { /* best effort */ }
+  }
+  if (scaffold.status !== 0) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({
+      error: "scaffold-failed",
+      stdout: scaffold.stdout,
+      stderr: scaffold.stderr,
+    }));
+    return;
+  }
+  const stemMatch = (scaffold.stdout || "").match(/scaffolded projects\/([a-z0-9_-]+)\//);
+  if (!stemMatch) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({
+      error: "scaffold-succeeded-but-stem-not-parsed",
+      stdout: scaffold.stdout,
+    }));
+    return;
+  }
+  const stem = stemMatch[1];
+  const child = spawn(
+    "npm",
+    ["run", "mv:analyze", "--", "--project", stem],
+    { cwd: REPO_ROOT, detached: true, stdio: "ignore", env: { ...process.env } },
+  );
+  child.unref();
+  res.statusCode = 202;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ stem, analysisPid: child.pid }));
+};
+
+// POST /api/projects/create-from-path  {audioPath}
+// Chat-invoked variant of /api/projects/create: the chat layer has a file
+// path (from the user's natural-language request), not uploaded bytes.
+// Validates the path exists and is one of .mp3/.wav/.m4a, then delegates
+// to the shared scaffold+analyze helper. No tempfile cleanup — the audio
+// lives where the user left it.
+const handleProjectCreateFromPath = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const audioPath = String(body?.audioPath ?? "").trim();
+  if (!audioPath) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.audioPath required" }));
+    return;
+  }
+  const resolved = path.resolve(audioPath);
+  try {
+    const st = await fs.stat(resolved);
+    if (!st.isFile()) throw new Error("not a file");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: `audio file not found: ${audioPath}` }));
+    return;
+  }
+  const ext = path.extname(resolved).toLowerCase();
+  if (![".mp3", ".wav", ".m4a"].includes(ext)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({
+      error: `unsupported audio format: ${ext} (expected .mp3/.wav/.m4a)`,
+    }));
+    return;
+  }
+  await runScaffoldAndAnalyze(resolved, path.basename(resolved, ext), false, res);
+};
+
 // POST /api/projects/create
 // Upload an audio file + create a new project end-to-end with no CLI:
 //   1. Stream the raw body (audio bytes) to a tempfile.
@@ -969,52 +1067,7 @@ const handleProjectCreate = async (
     return;
   }
 
-  // Run scaffold synchronously. It's a file copy + mkdir + small writeFile —
-  // fast (~100ms for a 10MB mp3 plus tsx startup ~500ms). Worth blocking the
-  // request for so we can return the concrete stem to the client.
-  const scaffold = spawnSync(
-    "npm",
-    ["run", "--silent", "mv:scaffold", "--", "--audio", tmpFile, "--stem", path.basename(origFilename, ext)],
-    { cwd: REPO_ROOT, encoding: "utf8" },
-  );
-  try { await fs.unlink(tmpFile); } catch { /* best effort */ }
-
-  if (scaffold.status !== 0) {
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({
-      error: "scaffold-failed",
-      stdout: scaffold.stdout,
-      stderr: scaffold.stderr,
-    }));
-    return;
-  }
-
-  // Extract the stem from scaffold stdout. mv-scaffold.ts logs
-  // `scaffolded projects/<stem>/` on success.
-  const stemMatch = (scaffold.stdout || "").match(/scaffolded projects\/([a-z0-9_-]+)\//);
-  if (!stemMatch) {
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({
-      error: "scaffold-succeeded-but-stem-not-parsed",
-      stdout: scaffold.stdout,
-    }));
-    return;
-  }
-  const stem = stemMatch[1];
-
-  // Fire analysis detached — same pattern as /api/analyze/run.
-  const child = spawn(
-    "npm",
-    ["run", "mv:analyze", "--", "--project", stem],
-    { cwd: REPO_ROOT, detached: true, stdio: "ignore", env: { ...process.env } },
-  );
-  child.unref();
-
-  res.statusCode = 202;
-  res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify({ stem, analysisPid: child.pid }));
+  await runScaffoldAndAnalyze(tmpFile, path.basename(origFilename, ext), true, res);
 };
 
 // POST /api/analyze/clear  {stem}
@@ -1277,6 +1330,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/analyze/run", wrap("POST", handleAnalyzeRun));
     server.middlewares.use("/api/analyze/seed-beats", wrap("POST", handleAnalyzeSeedBeats));
     server.middlewares.use("/api/projects/create", wrap("POST", handleProjectCreate));
+    server.middlewares.use("/api/projects/create-from-path", wrap("POST", handleProjectCreateFromPath));
     server.middlewares.use("/api/analyze/clear", wrap("POST", handleAnalyzeClear));
     server.middlewares.use("/api/analyze/events/update", wrap("POST", handleAnalyzeEventsUpdate));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));

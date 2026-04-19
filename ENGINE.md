@@ -93,17 +93,32 @@ Dropdown of projects under `MV_PROJECTS_DIR` (or `<engineRoot>/projects/`). `+ N
 
 When a project loads with `beatData.beats.length === 0` and no analysis is in flight, fires `POST /api/analyze/seed-beats` after a 2.5s debounce. Per-stem latch in a ref prevents retry spam. Status probe (`GET /.analyze-status.json`) skips the call if `mv:analyze` is already running (its own Setup seeds beats).
 
-### Chat pane with full Claude Code tool access (ChatPane.tsx + useChat + /api/chat)
+### Chat pane with full Claude Code tool access + live streaming (ChatPane.tsx + useChat + /api/chat/stream)
 
-Natural-language interface. The sidecar spawns `claude -p --permission-mode bypassPermissions` — same invocation `mv:analyze` uses — giving the chat Read/Bash/Glob/Grep/Edit/Write/WebFetch.
+Natural-language interface backed by a streaming sidecar endpoint. The spawn is `claude -p --output-format stream-json --verbose --permission-mode bypassPermissions` — same tool surface as `mv:analyze` uses (Read/Bash/Glob/Grep/Edit/Write/WebFetch), with each assistant text fragment / tool_use / tool_result emitted as a separate event so the client can render them in real time.
 
-Chat can:
-- Read any file under the repo (analysis.json, .analyze-status.json, PNGs under `projects/<stem>/analysis/`).
-- Run bash (`ps aux | grep mv:analyze`, tail logs, query git).
-- Grep the codebase to answer "why is X doing Y" questions.
-- Edit files (respects the engine-lock hook; replies with "requires ENGINE_UNLOCK=1" when asked to modify engine paths).
+Events emitted by `POST /api/chat/stream` (newline-delimited JSON over the POST response body):
+- `{type:"text", delta}` — assistant text fragment; client appends to the active bubble
+- `{type:"tool_use", id, name, input}` — tool invocation; client adds a chip
+- `{type:"tool_result", tool_use_id, content, is_error}` — corresponding result; client attaches to the matching chip
+- `{type:"done", reply, mutations}` — final turn; the `<final>{...}</final>` sentinel is parsed server-side and delivered as a normalized payload
+- `{type:"error", code, error, stderr}` — non-zero exit (rate limits surface as `error:"claude-cli-rate-limited"`)
 
-Returns a `<final>{reply, mutations}</final>` block parsed into store mutations. Latency: 9s for no-tool requests, 20–60s for tool-using turns. Rate-limit aware (surfaces cooldown banner on 429). Undo last turn via the Undo chip on each assistant message.
+The older non-streaming `POST /api/chat` endpoint is retained as a fallback for headless/CLI callers that want a single JSON response.
+
+Client behavior (ChatPane.tsx + useChat.ts):
+- Assistant messages stream in live with a pulsing cursor; tool-call chips appear inline as Claude invokes tools. Each chip shows the tool name + truncated input; click to expand full input + up to 1200 chars of result.
+- When a chip is for a `Read` of an image file (`png/jpg/jpeg/gif/webp`) under `projects/`, the expanded view renders an inline `<img>` preview served via `/api/projects/<rel-path>`. Non-image reads stay text-only.
+- Conversation memory: the client re-sends the last 8 user/assistant turns (content trimmed to 600 chars each) as a `history` array on every request; the sidecar weaves them into the user prompt so `"now make it bigger"` resolves against the prior turn. No server-side session state.
+- Chat history persists to `localStorage` across tab close; explicit `Clear` button wipes it.
+- Keyboard: plain `Enter` or `Cmd/Ctrl+Enter` submits; `Shift+Enter` inserts a newline.
+- Cancel during a streaming turn aborts the fetch, which closes the HTTP connection, which triggers the sidecar\'s `req.on("close")` handler to SIGTERM the spawned claude child. Partial content already streamed stays visible; the bubble\'s `streaming` flag flips off.
+
+Engine-lock: chat-driven `Edit`/`Write` on engine paths (`src/`, `editor/`, `scripts/`, `docs/`, etc.) is still blocked by the `PreToolUse` hook. The system prompt tells Claude to reply `"requires ENGINE_UNLOCK=1; set ENGINE_UNLOCK=1 in your shell and restart the editor, then re-issue"` in that case rather than attempting a write that would fail the hook.
+
+Mutation extraction is unchanged: Claude ends every turn with `<final>{reply, mutations}</final>`; the sidecar greedily matches the LAST such block and parses JSON. If the sentinel is missing, a fallback brace-match on the full output degrades gracefully. The `applyMutations` dispatcher then applies element + project-lifecycle ops as described above.
+
+Latency: simple mutation turns round-trip in ~9s (up from ~5s of the non-streaming path — the cost of free-form reasoning). Tool-using turns are 20–90s depending on how many tools Claude chains; users see progress throughout via the streaming cursor and filling chip row.
 
 ### Chat mutation vocabulary (applyMutations.ts)
 

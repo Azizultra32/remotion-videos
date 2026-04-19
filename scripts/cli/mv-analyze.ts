@@ -3,29 +3,28 @@
 //
 // Kicks off the waveform-analysis workflow for a project. Does Setup
 // automatically (runs energy-bands.py + plot-pioneer.py to produce
-// analysis.json + full.png), then prints the master-prompt text with
-// paths substituted in so you can paste it into a fresh `claude` session
-// to run Phases 1 and 2 (the multi-agent visual review steps that need
-// Task-tool access).
+// analysis.json + full.png), then spawns `claude -p "<prompt>"` to run
+// Phases 1 and 2 (the multi-agent visual review steps) end-to-end.
 //
-// Why not one-shot automate everything? The master prompt's Phases 1
-// and 2 spawn fresh subagents with per-zoom images and require full
-// Task/Bash/Read tool access. `claude -p` is non-interactive and
-// doesn't spawn subagents in the same way. So Setup runs here, and the
-// prompt text is printed with all `<AUDIO_STEM>` / `<OUT_DIR>` /
-// `<AUDIO_PATH>` placeholders resolved — paste into a live Claude Code
-// session (or your editor's chat pane) to kick off Phase 1.
+// The child claude process runs the multi-agent workflow autonomously,
+// emulating fresh-subagent isolation via per-zoom reads (proven pattern
+// from the Task-agent run on as-the-rush-comes).
+//
+// On child exit 0, copies <OUT_DIR>/<stem>-phase2-events.json to
+// projects/<stem>/analysis.json so the editor's Scrubber picks up the
+// new events on next refresh. --no-copy opts out.
 //
 // Usage:
 //   npm run mv:analyze -- --project love-in-traffic
 //   npm run mv:analyze -- --project love-in-traffic --setup-only
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+//   npm run mv:analyze -- --project love-in-traffic --no-copy
+import { spawn, spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
-type Args = { project?: string; setupOnly?: boolean };
+type Args = { project?: string; setupOnly?: boolean; noCopy?: boolean };
 
 const parseArgs = (): Args => {
   const a: Args = {};
@@ -34,13 +33,14 @@ const parseArgs = (): Args => {
     const next = process.argv[i + 1];
     if (tok === "--project" && next) { a.project = next; i++; }
     else if (tok === "--setup-only") a.setupOnly = true;
+    else if (tok === "--no-copy") a.noCopy = true;
   }
   return a;
 };
 
 const args = parseArgs();
 if (!args.project) {
-  console.error("usage: mv:analyze --project <stem> [--setup-only]");
+  console.error("usage: mv:analyze --project <stem> [--setup-only] [--no-copy]");
   console.error("       tip: use `npm run --silent mv:current` to auto-fill --project");
   process.exit(1);
 }
@@ -103,7 +103,7 @@ if (args.setupOnly) {
   process.exit(0);
 }
 
-// ---- Phase 1 + 2: print the master prompt with placeholders resolved ----
+// ---- Phase 1 + 2: spawn `claude -p` with placeholder-resolved prompt ----
 const promptFile = resolve(repoRoot, "docs/waveform-analysis-protocol.md");
 if (!existsSync(promptFile)) {
   console.error(`master prompt not found at docs/waveform-analysis-protocol.md`);
@@ -129,10 +129,65 @@ prompt = prompt
   .replace(/<OUT_DIR>/g, analysisDir);
 
 console.log("");
-console.log("=".repeat(78));
-console.log("[mv:analyze] Phases 1-2 require a live Claude session.");
-console.log("Paste the prompt below into a fresh `claude` session or the editor's");
-console.log("chat pane. The subagent fan-out needs Task/Read/Bash tool access.");
-console.log("=".repeat(78));
-console.log("");
-console.log(prompt);
+console.log("[mv:analyze] spawning claude -p (multi-agent Phase 1 + Phase 2; this takes 5-10 min)");
+
+const child = spawn("claude", ["-p", prompt], { stdio: "inherit", cwd: repoRoot });
+
+child.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "ENOENT") {
+    console.error("[mv:analyze] claude CLI not installed or not on PATH");
+    console.error("install from https://docs.claude.com/en/docs/claude-code");
+    process.exit(2);
+  }
+  console.error(`[mv:analyze] failed to spawn claude: ${err.message}`);
+  process.exit(2);
+});
+
+child.on("close", (code) => {
+  const phase1Full = resolve(analysisDir, `${stem}-phase1-full.png`);
+  const phase2Events = resolve(analysisDir, `${stem}-phase2-events.json`);
+  const phase2Full = resolve(analysisDir, `${stem}-phase2-confirmed-full.png`);
+
+  if (code !== 0) {
+    console.error(`[mv:analyze] claude exited with code ${code}`);
+    const gotPhase1 = existsSync(phase1Full);
+    const gotPhase2 = existsSync(phase2Events);
+    console.error(`  phase1 artifacts present: ${gotPhase1}`);
+    console.error(`  phase2 artifacts present: ${gotPhase2}`);
+    process.exit(code ?? 1);
+  }
+
+  // Success path
+  if (args.noCopy) {
+    console.log("[mv:analyze] --no-copy passed; skipping analysis.json copy");
+  } else if (existsSync(phase2Events)) {
+    const dest = resolve(projectDir, "analysis.json");
+    try {
+      copyFileSync(phase2Events, dest);
+      console.log(`[mv:analyze] copied phase2-events -> projects/${stem}/analysis.json`);
+    } catch (err) {
+      console.warn(`[mv:analyze] warning: failed to copy phase2-events: ${(err as Error).message}`);
+    }
+  } else {
+    console.warn(`[mv:analyze] warning: ${stem}-phase2-events.json not found; skipping analysis.json copy`);
+    console.warn("  (run may have been test-mode / Phase 1 only)");
+  }
+
+  // Summary
+  let eventCount: number | null = null;
+  if (existsSync(phase2Events)) {
+    try {
+      const parsed = JSON.parse(readFileSync(phase2Events, "utf8"));
+      if (Array.isArray(parsed)) eventCount = parsed.length;
+      else if (Array.isArray(parsed?.events)) eventCount = parsed.events.length;
+    } catch {
+      /* ignore parse errors in summary */
+    }
+  }
+
+  console.log("");
+  console.log(`[mv:analyze] done`);
+  if (eventCount !== null) console.log(`  events: ${eventCount}`);
+  if (existsSync(phase2Full)) console.log(`  confirmed-full: ${phase2Full}`);
+  process.exit(0);
+});

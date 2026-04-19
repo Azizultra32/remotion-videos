@@ -12,7 +12,9 @@
     "mv:scaffold": "tsx scripts/cli/mv-scaffold.ts",
     "mv:current": "tsx scripts/cli/mv-current.ts",
     "mv:analyze": "tsx scripts/cli/mv-analyze.ts",
-    "mv:seed-beats": "tsx scripts/cli/mv-seed-beats.ts"
+    "mv:seed-beats": "tsx scripts/cli/mv-seed-beats.ts",
+    "mv:clear-events": "tsx scripts/cli/mv-clear-events.ts",
+    "mv:switch": "tsx scripts/cli/mv-switch.ts"
   },
   "keywords": [],
   "author": "ali",

@@ -2,6 +2,7 @@
 import { useEditorStore } from "../store";
 import { ProjectActions } from "./ProjectActions";
 import { EventCycler } from "./EventCycler";
+import { StageStrip } from "./StageStrip";
 import type { SnapMode } from "../types";
 
 // Click cycles through the modes in this order. "off" is the only "inactive"
@@ -226,6 +227,7 @@ export const TransportControls = () => {
         Reset
       </button>
     </div>
+    <StageStrip />
     <EventCycler />
     </>
   );

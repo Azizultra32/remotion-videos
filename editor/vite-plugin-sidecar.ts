@@ -685,6 +685,88 @@ const handleAnalyzeEvents = async (
   }, 20000);
 };
 
+// ---------------------------------------------------------------------------
+// /api/analyze/status/:stem  (GET — SSE stream of projects/<stem>/.analyze-status.json)
+// ---------------------------------------------------------------------------
+//
+// Mirrors handleAnalyzeEvents for the per-run status file written by
+// mv:analyze at phase boundaries. Sends `event: status` with the JSON body
+// on connect + on every fs.watch change. The editor's StageStrip component
+// subscribes to this and renders the current pipeline phase.
+
+const handleAnalyzeStatus = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  const file = path.join(projectDir, ".analyze-status.json");
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a dir");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project not found", stem }));
+    return;
+  }
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const emit = async () => {
+    let data: string;
+    try {
+      data = await fs.readFile(file, "utf8");
+    } catch {
+      data = "null";
+    }
+    try {
+      res.write(`event: status\ndata: ${data}\n\n`);
+    } catch {
+      // connection closed
+    }
+  };
+
+  let watcher: FSWatcher | null = null;
+  let keepalive: ReturnType<typeof setInterval> | null = null;
+  const cleanup = () => {
+    if (keepalive) { clearInterval(keepalive); keepalive = null; }
+    if (watcher) { watcher.close(); watcher = null; }
+  };
+  req.on("close", cleanup);
+  if (req.destroyed) { cleanup(); return; }
+
+  await emit();
+
+  try {
+    watcher = fsWatch(projectDir, { persistent: false }, (eventType, filename) => {
+      if (filename !== ".analyze-status.json") return;
+      if (eventType !== "change" && eventType !== "rename") return;
+      void emit();
+    });
+  } catch (err) {
+    res.write(
+      `event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`,
+    );
+  }
+
+  keepalive = setInterval(() => {
+    try { res.write(":keepalive\n\n"); } catch { /* closed */ }
+  }, 20000);
+};
+
 const handleChat = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -831,6 +913,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/out/", wrap("GET", handleOut));
     server.middlewares.use("/api/projects/", wrap("GET", handleProjectFile));
     server.middlewares.use("/api/analyze/events/", wrap("GET", handleAnalyzeEvents));
+    server.middlewares.use("/api/analyze/status/", wrap("GET", handleAnalyzeStatus));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));

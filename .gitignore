@@ -30,3 +30,8 @@ estimations/
 # current-project marker — bridges editor's SongPicker state to Claude Code
 # sessions via `npm run mv:current`. Per-machine UI state, not versioned.
 .current-project
+
+# analyze-status per-run transient — written by mv:analyze, consumed by
+# the editor's /api/analyze/status SSE. Per-machine, per-run; not versioned.
+.analyze-status.json
+projects/*/.analyze-status.json

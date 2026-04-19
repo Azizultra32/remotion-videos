@@ -19,10 +19,39 @@
 //   npm run mv:analyze -- --project love-in-traffic --setup-only
 //   npm run mv:analyze -- --project love-in-traffic --no-copy
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const repoRoot = resolve(__dirname, "..", "..");
+
+const statusStart = Date.now();
+const statusFile = (stem: string) =>
+  resolve(repoRoot, "projects", stem, ".analyze-status.json");
+
+const writeStatus = (
+  stem: string,
+  phase: string,
+  stage: { current: number; total: number; label: string } | null = null,
+) => {
+  try {
+    writeFileSync(
+      statusFile(stem),
+      JSON.stringify(
+        {
+          startedAt: statusStart,
+          phase,
+          stage,
+          updatedAt: Date.now(),
+          endedAt: ["done", "failed"].includes(phase) ? Date.now() : null,
+        },
+        null,
+        2,
+      ),
+    );
+  } catch {
+    /* non-fatal — status reporting is best-effort */
+  }
+};
 
 type Args = { project?: string; setupOnly?: boolean; noCopy?: boolean };
 
@@ -61,6 +90,8 @@ const fullPng = resolve(analysisDir, "full.png");
 // ---- Setup: Steps 1-3 of the master prompt ----
 console.log(`[mv:analyze] running Setup for ${stem}`);
 console.log(`  step 1/2: energy-bands.py -> projects/${stem}/analysis/source.json`);
+
+writeStatus(stem, "setup");
 
 const r1 = spawnSync(
   "python3",
@@ -165,6 +196,8 @@ autonomously through Phase 1 then Phase 2.
 console.log("");
 console.log("[mv:analyze] spawning claude -p (multi-agent Phase 1 + Phase 2; this takes 5-10 min)");
 
+writeStatus(stem, "phase1-review");
+
 // --permission-mode bypassPermissions lets the child execute Read/Bash/Write
 // without per-call approval prompts. Without this, claude -p sits waiting
 // on stdin for approvals the CLI has no way to answer.
@@ -175,6 +208,7 @@ const child = spawn(
 );
 
 child.on("error", (err: NodeJS.ErrnoException) => {
+  writeStatus(stem, "failed");
   if (err.code === "ENOENT") {
     console.error("[mv:analyze] claude CLI not installed or not on PATH");
     console.error("install from https://docs.claude.com/en/docs/claude-code");
@@ -190,6 +224,7 @@ child.on("close", (code) => {
   const phase2Full = resolve(analysisDir, `${stem}-phase2-confirmed-full.png`);
 
   if (code !== 0) {
+    writeStatus(stem, "failed");
     console.error(`[mv:analyze] claude exited with code ${code}`);
     const gotPhase1 = existsSync(phase1Full);
     const gotPhase2 = existsSync(phase2Events);
@@ -197,6 +232,8 @@ child.on("close", (code) => {
     console.error(`  phase2 artifacts present: ${gotPhase2}`);
     process.exit(code ?? 1);
   }
+
+  writeStatus(stem, "done");
 
   // Success path
   if (args.noCopy) {

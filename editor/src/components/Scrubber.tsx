@@ -16,6 +16,12 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   const wsRef = useRef<WaveSurfer | null>(null);
   const [ready, setReady] = useState(false);
   const [duration, setDuration] = useState(0);
+  // Live-preview state during event-marker drag. Holds the in-flight sec value
+  // so the yellow line renders at the drag position (not the stored position)
+  // until release, when the POST completes and SSE refreshes beatData. Without
+  // this the line stays pinned at the original spot during drag and only jumps
+  // on release — feels broken even though it works.
+  const [dragState, setDragState] = useState<{ idx: number; sec: number } | null>(null);
 
   // Granular selectors — only re-render when THESE specific fields change.
   // currentTimeSec is deliberately NOT subscribed as state: it changes 24 Hz
@@ -242,32 +248,38 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
             ))}
             {/* Phase-1 event markers - shown only when phase-2 is empty. */}
             {!beatData.phase2_events_sec?.length &&
-              beatData.phase1_events_sec?.map((t, i) => (
+              beatData.phase1_events_sec?.map((t, i) => {
+                const x = dragState?.idx === i ? dragState.sec : t;
+                return (
+                  <line
+                    key={`ph1-${i}`}
+                    x1={x}
+                    x2={x}
+                    y1={0}
+                    y2={100}
+                    stroke={dragState?.idx === i ? "#ffb488" : "#ff8844"}
+                    strokeWidth={dragState?.idx === i ? 3.5 : 2.5}
+                    vectorEffect="non-scaling-stroke"
+                    opacity={0.85}
+                  />
+                );
+              })}
+            {/* Phase-2 event markers - canonical confirmed events. */}
+            {beatData.phase2_events_sec?.map((t, i) => {
+              const x = dragState?.idx === i ? dragState.sec : t;
+              return (
                 <line
-                  key={`ph1-${i}`}
-                  x1={t}
-                  x2={t}
+                  key={`ph2-${i}`}
+                  x1={x}
+                  x2={x}
                   y1={0}
                   y2={100}
-                  stroke="#ff8844"
-                  strokeWidth={2.5}
+                  stroke={dragState?.idx === i ? "#ffe066" : "#ffcc00"}
+                  strokeWidth={dragState?.idx === i ? 4 : 3}
                   vectorEffect="non-scaling-stroke"
-                  opacity={0.85}
                 />
-              ))}
-            {/* Phase-2 event markers - canonical confirmed events. */}
-            {beatData.phase2_events_sec?.map((t, i) => (
-              <line
-                key={`ph2-${i}`}
-                x1={t}
-                x2={t}
-                y1={0}
-                y2={100}
-                stroke="#ffcc00"
-                strokeWidth={3}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
+              );
+            })}
           </svg>
         )}
 
@@ -307,9 +319,11 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
                   0,
                   Math.min(totalSec, startSec + (dx / rect.width) * totalSec),
                 );
-                // Live preview: move the corresponding pipeline element so
-                // both the waveform line (redrawn from the events list on
-                // POST completion) and the timeline element track the drag.
+                // Live preview for the WAVEFORM LINE — rendered from dragState
+                // instead of the stored event array until release.
+                setDragState({ idx: i, sec: newSec });
+                // Also move the corresponding pipeline element so the timeline
+                // block tracks the drag in sync with the line.
                 const eid = pipelineId;
                 const els = useEditorStore.getState().elements;
                 const el = els.find((x) => x.id === eid);
@@ -324,6 +338,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
               const onUp = () => {
                 window.removeEventListener("pointermove", onMove);
                 window.removeEventListener("pointerup", onUp);
+                setDragState(null);
                 if (!dragged) return;
                 if (Math.abs(newSec - startSec) < 0.05) return;
                 const events = (beatData.phase2_events_sec?.length
@@ -341,23 +356,43 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
               window.addEventListener("pointermove", onMove);
               window.addEventListener("pointerup", onUp);
             };
+            const isDragging = dragState?.idx === i;
+            const previewLeft = isDragging ? (dragState.sec / totalSec) * 100 : left;
             return (
               <div
                 key={`hit-${i}`}
                 onPointerDown={onPointerDown}
-                title={`Event ${i + 1} at ${t.toFixed(2)}s - click to select, drag to move, Delete to remove`}
+                title={`Event ${i + 1} at ${t.toFixed(2)}s — drag to move (shift disables beat-snap), click to select, Delete key to remove`}
                 style={{
                   position: "absolute",
-                  left: `calc(${left}% - 6px)`,
+                  left: `calc(${previewLeft}% - 8px)`,
                   top: 0,
-                  width: 12,
+                  width: 16,
                   height: "100%",
                   cursor: "ew-resize",
                   background: "transparent",
                   zIndex: 2,
                   touchAction: "none",
                 }}
-              />
+              >
+                {/* Visible grab handle: downward triangle at the top of each
+                    event line, so drag is discoverable without hovering to
+                    test the cursor. Amber when mid-drag. */}
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    top: -2,
+                    transform: "translateX(-50%)",
+                    width: 0,
+                    height: 0,
+                    borderLeft: "6px solid transparent",
+                    borderRight: "6px solid transparent",
+                    borderTop: `10px solid ${isDragging ? "#ffe066" : "#ffcc00"}`,
+                    pointerEvents: "none",
+                  }}
+                />
+              </div>
             );
           });
         })()}

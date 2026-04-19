@@ -81,7 +81,7 @@ export const StageStrip = () => {
   const stem = stemFromAudioSrc(audioSrc);
   const beatData = useEditorStore((s) => s.beatData);
   const [status, setStatus] = useState<Status | null>(null);
-  const [busy, setBusy] = useState<"run" | "clear" | null>(null);
+  const [busy, setBusy] = useState<"run" | "clear" | "seed" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const retryRef = useRef<{ attempt: number; timer: number | null }>({ attempt: 0, timer: null });
@@ -167,6 +167,33 @@ export const StageStrip = () => {
     }
   };
 
+  const seedBeats = async () => {
+    if (!stem || isRunning || busy) return;
+    setBusy("seed");
+    setError(null);
+    try {
+      const r = await fetch("/api/analyze/seed-beats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stem }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setError(j?.error ?? `HTTP ${r.status}`);
+        setBusy(null);
+        return;
+      }
+      // The sidecar's SSE watcher on analysis.json will push the updated
+      // beats when detect-beats.py finishes (~30-60s). useBeatData picks
+      // it up and beats.length > 0 hides this UI. Until then, keep the
+      // button disabled.
+      setTimeout(() => setBusy((b) => (b === "seed" ? null : b)), 90_000);
+    } catch (err) {
+      setError(String(err));
+      setBusy(null);
+    }
+  };
+
   const clearEvents = async () => {
     if (!stem || isRunning) return;
     if (!window.confirm(
@@ -216,6 +243,39 @@ export const StageStrip = () => {
       <span style={phaseBadge(phase2Count > 0, activePhase === "phase2")}>
         Phase 2{phase2Count > 0 ? `  ${phase2Count}` : "  -"}
       </span>
+
+      {/* No-beat-grid chip + Seed button. Appears ONLY when analysis.json
+          lacks a beats array (old projects, or a fresh scaffold before
+          mv:analyze ran). Snap-to-beat silently no-ops without beats — this
+          makes the broken state honest and one-click fixable. */}
+      {(beatData?.beats?.length ?? 0) === 0 && (
+        <>
+          <span
+            style={{
+              padding: "3px 8px",
+              fontSize: 10,
+              fontFamily: "monospace",
+              background: "#3a2a10",
+              color: "#f9c47a",
+              border: "1px solid #a87c30",
+              borderRadius: 3,
+              letterSpacing: "0.06em",
+              whiteSpace: "nowrap",
+            }}
+            title="No beat grid for this track. Snap-to-beat silently no-ops until you seed beats. Click SEED BEATS to run detect-beats.py (~30-60s); it does not disturb phase events."
+          >
+            NO BEAT GRID
+          </span>
+          <button
+            onClick={seedBeats}
+            disabled={isRunning || busy !== null}
+            title="Run detect-beats.py on this project's audio and merge beats/downbeats/bpm_global into analysis.json. Preserves all other fields. Takes ~30-60s."
+            style={btnStyle("ghost", isRunning || busy !== null)}
+          >
+            {busy === "seed" ? "Seeding…" : "Seed beats"}
+          </button>
+        </>
+      )}
 
       {/* Live stage chips only while running - gives the per-sub-phase detail
           that the two persistent badges don't surface. */}

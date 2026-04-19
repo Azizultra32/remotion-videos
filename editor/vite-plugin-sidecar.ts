@@ -875,6 +875,48 @@ const handleAnalyzeRun = async (
   res.end(JSON.stringify({ stem, pid: child.pid }));
 };
 
+// POST /api/analyze/seed-beats  {stem}
+// Spawns `npm run mv:seed-beats -- --project <stem>` as a detached child.
+// Runs ONLY detect-beats.py (~30-60s) and merges beats/downbeats/bpm into
+// projects/<stem>/analysis.json. Safe to call anytime — doesn't touch phase
+// events or energy bands. Used to backfill beats on projects that predate
+// the beat-tracking integration (ead3c3a).
+const handleAnalyzeSeedBeats = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const stem: string = String(body?.stem ?? "").trim();
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.stem must match /^[a-z0-9_-]+$/i" }));
+    return;
+  }
+  const repoRoot = path.resolve(__dirname, "..");
+  const projectDir = path.join(repoRoot, "projects", stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a directory");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: `project ${stem} not found` }));
+    return;
+  }
+  const { spawn: spawnChild } = await import("node:child_process");
+  const child = spawnChild("npm", ["run", "mv:seed-beats", "--", "--project", stem], {
+    cwd: repoRoot,
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env },
+  });
+  child.unref();
+  res.statusCode = 202;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ stem, pid: child.pid }));
+};
+
 // POST /api/analyze/clear  {stem}
 // Sets analysis.json to an empty events list so the SSE EventSource next
 // tick pushes `{}` → replacePipelineElements(stem, []) → merge removes all
@@ -1132,6 +1174,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/analyze/events/", wrap("GET", handleAnalyzeEvents));
     server.middlewares.use("/api/analyze/status/", wrap("GET", handleAnalyzeStatus));
     server.middlewares.use("/api/analyze/run", wrap("POST", handleAnalyzeRun));
+    server.middlewares.use("/api/analyze/seed-beats", wrap("POST", handleAnalyzeSeedBeats));
     server.middlewares.use("/api/analyze/clear", wrap("POST", handleAnalyzeClear));
     server.middlewares.use("/api/analyze/events/update", wrap("POST", handleAnalyzeEventsUpdate));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));

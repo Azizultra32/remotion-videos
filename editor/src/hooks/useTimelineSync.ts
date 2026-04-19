@@ -84,6 +84,11 @@ export const useTimelineSync = () => {
           const parsed = JSON.parse(e.data) as {
             phase2_events_sec?: number[];
             phase1_events_sec?: number[];
+            beats?: number[];
+            downbeats?: number[];
+            bpm_global?: number;
+            duration?: number;
+            duration_sec?: number;
           };
           const clean = (xs: unknown): number[] =>
             Array.isArray(xs)
@@ -95,11 +100,18 @@ export const useTimelineSync = () => {
           const p2 = clean(parsed.phase2_events_sec);
           const events = p2.length ? p2 : p1;
 
-          // Also refresh beatData so consumers that read phase1/phase2
-          // counts (StageStrip badges, Scrubber SVG overlay) update when
-          // analysis.json changes in place. useBeatData only fetches on
-          // stem change, so without this the badges stay lit after a
-          // Re-analyze wipe until the user switches tracks and back.
+          // Refresh ALL beatData fields from the SSE payload — not just
+          // phase events. The sidecar emits the full analysis.json, so
+          // this is the one point where beats/downbeats/bpm/duration can
+          // propagate after a mid-session change (e.g. mv:seed-beats
+          // backfilling beats on an old project). Without this, the
+          // store's `beats` stays stale at whatever useBeatData's one-
+          // shot fetch loaded on stem change — snap-to-beat would remain
+          // silently dead until the user switched tracks and back.
+          //
+          // Defensive: only overwrite a field when the payload actually
+          // carries it, so partial payloads (legacy phase2-events.json
+          // shape) don't clobber state with empty arrays.
           const store = useEditorStore.getState();
           const current = store.beatData ?? {
             duration: 0,
@@ -110,11 +122,33 @@ export const useTimelineSync = () => {
             breakdowns: [],
             energy: [],
           };
+          const nextBeats = Array.isArray(parsed.beats)
+            ? clean(parsed.beats)
+            : current.beats;
+          const nextDownbeats = Array.isArray(parsed.downbeats)
+            ? clean(parsed.downbeats)
+            : current.downbeats;
+          const nextBpm =
+            typeof parsed.bpm_global === "number" && Number.isFinite(parsed.bpm_global)
+              ? parsed.bpm_global
+              : current.bpm_global;
+          const nextDuration =
+            typeof parsed.duration_sec === "number" && Number.isFinite(parsed.duration_sec)
+              ? parsed.duration_sec
+              : typeof parsed.duration === "number" && Number.isFinite(parsed.duration)
+              ? parsed.duration
+              : current.duration;
           store.setBeatData({
             ...current,
+            beats: nextBeats,
+            downbeats: nextDownbeats,
+            bpm_global: nextBpm,
+            duration: nextDuration,
             phase1_events_sec: p1,
             phase2_events_sec: p2,
           });
+          // replacePipelineElements reads s.beatData.beats inside the
+          // set() callback, so it sees the beats we just wrote above.
           store.replacePipelineElements(stem, events);
         } catch {
           /* malformed payload — ignore */

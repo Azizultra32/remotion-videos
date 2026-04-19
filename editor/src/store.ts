@@ -35,7 +35,7 @@ export const useEditorStore = create<EditorState>()(
         })),
       replacePipelineElements: (stem, events) =>
         set((s) => ({
-          elements: mergePipelineElements(s.elements, stem, events),
+          elements: mergePipelineElements(s.elements, stem, events, s.beatData?.beats ?? []),
         })),
       removeElement: (id) =>
         set((s) => ({

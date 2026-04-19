@@ -1,6 +1,7 @@
 // src/components/TransportControls.tsx
 import { useEditorStore } from "../store";
 import { ProjectActions } from "./ProjectActions";
+import { EventCycler } from "./EventCycler";
 import type { SnapMode } from "../types";
 
 // Click cycles through the modes in this order. "off" is the only "inactive"
@@ -83,6 +84,7 @@ export const TransportControls = () => {
   };
 
   return (
+    <>
     <div
       style={{
         display: "flex",
@@ -224,5 +226,7 @@ export const TransportControls = () => {
         Reset
       </button>
     </div>
+    <EventCycler />
+    </>
   );
 };

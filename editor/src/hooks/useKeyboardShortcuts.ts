@@ -7,6 +7,7 @@
 //   ,  / .          step 1 frame
 //   home            rewind to 0
 //   end             seek to last second
+//   [  / ]          prev / next analysis event
 import { useEffect } from "react";
 import { useEditorStore } from "../store";
 
@@ -53,6 +54,40 @@ export const useKeyboardShortcuts = () => {
         case "End":
           e.preventDefault();
           s.setCurrentTime(Math.max(0, s.compositionDuration - 1));
+          return;
+        case "[":
+          e.preventDefault();
+          {
+            const bd = s.beatData;
+            const events =
+              (bd?.phase2_events_sec?.length
+                ? bd.phase2_events_sec
+                : bd?.phase1_events_sec) ?? [];
+            if (events.length === 0) return;
+            const i = events.findIndex((t, idx) => {
+              const next = events[idx + 1] ?? Number.POSITIVE_INFINITY;
+              return s.currentTimeSec >= t - 0.5 && s.currentTimeSec < next - 0.5;
+            });
+            const target = events[Math.max(0, i - 1)];
+            if (target !== undefined) s.setCurrentTime(target);
+          }
+          return;
+        case "]":
+          e.preventDefault();
+          {
+            const bd = s.beatData;
+            const events =
+              (bd?.phase2_events_sec?.length
+                ? bd.phase2_events_sec
+                : bd?.phase1_events_sec) ?? [];
+            if (events.length === 0) return;
+            const i = events.findIndex((t, idx) => {
+              const next = events[idx + 1] ?? Number.POSITIVE_INFINITY;
+              return s.currentTimeSec >= t - 0.5 && s.currentTimeSec < next - 0.5;
+            });
+            const target = events[Math.min(events.length - 1, i + 1)];
+            if (target !== undefined) s.setCurrentTime(target);
+          }
           return;
       }
     };

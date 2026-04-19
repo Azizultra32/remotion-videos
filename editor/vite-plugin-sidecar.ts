@@ -644,11 +644,16 @@ const handleAnalyzeEvents = async (
   });
 
   const emit = async () => {
+    let data: string;
     try {
-      const data = await fs.readFile(file, "utf8");
+      data = await fs.readFile(file, "utf8");
+    } catch {
+      data = "{}";
+    }
+    try {
       res.write(`event: events\ndata: ${data}\n\n`);
     } catch {
-      res.write(`event: events\ndata: {}\n\n`);
+      // connection closed between readFile and write; ignore
     }
   };
 

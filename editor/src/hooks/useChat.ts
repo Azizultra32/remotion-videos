@@ -34,14 +34,15 @@ export type ChatMessage = {
 
 const newId = () => `msg-${Math.random().toString(36).slice(2, 9)}`;
 
-// Gap C — sessionStorage persistence key. Using sessionStorage (not local)
-// so the conversation clears when the tab closes but survives a dev-server
-// reload mid-session.
+// localStorage persistence: chat history survives tab close + dev-server
+// reload. User clears explicitly via the Clear button in ChatPane. Per-
+// session-only state (streaming flag, tool-call partial results) is not
+// persisted — only finalized turn content.
 const STORAGE_KEY = "music-video-editor-chat";
 
 const loadMessages = (): ChatMessage[] => {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -61,7 +62,7 @@ const loadMessages = (): ChatMessage[] => {
 
 const saveMessages = (messages: ChatMessage[]): void => {
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
   } catch {
     // Quota errors are non-fatal — just skip persist this turn.
   }
@@ -307,6 +308,7 @@ export const useChat = () => {
   const clear = useCallback(() => {
     setMessages([]);
     setError(null);
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* quota/private-mode */ }
   }, []);
 
   // Gap B — revert the last assistant turn's mutations in one click.

@@ -33,10 +33,12 @@ export const ChatPane = () => {
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      submit();
-    }
+    if (e.key !== "Enter") return;
+    // Shift+Enter → newline (default textarea behavior).
+    if (e.shiftKey) return;
+    // Plain Enter OR Cmd/Ctrl+Enter → submit.
+    e.preventDefault();
+    submit();
   };
 
   return (
@@ -174,7 +176,7 @@ export const ChatPane = () => {
           placeholder={
             cooling
               ? `Cooling down — ${cooldown!.remainingSec}s remaining`
-              : "Describe what you want — Enter to send, Shift+Enter for newline"
+              : "Describe what you want — Enter or ⌘↩ to send, Shift+Enter for newline"
           }
           rows={3}
           disabled={inputDisabled}
@@ -329,6 +331,36 @@ const MessageBubble = ({
                   <div style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
                     <div style={{ opacity: 0.7 }}>input:</div>
                     <div>{inputSummary.replace(/…$/, "") || "(empty)"}</div>
+                    {(() => {
+                      // If this is a Read of an image file under projects/,
+                      // render an inline preview. Looks up the file_path on
+                      // the tool_use input and builds a /api/projects/<rel>
+                      // URL that the sidecar can stream.
+                      if (tc.name !== "Read") return null;
+                      const input = tc.input as { file_path?: unknown };
+                      const fp = typeof input?.file_path === "string" ? input.file_path : "";
+                      if (!/\.(png|jpe?g|gif|webp)$/i.test(fp)) return null;
+                      const m = fp.match(/\/projects\/(.+)$/);
+                      if (!m) return null;
+                      const url = `/api/projects/${m[1]}`;
+                      return (
+                        <>
+                          <div style={{ opacity: 0.7, marginTop: 4 }}>preview:</div>
+                          <img
+                            src={url}
+                            alt={fp}
+                            style={{
+                              maxWidth: "100%",
+                              maxHeight: 200,
+                              borderRadius: 3,
+                              marginTop: 2,
+                              background: "#000",
+                              display: "block",
+                            }}
+                          />
+                        </>
+                      );
+                    })()}
                     {tc.result !== undefined && (
                       <>
                         <div style={{ opacity: 0.7, marginTop: 4 }}>result:</div>

@@ -284,10 +284,23 @@ export const StageStrip = () => {
         Analysis
       </span>
 
-      {/* Persistent Phase 1 + Phase 2 completion badges. */}
-      <span style={phaseBadge(phase1Count > 0, activePhase === "phase1")}>
-        Phase 1{phase1Count > 0 ? `  ${phase1Count}` : "  -"}
-      </span>
+      {/* Persistent Phase 1 + Phase 2 completion badges. Phase 1 counts as
+          "done" when either its own events survive in analysis.json OR when
+          phase2 has events (phase2 depends on phase1, so phase2 success
+          implies phase1 ran). The pipeline's final cp only writes
+          phase2-events.json into analysis.json, so phase1_events_sec is
+          usually empty after a successful run — treating that as "not done"
+          is wrong, which is what the checkmark fallback below fixes. */}
+      {(() => {
+        const phase1Done = phase1Count > 0 || phase2Count > 0;
+        const phase1Label =
+          phase1Count > 0 ? `  ${phase1Count}` : phase1Done ? "  ✓" : "  -";
+        return (
+          <span style={phaseBadge(phase1Done, activePhase === "phase1")}>
+            Phase 1{phase1Label}
+          </span>
+        );
+      })()}
       <span style={phaseBadge(phase2Count > 0, activePhase === "phase2")}>
         Phase 2{phase2Count > 0 ? `  ${phase2Count}` : "  -"}
       </span>

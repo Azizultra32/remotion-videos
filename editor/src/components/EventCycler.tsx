@@ -20,6 +20,8 @@ const nearestBeat = (sec: number, beats: number[]): number => {
   return best;
 };
 
+const NUDGE_SEC = 0.05; // fine-adjust step for the ← / → buttons
+
 const chipStyle = (active: boolean, selected: boolean): React.CSSProperties => ({
   padding: "3px 8px",
   fontSize: 10,
@@ -32,20 +34,23 @@ const chipStyle = (active: boolean, selected: boolean): React.CSSProperties => (
   letterSpacing: "0.04em",
 });
 
-const actionBtn = (variant: "danger" | "ghost", disabled = false): React.CSSProperties => ({
+const actionBtn = (variant: "primary" | "danger" | "ghost", disabled = false): React.CSSProperties => ({
   padding: "3px 10px",
   fontSize: 10,
   fontFamily: "monospace",
   background:
     disabled ? "#222" :
+    variant === "primary" ? "#1a3a1a" :
     variant === "danger" ? "#3a1a1a" : "#1a1a1a",
   border: "1px solid " + (
     disabled ? "#333" :
+    variant === "primary" ? "#386" :
     variant === "danger" ? "#833" : "#444"
   ),
   borderRadius: 3,
   color:
     disabled ? "#666" :
+    variant === "primary" ? "#afa" :
     variant === "danger" ? "#f88" : "#ddd",
   cursor: disabled ? "not-allowed" : "pointer",
   letterSpacing: "0.06em",
@@ -61,6 +66,7 @@ export const EventCycler = () => {
   const selectElement = useEditorStore((s) => s.selectElement);
 
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [draftSec, setDraftSec] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rowRef = useRef<HTMLDivElement | null>(null);
@@ -71,8 +77,7 @@ export const EventCycler = () => {
       : beatData?.phase1_events_sec) ?? [];
   const stem = stemFromAudioSrc(audioSrc);
 
-  // Click anywhere outside this row de-selects. We still want the in-row
-  // button clicks to NOT close (they handle their own state transitions).
+  // Click outside the row deselects.
   useEffect(() => {
     if (selectedIdx === null) return;
     const onDown = (e: MouseEvent) => {
@@ -84,6 +89,17 @@ export const EventCycler = () => {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [selectedIdx]);
+
+  // Sync the draft input whenever the selected event\'s stored time changes
+  // (happens after every save — keeps the input matching what\'s persisted).
+  useEffect(() => {
+    if (selectedIdx === null) return;
+    if (selectedIdx >= events.length) {
+      setSelectedIdx(null);
+      return;
+    }
+    setDraftSec(events[selectedIdx].toFixed(3));
+  }, [selectedIdx, events]);
 
   if (!events.length) return null;
 
@@ -103,6 +119,7 @@ export const EventCycler = () => {
     );
     if (el) selectElement(el.id);
     setSelectedIdx(idx);
+    setDraftSec(t.toFixed(3));
     setError(null);
   };
 
@@ -130,11 +147,31 @@ export const EventCycler = () => {
     }
   };
 
+  const setEventTo = async (idx: number, newSec: number): Promise<boolean> => {
+    if (!Number.isFinite(newSec) || newSec < 0) {
+      setError("time must be non-negative");
+      return false;
+    }
+    const next = events.slice();
+    next[idx] = newSec;
+    return postEvents(next);
+  };
+
+  const saveTyped = async () => {
+    if (selectedIdx === null) return;
+    const parsed = Number(draftSec);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setError("time must be a non-negative number");
+      return;
+    }
+    await setEventTo(selectedIdx, parsed);
+  };
+
   const snapSelected = async () => {
     if (selectedIdx === null) return;
     const beats = beatData?.beats ?? [];
     if (beats.length === 0) {
-      setError("no beat grid; run Seed beats first");
+      setError("no beat grid; run Seed Beats first");
       return;
     }
     const snapped = nearestBeat(events[selectedIdx], beats);
@@ -142,8 +179,34 @@ export const EventCycler = () => {
       setError("already on nearest beat");
       return;
     }
-    const next = events.slice();
-    next[selectedIdx] = snapped;
+    await setEventTo(selectedIdx, snapped);
+  };
+
+  const snapToPlayhead = async () => {
+    if (selectedIdx === null) return;
+    const t = currentTimeSec;
+    if (!Number.isFinite(t) || t < 0) {
+      setError("playhead position invalid");
+      return;
+    }
+    if (Math.abs(t - events[selectedIdx]) < 0.001) {
+      setError("event is already at the playhead");
+      return;
+    }
+    await setEventTo(selectedIdx, t);
+  };
+
+  const nudge = async (delta: number) => {
+    if (selectedIdx === null) return;
+    const next = Math.max(0, events[selectedIdx] + delta);
+    await setEventTo(selectedIdx, next);
+  };
+
+  const duplicate = async () => {
+    if (selectedIdx === null) return;
+    const t = events[selectedIdx];
+    // Offset by 0.1s so server-side dedupe (0.05s threshold) keeps both.
+    const next = events.slice().concat(t + 0.1);
     const ok = await postEvents(next);
     if (ok) setError(null);
   };
@@ -197,16 +260,76 @@ export const EventCycler = () => {
       </div>
       {selectedIdx !== null && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", rowGap: 4 }}>
-          <span style={{ fontSize: 10, color: "#888", letterSpacing: "0.05em" }}>
-            EVT {selectedIdx + 1} · {events[selectedIdx].toFixed(3)}s —
+          <span style={{ fontSize: 10, color: "#888", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+            EVT {selectedIdx + 1} —
           </span>
+          <input
+            type="number"
+            step="0.001"
+            min={0}
+            value={draftSec}
+            onChange={(e) => setDraftSec(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void saveTyped(); }}
+            disabled={busy}
+            title="Type an exact time (seconds) and press Enter / SET to jump the event to it."
+            style={{
+              width: 80,
+              padding: "3px 6px",
+              fontSize: 10,
+              fontFamily: "monospace",
+              background: busy ? "#111" : "#1a1a1a",
+              color: busy ? "#666" : "#fff",
+              border: "1px solid #333",
+              borderRadius: 3,
+            }}
+          />
           <button
-            onClick={snapSelected}
+            onClick={() => void saveTyped()}
+            disabled={busy}
+            title="Save the typed time."
+            style={actionBtn("primary", busy)}
+          >
+            SET
+          </button>
+          <button
+            onClick={() => void nudge(-NUDGE_SEC)}
+            disabled={busy}
+            title={`Move event earlier by ${NUDGE_SEC}s.`}
+            style={actionBtn("ghost", busy)}
+          >
+            ← NUDGE
+          </button>
+          <button
+            onClick={() => void nudge(NUDGE_SEC)}
+            disabled={busy}
+            title={`Move event later by ${NUDGE_SEC}s.`}
+            style={actionBtn("ghost", busy)}
+          >
+            NUDGE →
+          </button>
+          <button
+            onClick={() => void snapSelected()}
             disabled={busy}
             title="Snap this event to the nearest detected beat. Requires a beat grid — if none, run Seed Beats first (error inlines)."
             style={actionBtn("ghost", busy)}
           >
             Snap to beat
+          </button>
+          <button
+            onClick={() => void snapToPlayhead()}
+            disabled={busy}
+            title="Move this event to the current playhead position."
+            style={actionBtn("ghost", busy)}
+          >
+            Snap to playhead
+          </button>
+          <button
+            onClick={() => void duplicate()}
+            disabled={busy}
+            title="Add a new event 0.1s after this one."
+            style={actionBtn("ghost", busy)}
+          >
+            Duplicate
           </button>
           <button
             onClick={() => void deleteSelected()}
@@ -217,7 +340,7 @@ export const EventCycler = () => {
             Delete
           </button>
           <span style={{ fontSize: 9, color: "#666", marginLeft: 6 }}>
-            drag the yellow line on the waveform to move
+            or drag the yellow line on the waveform
           </span>
           {error && (
             <span style={{ fontSize: 10, color: "#f66", fontFamily: "monospace" }}>{error}</span>

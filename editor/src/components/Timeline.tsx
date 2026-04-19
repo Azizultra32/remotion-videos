@@ -244,7 +244,7 @@ const TimelineElementHost = ({ el, height }: { el: TimelineElementType; height: 
           <span
             style={{
               position: "absolute",
-              left: leftPx + widthPx - 38,
+              left: leftPx + Math.max(0, widthPx - 38),
               top: 2,
               fontSize: 9,
               color: "#6af",

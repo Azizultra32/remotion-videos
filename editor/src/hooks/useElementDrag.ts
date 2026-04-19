@@ -25,11 +25,18 @@ export const useElementDrag = (elementId: string, pxPerSec: number) => {
       const boundedStart = Math.min(maxStart, Math.max(0, rawNewStart));
 
       const state2 = useEditorStore.getState();
+      // Pipeline-origin elements always beat-snap on drag so they stay
+      // musically precise even when the global snapMode is "off". Holding
+      // Shift during the drag inverts this (lets you free-drag a pipeline
+      // element temporarily without unlocking the global setting).
+      const isPipeline = currentEl.origin === "pipeline";
+      const effectiveSnapMode =
+        isPipeline && !ev.shiftKey ? "beat" : state2.snapMode;
       // Shift inverts current snap behavior for this single drag: off+shift →
       // beat snap, any mode+shift → no snap. snapTime() handles the mode table.
       const snapped = snapTime(
         boundedStart,
-        state2.snapMode,
+        effectiveSnapMode,
         state2.beatData,
         ev.shiftKey,
       );

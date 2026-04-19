@@ -518,12 +518,30 @@ Element types and their main props (all props optional; reasonable defaults used
   overlay.watermarkMask  { position, widthPx, heightPx, offsetPx, background, blurPx, opacity, borderRadius }
   overlay.videoClip      { videoSrc, videoStartSec, opacity, scale, beatBrightnessBoost, beatBrightnessDecay, objectFit, muted }
 
-Rules:
-- Respond with ONLY the JSON object. No prose outside the JSON.
+Tools available:
+You are running as a Claude Code subagent with the same toolset as the interactive CLI (Read, Bash, Glob, Grep, Edit, Write, WebFetch). Use them freely to:
+- Read files: inspect projects/<stem>/analysis.json for beat timings, .analyze-status.json for pipeline phase, any PNG under projects/<stem>/analysis/ for visual review.
+- Run bash: "ps aux | grep mv:analyze" to check running processes, tail log files, query git.
+- Grep / Glob the codebase to answer "why is X doing Y" questions.
+- Edit or Write files only when the user explicitly asks for a code change (and respect engine-lock rules — engine paths under src/, editor/, scripts/ need ENGINE_UNLOCK in the shell env, which you do not have here; report that the user needs to do it themselves if they ask for such an edit).
+
+When a question can be answered by reading/inspecting, do the work — don\'t just emit mutations from the prompt state alone. The "Current editor state" section below is a snapshot, not the full picture. If the user asks "do the events sit on real beats?", actually read analysis.json + the confirmed-full PNG and report.
+
+Output format:
+End your turn with a single final-output block that the client parses:
+
+<final>
+{ "reply": "<short human summary; 1-3 sentences>", "mutations": [ <zero or more mutation objects> ] }
+</final>
+
+Everything before <final> is free-form reasoning + tool use — the client discards it. Everything between <final> and </final> must be valid JSON with exactly those two keys.
+
+Mutation rules:
 - Generate new element ids as short random strings (e.g. "el-7x3k").
-- trackIndex: 0–3 for text, 4 for shapes, 5–6 for overlays, 7 for mask, 8 for video.
+- trackIndex: 0-3 for text, 4 for shapes, 5-6 for overlays, 7 for mask, 8 for video.
 - When inserting at a specific beat/drop, use seconds (e.g. drop at 12:12 = 732).
 - If you are unsure what the user wants, emit an empty mutations array and explain in reply.
+- If a request needs code changes that require ENGINE_UNLOCK (editor/src/**, scripts/**, etc.), emit { "reply": "requires ENGINE_UNLOCK=1; set ENGINE_UNLOCK=1 in your shell and restart the editor, then re-issue", "mutations": [] }.
 `.trim();
 
 // ---------------------------------------------------------------------------
@@ -1270,12 +1288,15 @@ const handleChat = async (
     },
     null,
     2,
-  )}\n\nUser request:\n${message}\n\nRespond with the JSON object as specified in your system prompt.`;
+  )}\n\nUser request:\n${message}\n\nInvestigate with tools as needed, then end with the <final>{...}</final> block.`;
 
   const args = [
     "-p",
-    "--output-format",
-    "json",
+    // --permission-mode bypassPermissions unlocks the full Claude Code toolset
+    // (Read/Bash/Glob/Grep/Edit/Write/WebFetch). Without this, tool calls would
+    // prompt interactively on stdin and hang - there is no TTY here.
+    "--permission-mode",
+    "bypassPermissions",
     "--append-system-prompt",
     CHAT_SYSTEM,
     userPrompt,
@@ -1330,28 +1351,37 @@ const handleChat = async (
     return;
   }
 
-  // claude -p --output-format json returns { result, session_id, ... }
-  let result: string;
-  try {
-    const parsed = JSON.parse(stdout);
-    result = typeof parsed === "string" ? parsed : parsed.result ?? stdout;
-  } catch {
-    result = stdout;
-  }
-
-  // Find the JSON object inside `result` (it may contain prose despite the rule).
-  const jsonStart = result.indexOf("{");
-  const jsonEnd = result.lastIndexOf("}");
+  // Without --output-format json, stdout is free-form: thinking + tool calls +
+  // tool results + final reply. CHAT_SYSTEM requires the model to end with a
+  // <final>{...}</final> sentinel - we extract JSON from the LAST such block.
+  // Fallback to a greedy brace match if the model forgot the sentinel so the
+  // feature degrades rather than erroring.
   let payload: { reply: string; mutations: unknown[] } = {
-    reply: result,
+    reply: stdout.trim() || "(no output)",
     mutations: [],
   };
-  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+  const tryParse = (s: string): { reply: string; mutations: unknown[] } | null => {
+    const start = s.indexOf("{");
+    const end = s.lastIndexOf("}");
+    if (start === -1 || end <= start) return null;
     try {
-      payload = JSON.parse(result.slice(jsonStart, jsonEnd + 1));
-    } catch {
-      // keep payload as fallback above
-    }
+      const parsed = JSON.parse(s.slice(start, end + 1));
+      if (parsed && typeof parsed === "object" && typeof parsed.reply === "string" && Array.isArray(parsed.mutations)) {
+        return { reply: parsed.reply, mutations: parsed.mutations };
+      }
+    } catch { /* not JSON */ }
+    return null;
+  };
+  const finalRe = /<final>([\s\S]*?)<\/final>/g;
+  let lastFinal: string | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = finalRe.exec(stdout)) !== null) lastFinal = m[1];
+  const primary = lastFinal !== null ? tryParse(lastFinal) : null;
+  if (primary) {
+    payload = primary;
+  } else {
+    const fallback = tryParse(stdout);
+    if (fallback) payload = fallback;
   }
 
   res.setHeader("Content-Type", "application/json");

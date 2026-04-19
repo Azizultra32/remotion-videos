@@ -111,13 +111,43 @@ export const ChatPane = () => {
         }}
       >
         {messages.length === 0 && !pending && (
-          <div style={{ color: "#666", fontSize: 11, lineHeight: 1.5 }}>
-            Tell me what to build. Examples:
-            <ul style={{ margin: "8px 0 0 0", paddingLeft: 18 }}>
-              <li>Add a beat-drop title starting at 12:12 for 18 seconds.</li>
+          <div style={{ color: "#888", fontSize: 11, lineHeight: 1.55 }}>
+            <div style={{ color: "#aaa", marginBottom: 6 }}>Tell me what to build or what to do.</div>
+            <div style={{ color: "#666", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 10, marginBottom: 4 }}>
+              Timeline edits
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              <li>Add a beat-drop title at 12:12 for 18 seconds.</li>
               <li>Put spectrum bars at the bottom, purple.</li>
-              <li>Seek to 30 seconds and play.</li>
+              <li>Seek to 30 and play.</li>
             </ul>
+            <div style={{ color: "#666", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 10, marginBottom: 4 }}>
+              Project lifecycle (no CLI)
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              <li>Bring in the track at /Users/me/tracks/song.mp3.</li>
+              <li>Seed beats for the current track.</li>
+              <li>Re-analyze this track.</li>
+              <li>Switch to dubfire-sake.</li>
+              <li>Clear the pipeline events.</li>
+            </ul>
+            <details style={{ marginTop: 14 }}>
+              <summary style={{ cursor: "pointer", color: "#8cf", fontSize: 11, userSelect: "none" }}>
+                What can I say?
+              </summary>
+              <div style={{ marginTop: 8, color: "#888", fontSize: 10.5, lineHeight: 1.5 }}>
+                The chat maps natural language to store mutations + HTTP calls.
+                <ul style={{ margin: "6px 0 0 0", paddingLeft: 16 }}>
+                  <li><code>addElement</code> — any of the 16 element types (text.bellCurve, text.beatDrop, audio.spectrumBars, shape.sonarRings, overlay.videoClip, …).</li>
+                  <li><code>updateElement</code> / <code>removeElement</code> — tweak or delete by id.</li>
+                  <li><code>seekTo</code> / <code>setPlaying</code> — jump the playhead, play/pause.</li>
+                  <li><code>scaffold</code> — absolute audio path → new project + auto-analyze.</li>
+                  <li><code>analyze</code> / <code>seedBeats</code> / <code>clearEvents</code> — per-project pipeline control.</li>
+                  <li><code>switchTrack</code> — load a different existing project.</li>
+                </ul>
+                One-shot per turn — no memory across messages yet. Undo is per-turn via the Undo chip on each reply.
+              </div>
+            </details>
           </div>
         )}
         {messages.map((m, i) => (

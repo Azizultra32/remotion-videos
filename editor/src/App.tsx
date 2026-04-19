@@ -122,7 +122,7 @@ export const App = () => {
       </div>
 
       {/* Chat pane — natural-language mutations via /api/chat sidecar */}
-      <div style={{ gridRow: "1/5", gridColumn: 3, borderLeft: "1px solid #333", overflowY: "auto", minHeight: 0 }}>
+      <div style={{ gridRow: "1/5", gridColumn: 3, borderLeft: "1px solid #333", minHeight: 0, display: "flex", flexDirection: "column" }}>
         <ErrorBoundary name="Chat">
           <ChatPane />
         </ErrorBoundary>

@@ -602,6 +602,84 @@ const handleTimelineWatch = async (
   }, 20000);
 };
 
+// ---------------------------------------------------------------------------
+// /api/analyze/events/:stem  (GET — SSE stream of projects/<stem>/analysis.json)
+// ---------------------------------------------------------------------------
+//
+// Mirrors /api/timeline/watch/:stem but for analysis.json. Emits an initial
+// `events` event with the full file contents on connect, then a new `events`
+// event whenever the file changes. The editor's useTimelineSync hook uses
+// this to auto-populate locked pipeline placeholders (text.bellCurve per
+// confirmed event) on re-runs of the analysis pipeline.
+
+const handleAnalyzeEvents = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  const file = path.join(projectDir, "analysis.json");
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a dir");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project not found", stem }));
+    return;
+  }
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const emit = async () => {
+    try {
+      const data = await fs.readFile(file, "utf8");
+      res.write(`event: events\ndata: ${data}\n\n`);
+    } catch {
+      res.write(`event: events\ndata: {}\n\n`);
+    }
+  };
+
+  let watcher: FSWatcher | null = null;
+  let keepalive: ReturnType<typeof setInterval> | null = null;
+  const cleanup = () => {
+    if (keepalive) { clearInterval(keepalive); keepalive = null; }
+    if (watcher) { watcher.close(); watcher = null; }
+  };
+  req.on("close", cleanup);
+  if (req.destroyed) { cleanup(); return; }
+
+  await emit(); // initial snapshot
+
+  try {
+    watcher = fsWatch(projectDir, { persistent: false }, (eventType, filename) => {
+      if (filename !== "analysis.json") return;
+      if (eventType !== "change" && eventType !== "rename") return;
+      void emit();
+    });
+  } catch (err) {
+    res.write(
+      `event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`,
+    );
+  }
+
+  keepalive = setInterval(() => {
+    try { res.write(":keepalive\n\n"); } catch { /* closed */ }
+  }, 20000);
+};
+
 const handleChat = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -747,6 +825,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/songs", wrap("GET", handleSongs));
     server.middlewares.use("/api/out/", wrap("GET", handleOut));
     server.middlewares.use("/api/projects/", wrap("GET", handleProjectFile));
+    server.middlewares.use("/api/analyze/events/", wrap("GET", handleAnalyzeEvents));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));

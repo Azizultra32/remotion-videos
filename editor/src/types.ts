@@ -64,6 +64,7 @@ export type EditorState = {
   addElement: (el: TimelineElement) => void;
   updateElement: (id: string, partial: Partial<TimelineElement>) => void;
   setElementLocked: (id: string, locked: boolean) => void;
+  replacePipelineElements: (stem: string, events: number[]) => void;
   removeElement: (id: string) => void;
   selectElement: (id: string | null) => void;
   setBeatData: (d: BeatData) => void;

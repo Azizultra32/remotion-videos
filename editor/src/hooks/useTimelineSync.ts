@@ -48,6 +48,11 @@ export const useTimelineSync = () => {
   // Edit tool, or vim). Closed and re-opened on every stem change.
   const watchRef = useRef<EventSource | null>(null);
 
+  // Parallel EventSource for projects/<stem>/analysis.json. Pushes the full
+  // file contents on connect and on every change so the store can reconcile
+  // pipeline-origin placeholders against the latest confirmed event list.
+  const eventsRef = useRef<EventSource | null>(null);
+
   const openWatcher = (stem: string, onRemoteChange: () => void) => {
     if (watchRef.current) {
       watchRef.current.close();
@@ -64,6 +69,37 @@ export const useTimelineSync = () => {
     } catch {
       // EventSource unavailable (very old browser) — autosave still works;
       // only live-reload from external edits is lost.
+    }
+  };
+
+  const openEventsWatcher = (stem: string) => {
+    if (eventsRef.current) {
+      eventsRef.current.close();
+      eventsRef.current = null;
+    }
+    try {
+      const es = new EventSource(`/api/analyze/events/${stem}`);
+      es.addEventListener("events", (e: MessageEvent) => {
+        try {
+          const parsed = JSON.parse(e.data) as {
+            phase2_events_sec?: number[];
+            phase1_events_sec?: number[];
+          };
+          const events =
+            (parsed.phase2_events_sec?.length
+              ? parsed.phase2_events_sec
+              : parsed.phase1_events_sec) ?? [];
+          useEditorStore.getState().replacePipelineElements(stem, events);
+        } catch {
+          /* malformed payload — ignore */
+        }
+      });
+      es.addEventListener("error", () => {
+        /* browser auto-reconnects */
+      });
+      eventsRef.current = es;
+    } catch {
+      /* EventSource unsupported — skip silently */
     }
   };
 
@@ -113,6 +149,7 @@ export const useTimelineSync = () => {
           body: JSON.stringify({ stem: nextStem }),
         }).catch(() => {});
         openWatcher(nextStem, () => void hydrate(nextStem));
+        openEventsWatcher(nextStem);
       }
     });
 
@@ -129,6 +166,7 @@ export const useTimelineSync = () => {
         body: JSON.stringify({ stem: initialStem }),
       }).catch(() => {});
       openWatcher(initialStem, () => void hydrate(initialStem));
+      openEventsWatcher(initialStem);
     }
 
     return () => {
@@ -137,6 +175,10 @@ export const useTimelineSync = () => {
       if (watchRef.current) {
         watchRef.current.close();
         watchRef.current = null;
+      }
+      if (eventsRef.current) {
+        eventsRef.current.close();
+        eventsRef.current = null;
       }
     };
   }, []);

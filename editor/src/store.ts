@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { EditorState } from "./types";
+import { mergePipelineElements } from "./utils/pipelineElements";
 
 export const useEditorStore = create<EditorState>()(
   persist(
@@ -31,6 +32,10 @@ export const useEditorStore = create<EditorState>()(
           elements: s.elements.map((e) =>
             e.id === id ? { ...e, locked } : e,
           ),
+        })),
+      replacePipelineElements: (stem, events) =>
+        set((s) => ({
+          elements: mergePipelineElements(s.elements, stem, events),
         })),
       removeElement: (id) =>
         set((s) => ({

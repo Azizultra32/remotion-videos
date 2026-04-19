@@ -41,3 +41,7 @@ projects/*/.analyze-status.json
 # there. These should never be versioned.
 projects/**/.claude/
 .claude/scheduled_tasks.lock
+
+# Reference clones of other people's Remotion projects — research only,
+# not imported by anything in this repo. Kept on disk for study, not in git.
+vendor/

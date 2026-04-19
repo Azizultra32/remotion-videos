@@ -12,6 +12,10 @@ html,body{margin:0;padding:0;overflow:hidden}
 .timeline-scroll::-webkit-scrollbar-thumb{background:#555;border:2px solid #181818;border-radius:6px}
 .timeline-scroll::-webkit-scrollbar-thumb:hover{background:#777}
 .timeline-scroll::-webkit-scrollbar-corner{background:#181818}
+/* Active-run indicator: phase chips + STARTING indicator use this to
+   communicate "work in progress" vs done (solid). 1.4s feels alive
+   without being distracting. */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.45}}
 </style></head>
 <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
 </html>

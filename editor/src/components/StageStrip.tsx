@@ -347,6 +347,9 @@ export const StageStrip = () => {
                   color: done || active ? "#fff" : "#555",
                   border: "1px solid " + (i <= currentIdx ? "#2196F3" : "#2a2a2a"),
                   opacity: active ? 1 : done ? 0.85 : 0.5,
+                  // Pulse only the currently-running stage. Done stages
+                  // stay solid; upcoming stages stay dim static.
+                  animation: active ? "pulse 1.4s ease-in-out infinite" : "none",
                 }}
               >
                 {s.toUpperCase()}

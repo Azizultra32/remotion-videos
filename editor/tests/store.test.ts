@@ -20,6 +20,7 @@ describe("editor store", () => {
       isPlaying: false,
       selectedElementId: null,
       beatData: null,
+      events: [],
       compositionDuration: 90,
       fps: 24,
       snapMode: "beat",
@@ -85,5 +86,64 @@ describe("editor store", () => {
     store.setElementLocked("t1", false);
     expect(useEditorStore.getState().elements[0].locked).toBe(false);
     store.removeElement("t1");
+  });
+
+  describe("named time events", () => {
+    it("setEvents replaces the list", () => {
+      useEditorStore.getState().setEvents([{ name: "drop", timeSec: 30 }]);
+      expect(useEditorStore.getState().events).toEqual([
+        { name: "drop", timeSec: 30 },
+      ]);
+    });
+
+    it("upsertEventMark adds a new entry", () => {
+      useEditorStore.getState().upsertEventMark("drop", 12);
+      expect(useEditorStore.getState().events).toEqual([
+        { name: "drop", timeSec: 12 },
+      ]);
+    });
+
+    it("upsertEventMark updates an existing entry by name", () => {
+      useEditorStore.getState().upsertEventMark("drop", 12);
+      useEditorStore.getState().upsertEventMark("drop", 30);
+      const events = useEditorStore.getState().events;
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({ name: "drop", timeSec: 30 });
+    });
+
+    it("removeEventMark drops by name", () => {
+      useEditorStore.getState().setEvents([
+        { name: "a", timeSec: 1 },
+        { name: "b", timeSec: 2 },
+      ]);
+      useEditorStore.getState().removeEventMark("a");
+      expect(useEditorStore.getState().events.map((e) => e.name)).toEqual([
+        "b",
+      ]);
+    });
+
+    it("renameEventMark renames an event", () => {
+      useEditorStore.getState().setEvents([{ name: "old", timeSec: 1 }]);
+      useEditorStore.getState().renameEventMark("old", "new");
+      expect(useEditorStore.getState().events[0].name).toBe("new");
+    });
+
+    it("renameEventMark is a no-op when new name collides", () => {
+      useEditorStore.getState().setEvents([
+        { name: "a", timeSec: 1 },
+        { name: "b", timeSec: 2 },
+      ]);
+      useEditorStore.getState().renameEventMark("a", "b");
+      expect(useEditorStore.getState().events).toEqual([
+        { name: "a", timeSec: 1 },
+        { name: "b", timeSec: 2 },
+      ]);
+    });
+
+    it("setTrack clears events along with elements", () => {
+      useEditorStore.getState().setEvents([{ name: "drop", timeSec: 5 }]);
+      useEditorStore.getState().setTrack("projects/foo/audio.mp3", "projects/foo/analysis.json");
+      expect(useEditorStore.getState().events).toEqual([]);
+    });
   });
 });

@@ -47,12 +47,21 @@ export type BeatData = {
 //   downbeat  — snap to nearest downbeat (BeatData.downbeats, or every 4th beat)
 export type SnapMode = "off" | "beat" | "half-beat" | "downbeat";
 
+// Named time events — MC-style (waitUntil('name')) persistence lifted into
+// projects/<stem>/events.json. Kept in-memory in the store; useEventsSync
+// hydrates + persists to disk via /api/events/:stem.
+export type EventMark = {
+  name: string;
+  timeSec: number;
+};
+
 export type EditorState = {
   elements: TimelineElement[];
   currentTimeSec: number;
   isPlaying: boolean;
   selectedElementId: string | null;
   beatData: BeatData | null;
+  events: EventMark[];
   compositionDuration: number; // seconds
   fps: number;
   snapMode: SnapMode;
@@ -72,4 +81,9 @@ export type EditorState = {
   setAudioSrc: (s: string | null) => void;
   setBeatsSrc: (s: string | null) => void;
   setTrack: (audioSrc: string, beatsSrc: string) => void;
+  // Named events
+  setEvents: (events: EventMark[]) => void;
+  upsertEventMark: (name: string, timeSec: number) => void;
+  removeEventMark: (name: string) => void;
+  renameEventMark: (oldName: string, newName: string) => void;
 };

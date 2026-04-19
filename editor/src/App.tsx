@@ -11,6 +11,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useBeatData } from "./hooks/useBeatData";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useTimelineSync } from "./hooks/useTimelineSync";
+import { useEventsSync } from "./hooks/useEventsSync";
 import { useAutoSeedBeats } from "./hooks/useAutoSeedBeats";
 import { useUndoHistory } from "./hooks/useUndoHistory";
 import { useEditorStore } from "./store";
@@ -37,6 +38,8 @@ export const App = () => {
   // Hydrate timeline.json on project switch + debounced autosave on mutations
   // + .current-project signal file for external Claude Code sessions.
   useTimelineSync();
+  // Same shape for the MC-style named time events (events.json).
+  useEventsSync();
   // Cmd-Z / Cmd-Shift-Z undo/redo for element mutations (50 levels deep).
   useUndoHistory();
   // Auto-fire /api/analyze/seed-beats when a project loads without beats,

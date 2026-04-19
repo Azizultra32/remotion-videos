@@ -26,7 +26,15 @@ export type ChatMutation =
   | { op: "analyze"; stem?: string }
   | { op: "seedBeats"; stem?: string }
   | { op: "clearEvents"; stem?: string }
-  | { op: "switchTrack"; stem: string };
+  | { op: "switchTrack"; stem: string }
+  // Named time events (MC-style waitUntil('name')). Persisted to
+  // projects/<stem>/events.json by useEventsSync. NOT captured in UndoSnapshot
+  // yet — revert of the whole chat turn would need a full events snapshot; add
+  // when the need appears.
+  | { op: "addEvent"; name: string; timeSec: number }
+  | { op: "moveEvent"; name: string; timeSec: number }
+  | { op: "renameEvent"; oldName: string; newName: string }
+  | { op: "removeEvent"; name: string };
 
 // Snapshot taken BEFORE a batch of mutations is applied, sufficient to revert
 // that batch via useChat's undoLastTurn. We capture:
@@ -306,6 +314,85 @@ export const applyMutations = (mutations: unknown): MutationResult => {
           // mp3/m4a inputs to .mp3 container names, so this is right for
           // everything except .wav projects.
           s.setTrack(`projects/${stem}/audio.mp3`, `projects/${stem}/analysis.json`);
+          result.applied++;
+          break;
+        }
+        case "addEvent": {
+          const name = typeof m.name === "string" ? m.name.trim() : "";
+          const timeSec = typeof m.timeSec === "number" ? m.timeSec : NaN;
+          if (!name) {
+            result.skipped++;
+            result.errors.push(`[${i}] addEvent: name required`);
+            break;
+          }
+          if (!Number.isFinite(timeSec) || timeSec < 0) {
+            result.skipped++;
+            result.errors.push(`[${i}] addEvent: timeSec must be a non-negative number`);
+            break;
+          }
+          s.upsertEventMark(name, timeSec);
+          result.applied++;
+          break;
+        }
+        case "moveEvent": {
+          const name = typeof m.name === "string" ? m.name.trim() : "";
+          const timeSec = typeof m.timeSec === "number" ? m.timeSec : NaN;
+          if (!name) {
+            result.skipped++;
+            result.errors.push(`[${i}] moveEvent: name required`);
+            break;
+          }
+          if (!Number.isFinite(timeSec) || timeSec < 0) {
+            result.skipped++;
+            result.errors.push(`[${i}] moveEvent: timeSec must be a non-negative number`);
+            break;
+          }
+          const existing = useEditorStore.getState().events.some((e) => e.name === name);
+          if (!existing) {
+            result.skipped++;
+            result.errors.push(`[${i}] moveEvent: no event "${name}"`);
+            break;
+          }
+          s.upsertEventMark(name, timeSec);
+          result.applied++;
+          break;
+        }
+        case "renameEvent": {
+          const oldName = typeof m.oldName === "string" ? m.oldName.trim() : "";
+          const newName = typeof m.newName === "string" ? m.newName.trim() : "";
+          if (!oldName || !newName) {
+            result.skipped++;
+            result.errors.push(`[${i}] renameEvent: oldName and newName required`);
+            break;
+          }
+          const events = useEditorStore.getState().events;
+          if (!events.some((e) => e.name === oldName)) {
+            result.skipped++;
+            result.errors.push(`[${i}] renameEvent: no event "${oldName}"`);
+            break;
+          }
+          if (oldName !== newName && events.some((e) => e.name === newName)) {
+            result.skipped++;
+            result.errors.push(`[${i}] renameEvent: "${newName}" already exists`);
+            break;
+          }
+          s.renameEventMark(oldName, newName);
+          result.applied++;
+          break;
+        }
+        case "removeEvent": {
+          const name = typeof m.name === "string" ? m.name.trim() : "";
+          if (!name) {
+            result.skipped++;
+            result.errors.push(`[${i}] removeEvent: name required`);
+            break;
+          }
+          if (!useEditorStore.getState().events.some((e) => e.name === name)) {
+            result.skipped++;
+            result.errors.push(`[${i}] removeEvent: no event "${name}"`);
+            break;
+          }
+          s.removeEventMark(name);
           result.applied++;
           break;
         }

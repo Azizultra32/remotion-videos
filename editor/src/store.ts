@@ -3,6 +3,11 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { EditorState } from "./types";
 import { mergePipelineElements } from "./utils/pipelineElements";
+import {
+  upsertEvent as upsertEventMarkPure,
+  removeEventByName as removeEventMarkPure,
+  renameEvent as renameEventMarkPure,
+} from "./utils/eventsFile";
 
 export const useEditorStore = create<EditorState>()(
   persist(
@@ -12,6 +17,7 @@ export const useEditorStore = create<EditorState>()(
       isPlaying: false,
       selectedElementId: null,
       beatData: null,
+      events: [],
       compositionDuration: 90,
       fps: 24,
       snapMode: "beat",
@@ -61,7 +67,18 @@ export const useEditorStore = create<EditorState>()(
           isPlaying: false,
           selectedElementId: null,
           beatData: null,
+          events: [],
         }),
+      // Named time events — in-memory; persisted to disk by useEventsSync.
+      setEvents: (events) => set({ events }),
+      upsertEventMark: (name, timeSec) =>
+        set((s) => ({ events: upsertEventMarkPure(s.events, name, timeSec) })),
+      removeEventMark: (name) =>
+        set((s) => ({ events: removeEventMarkPure(s.events, name) })),
+      renameEventMark: (oldName, newName) =>
+        set((s) => ({
+          events: renameEventMarkPure(s.events, oldName, newName),
+        })),
     }),
     {
       name: "music-video-editor",

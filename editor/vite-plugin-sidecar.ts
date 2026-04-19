@@ -23,6 +23,10 @@ import {
   syncStaticProjectsSymlink,
 } from "../scripts/cli/paths";
 import { parseFileArg, sanitizeEditorPath } from "../scripts/cli/editorPath";
+import {
+  parseEventsFile,
+  serializeEventsFile,
+} from "./src/utils/eventsFile";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(REPO_ROOT, "out");
@@ -45,6 +49,9 @@ const PUBLIC_DIR = path.join(REPO_ROOT, "public"); // kept for legacy engine ass
 // interleave their writes. Each write waits for the previous one on the
 // same stem. Writes across different stems run independently.
 const TIMELINE_LOCK = new Map<string, Promise<void>>();
+// Separate lock for events.json writes — orthogonal to timeline.json, so
+// parallel saves of both for the same stem are safe.
+const EVENTS_LOCK = new Map<string, Promise<void>>();
 
 const STEM_RE = /^[a-z0-9_-]+$/i;
 
@@ -372,6 +379,87 @@ const handleTimelineSave = async (
 };
 
 // ---------------------------------------------------------------------------
+// /api/events/:stem   (GET + POST — named time-event markers)
+// ---------------------------------------------------------------------------
+//
+// Per-project events.json — the MC-style `waitUntil('name')` store. Schema
+// validated via parseEventsFile so malformed entries (e.g. hand-edited JSON)
+// don't poison the editor state.
+
+const handleEventsGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  const dest = path.join(PROJECTS_DIR, stem, "events.json");
+  let parsed;
+  try {
+    const content = await fs.readFile(dest, "utf8");
+    parsed = parseEventsFile(JSON.parse(content));
+  } catch {
+    // Missing file is the default state — return empty v1 doc.
+    parsed = parseEventsFile(undefined);
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(parsed));
+};
+
+const handleEventsSave = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  const body = await readJsonBody(req);
+  // Validate at the gateway — the client may send the whole file OR just the
+  // events array. parseEventsFile normalizes both.
+  const toPersist = parseEventsFile(body);
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a directory");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project not found", stem }));
+    return;
+  }
+
+  const prev = EVENTS_LOCK.get(stem) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    const destFile = path.join(projectDir, "events.json");
+    const tmp = destFile + ".tmp";
+    await fs.writeFile(tmp, serializeEventsFile(toPersist.events));
+    await fs.rename(tmp, destFile);
+  });
+  EVENTS_LOCK.set(stem, next.catch(() => {}));
+  try {
+    await next;
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "events-write-failed", detail: String(err) }));
+    return;
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ ok: true, count: toPersist.events.length }));
+};
+
+// ---------------------------------------------------------------------------
 // /api/out/:file   (GET — stream a rendered MP4 back to the browser)
 // ---------------------------------------------------------------------------
 //
@@ -518,6 +606,12 @@ Mutation shapes:
   { "op": "seedBeats",     "stem": "<optional>" }   # Run detect-beats.py only (~45s). Use for "just detect beats", "fix the beat grid", "snap-to-beat isn't working".
   { "op": "clearEvents",   "stem": "<optional>" }   # Remove Phase 1 + Phase 2 events. Keeps beats/bands. For "clear the pipeline events", "start over with events".
   { "op": "switchTrack",   "stem": "<required>" }   # Switch the editor to a different existing project. For "open <track>", "switch to <name>", "load the other one".
+
+  Named time-event ops (per-project events.json, the MC-style waitUntil('name') store):
+  { "op": "addEvent",      "name": "<string>", "timeSec": <number ≥ 0> }   # Create or update a named event. Use for "mark the drop at 30s as 'drop1'", "remember beat 12:12 as zeta".
+  { "op": "moveEvent",     "name": "<string>", "timeSec": <number ≥ 0> }   # Adjust time of an existing event (fails if absent). Use for "move drop1 back 2 seconds".
+  { "op": "renameEvent",   "oldName": "<string>", "newName": "<string>" }   # Rename. Fails on collision with existing newName.
+  { "op": "removeEvent",   "name": "<string>" }   # Delete a named event.
 
 Element types and their main props (all props optional; reasonable defaults used if omitted):
   text.typingText        { text, cps, textColor, fontSize, fontWeight, fontFamily, x, y }
@@ -1682,6 +1776,8 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
+    server.middlewares.use("/api/events/", wrap("GET", handleEventsGet));
+    server.middlewares.use("/api/events/", wrap("POST", handleEventsSave));
     server.middlewares.use("/api/current-project", wrap("GET", handleCurrentGet));
     server.middlewares.use("/api/current-project", wrap("POST", handleCurrentSave));
     server.middlewares.use("/__open-in-editor", wrap("POST", handleOpenInEditor));

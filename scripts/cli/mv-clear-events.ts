@@ -16,6 +16,7 @@
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -37,7 +38,7 @@ if (!args.project) {
 }
 
 const stem = args.project;
-const projectDir = resolve(repoRoot, "projects", stem);
+const projectDir = resolveProjectDir(repoRoot, stem);
 const analysisFile = resolve(projectDir, "analysis.json");
 const statusFile = resolve(projectDir, ".analyze-status.json");
 

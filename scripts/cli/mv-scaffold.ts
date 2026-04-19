@@ -12,6 +12,7 @@
 // Suggests next steps at the end (run mv:analyze, pick the track in editor).
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
+import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -55,7 +56,8 @@ if (![".mp3", ".wav", ".m4a"].includes(ext)) {
 }
 
 const stem = args.stem ? slugify(args.stem) : slugify(basename(audioSource));
-const projectDir = resolve(repoRoot, "projects", stem);
+ensureProjectsDir(repoRoot);
+const projectDir = resolveProjectDir(repoRoot, stem);
 if (existsSync(projectDir)) {
   console.error(`project already exists: projects/${stem}/`);
   console.error(`pick a different --stem or remove the existing folder first`);

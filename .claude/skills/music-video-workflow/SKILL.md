@@ -3,6 +3,8 @@ name: music-video-workflow
 description: Use this skill when the user wants to edit, render, scaffold, or otherwise operate on a music-video track in this repo. Covers the editor GUI, the mv:* CLI commands, the timeline.json file format, and where per-project content lives under projects/<stem>/.
 ---
 
+> **Path note:** Everywhere this doc says `projects/<stem>/`, the actual path on disk is `<MV_PROJECTS_DIR>/<stem>/` if the env var is set, else `<engineRoot>/projects/<stem>/`. The sidecar, editor, and every mv:* CLI share the resolver in `scripts/cli/paths.ts`. The engine repo gitignores `projects/<stem>/` — per-track data lives wherever the user chooses.
+
 # Music Video Workflow
 
 ## When to use

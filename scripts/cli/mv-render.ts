@@ -16,6 +16,7 @@
 import { spawn } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, basename } from "node:path";
+import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -41,7 +42,7 @@ if (!args.project) {
 }
 
 const stem = args.project;
-const projectDir = resolve(repoRoot, "projects", stem);
+const projectDir = resolveProjectDir(repoRoot, stem);
 if (!existsSync(projectDir)) {
   console.error(`project not found: projects/${stem}/`);
   process.exit(1);

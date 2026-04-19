@@ -34,11 +34,14 @@ remotion.config.ts             Remotion config
 ## Free (agents write freely)
 
 ```
-projects/                      per-track content (audio, analysis, timeline, notes)
-brands/                        per-brand workspaces
+projects/<stem>/               per-track content (gitignored; user local)
+projects/_plans/               shared design docs + implementation plans (TRACKED)
+brands/                        per-brand workspaces (tracked)
 out/                           rendered MP4s (gitignored)
 .current-project               active-project marker (gitignored)
 ```
+
+Project data lives where `MV_PROJECTS_DIR` points, defaulting to `<engineRoot>/projects/`. The entire `projects/<stem>/` tree is gitignored — audio, analysis, timeline, PNGs, everything. The only exception is `projects/_plans/` which holds engine-level design docs shared across the codebase.
 
 ## Forbidden (gitignored — never commit)
 
@@ -49,6 +52,10 @@ editor/dist/                   editor build output
 scripts/__pycache__/           Python bytecode
 *.tsbuildinfo                  tsc incremental cache
 .DS_Store                      macOS Finder metadata
+projects/*/                    per-track project data (see Free above)
+vendor/                        reference clones of other people's work
+.claude/settings.local.json    per-machine Claude Code settings
+.claude/scheduled_tasks.lock   transient lock
 ```
 
 ---

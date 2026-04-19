@@ -44,25 +44,35 @@ Agents can **execute** these scripts freely (`Bash("npm run mv:analyze -- --proj
 
 `package.json`, `tsconfig.json`, `remotion.config.ts`, `.gitignore`, `.gitattributes`, `editor/package.json`, `editor/vite.config.ts`, `editor/tsconfig.json` — all config files that define how the project compiles, tests, or deploys.
 
-### `public/projects` (symlink)
+### `public/projects` (managed symlink)
 
-This is a one-file symlink pointing at `../projects`. It exists because Remotion's render path uses `staticFile()` which resolves to `public/<path>`, and our audio lives in `projects/<stem>/audio.mp3`. The symlink bridges those two worlds. Deleting it will break every render.
+One-file symlink that bridges `staticFile("projects/<stem>/audio.mp3")` to wherever project data actually lives. Remotion's render path resolves `staticFile()` through `public/<path>`, and project audio lives under `MV_PROJECTS_DIR`. The symlink target is:
+- `../projects` (relative) when `MV_PROJECTS_DIR` is unset — portable across machines, commitable.
+- The absolute resolved path of `MV_PROJECTS_DIR` when set — per-machine, not committed in that form.
+
+The sidecar keeps the symlink in sync on boot via `syncStaticProjectsSymlink()` in `scripts/cli/paths.ts`. Deleting it will break every render until the sidecar restarts and recreates it.
 
 ---
 
 ## What is NOT the engine
 
-### `projects/<stem>/`
+### `projects/<stem>/` (gitignored — per-user creative output)
 
-Per-track everything: the audio file, the analysis output, the timeline state, the notes. Agents should edit these freely based on the user's requests.
+Per-track everything: the audio file, the analysis output, the timeline state, the notes. This tree is gitignored in the engine repo — it's user creative output, not engine infrastructure. Agents edit freely based on the user's requests; commits that add to `projects/<stem>/` get filtered out by `.gitignore`.
+
+Projects live at `MV_PROJECTS_DIR` if the env var is set, else `<engineRoot>/projects/`. The sidecar and CLI both consult `scripts/cli/paths.ts` — that module is the single source of truth for the resolver.
+
+### `projects/_plans/` (TRACKED — shared engine history)
+
+Exception to the above. Design docs and implementation plans that document the engine's evolution live here and ARE tracked. Allow-listed via `!projects/_plans/` in `.gitignore`.
 
 ### `brands/<name>/`
 
-Per-client brand workspaces: logos, colors, typography, photos. Consumed by `BrandedDemo`, `LogoReveal`, `AdCreative` compositions. Already correctly scoped.
+Per-client brand workspaces: logos, colors, typography, photos. Consumed by `BrandedDemo`, `LogoReveal`, `AdCreative` compositions. Tracked.
 
-### `out/`, `.current-project`, transient caches
+### `out/`, `.current-project`, `.analyze-status.json`, transient caches
 
-Renders land in `out/` (gitignored). `.current-project` is a one-line marker written by the editor. Build caches and venvs are gitignored.
+Renders land in `out/` (gitignored). `.current-project` is a one-line marker written by the editor. `.analyze-status.json` is the per-run status file the sidecar SSE reads. Build caches and venvs are gitignored.
 
 ---
 

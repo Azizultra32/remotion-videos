@@ -12,34 +12,47 @@ Create videos by writing React components that render frame-by-frame.
 5. **Static assets** go in `public/` and are referenced with `staticFile()`.
 
 ## Engine / Project Split (CRITICAL)
-This repo is split into **engine** (reusable infrastructure) and **projects** (per-track content). Read `OWNERSHIP.md` for the authoritative path tables; `ENGINE.md` for why each engine path is locked.
+This repo is the **engine** — reusable infrastructure that runs from a fresh clone on any machine. Per-track **project data** (audio, analysis, timelines) is created locally by the user and is NOT tracked in git. Read `OWNERSHIP.md` for the authoritative path tables; `ENGINE.md` for why each engine path is locked.
 
 **TL;DR for agents:**
-- Write freely to: `projects/<stem>/**`, `brands/**`, `out/**`, `.current-project`
-- Write-LOCKED (require `ENGINE_UNLOCK=1` in shell env): `src/**`, `editor/**`, `scripts/**`, `public/fonts/**`, `.claude/**`, `docs/**`, `package.json`, `tsconfig.json`, `CLAUDE.md`, `ENGINE.md`, `OWNERSHIP.md`, `.gitignore`, `.gitattributes`, `remotion.config.ts`
+- Write freely to: `projects/<stem>/**`, `brands/**`, `out/**`, `.current-project` (all gitignored)
+- Write freely to: `projects/_plans/**` (tracked — shared design docs)
+- Write-LOCKED (require `ENGINE_UNLOCK=1` in shell env): `src/**`, `editor/**`, `scripts/**`, `public/fonts/**`, `.claude/**`, `docs/**`, `package.json`, `tsconfig.json`, `CLAUDE.md`, `ENGINE.md`, `OWNERSHIP.md`, `README.md`, `.gitignore`, `.gitattributes`, `remotion.config.ts`
 - Read + execute engine code is always fine; only writes are blocked.
+
+**Where project data lives:**
+Default: `<engineRoot>/projects/<stem>/` (gitignored). Override with the `MV_PROJECTS_DIR` env var — set it to any absolute path (or `~/something`) before launching `npm run dev` / any `mv:*` CLI, and the sidecar + scripts all resolve projects from there. Useful for:
+- Keeping projects in a separate dedicated repo (`MV_PROJECTS_DIR=~/mv-projects`)
+- External-drive storage
+- Per-machine project stashes that don't mix with the engine clone
+
+The sidecar auto-creates `MV_PROJECTS_DIR` if missing on boot, and keeps `public/projects` symlinked at the resolved directory so Remotion's `staticFile()` renders still resolve. Single source of truth for the resolver: `scripts/cli/paths.ts`.
 
 **Music-video workflow:** use the `music-video-workflow` and `analyze-music` skills (both project-scoped, auto-available in this repo).
 
 **CLI commands (run from repo root):**
 ```bash
 npm run mv:current                                     # echo active project stem
-npm run mv:render   -- --project <stem>                # render MP4 from timeline.json + audio
-npm run mv:scaffold -- --audio /abs/path/track.mp3     # create projects/<stem>/ from an audio file
-npm run mv:analyze  -- --project <stem>                # run full end-to-end analysis (Setup + Phase 1 + Phase 2; writes events to projects/<stem>/analysis.json)
+npm run mv:switch       -- --project <stem>            # set the active project
+npm run mv:render       -- --project <stem>            # render MP4 from timeline.json + audio
+npm run mv:scaffold     -- --audio /abs/path/track.mp3 # create a new project dir under MV_PROJECTS_DIR
+npm run mv:seed-beats   -- --project <stem>            # beats-only, ~45s (detect-beats.py merged into analysis.json)
+npm run mv:analyze      -- --project <stem>            # full pipeline: Setup + Phase 1 + Phase 2, ~5-10 min
+npm run mv:clear-events -- --project <stem>            # wipe Phase 1 + Phase 2 events only (keeps beats)
 ```
 
-**Per-project layout:**
+**Per-project layout (inside MV_PROJECTS_DIR):**
 ```
-projects/<stem>/
-  audio.mp3          ← via git-LFS (MP3 only; WAVs live externally)
-  analysis.json      ← canonical event list (editor reads this)
+<stem>/
+  audio.mp3          ← source audio (any format mv:scaffold ingested)
+  analysis.json      ← authoritative: phase1/phase2 events + beats + downbeats + bpm + energy bands
   timeline.json      ← editor state (elements, fps, compositionDuration)
-  notes.md           ← cut direction, zeta points, vocabulary
-  analysis/          ← pipeline artifacts (source.json, PNGs, manifest)
+  notes.md           ← optional cut direction, zeta points, vocabulary
+  .analyze-status.json  ← transient per-run status file, tailed by the editor via SSE (gitignored)
+  analysis/          ← pipeline artifacts: source.json, full.png, phase1/2 PNGs, manifest, segment json
 ```
 
-All edits — from the editor GUI, from the ChatPane, from an external Claude Code session's Edit on `timeline.json` — converge on the same on-disk JSON at `projects/<stem>/timeline.json`. Autosave writes within 500 ms; `.current-project` at repo root tracks the active stem so external sessions can discover it via `mv:current`.
+All edits — editor GUI, ChatPane, external Claude Code sessions — converge on the same on-disk JSON at `<MV_PROJECTS_DIR>/<stem>/timeline.json`. Autosave writes within 500 ms; `.current-project` at repo root tracks the active stem so external sessions discover it via `mv:current`.
 
 ## Parallel Agent Coordination
 If you suspect another Claude Code / coding-agent session is running on this

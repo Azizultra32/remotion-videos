@@ -45,3 +45,18 @@ projects/**/.claude/
 # Reference clones of other people's Remotion projects — research only,
 # not imported by anything in this repo. Kept on disk for study, not in git.
 vendor/
+
+# Per-track project content is user creative output, not engine data.
+# The engine repo no longer tracks it — relocated to wherever the user
+# keeps their tracks (MV_PROJECTS_DIR env var override, defaults to
+# engine/projects/). Fresh clones start with projects/ empty; the sidecar
+# and CLI mkdir it lazily.
+#
+# Rule uses projects/* (children) not projects/ (dir) so the negations
+# below can re-include specific subdirs. Git's "can't re-include content
+# under an excluded parent" limitation means blanket-ignoring the dir
+# itself would lock out _plans/ forever.
+projects/*
+# _plans/ holds design docs + implementation plans — engine-level history
+# we keep tracked.
+!projects/_plans/

@@ -17,9 +17,27 @@ import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import {
+  ensureProjectsDir,
+  resolveProjectsDir,
+  syncStaticProjectsSymlink,
+} from "../scripts/cli/paths";
+
 const REPO_ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(REPO_ROOT, "out");
-const PROJECTS_DIR = path.join(REPO_ROOT, "projects");
+// PROJECTS_DIR honours process.env.MV_PROJECTS_DIR (expanded and absolute-
+// resolved); falls back to <engine>/projects for the default experience.
+// The engine repo no longer tracks project content, so on fresh clones
+// this dir is either empty or absent until a user scaffolds a track.
+const PROJECTS_DIR = resolveProjectsDir(REPO_ROOT);
+ensureProjectsDir(REPO_ROOT);
+// Keep public/projects -> PROJECTS_DIR so Remotion renders that go through
+// staticFile("projects/<stem>/audio.mp3") resolve correctly even when
+// the user has relocated projects via MV_PROJECTS_DIR.
+try { syncStaticProjectsSymlink(REPO_ROOT); } catch (err) {
+  // eslint-disable-next-line no-console
+  console.warn("[sidecar] could not sync public/projects symlink:", err);
+}
 const PUBLIC_DIR = path.join(REPO_ROOT, "public"); // kept for legacy engine assets (fonts, etc.)
 
 // Per-stem in-process lock so concurrent /api/timeline/save calls don't

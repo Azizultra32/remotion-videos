@@ -15,6 +15,8 @@ Invoke on user intents like:
 
 Do NOT invoke for track editing or rendering — that's the `music-video-workflow` skill.
 
+> **Path note:** `projects/<stem>/` in this doc means the resolved project dir, which is `<MV_PROJECTS_DIR>/<stem>/` if the env var is set, else `<engineRoot>/projects/<stem>/`. All the mv:* CLI scripts and the sidecar share the same resolver (`scripts/cli/paths.ts`). See `CLAUDE.md` § "Engine / Project Split".
+
 ## Output
 
 A successful run produces, under `projects/<stem>/analysis/`:

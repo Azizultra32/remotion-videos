@@ -14,6 +14,7 @@
 
 import { existsSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -40,7 +41,7 @@ if (!/^[a-z0-9_-]+$/i.test(stem)) {
   process.exit(1);
 }
 
-const projectDir = resolve(repoRoot, "projects", stem);
+const projectDir = resolveProjectDir(repoRoot, stem);
 if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
   console.error(`project not found: projects/${stem}/`);
   console.error(`list available: ls projects/`);

@@ -2,7 +2,11 @@ import type { TimelineElement as TimelineElementType } from "../types";
 import { useElementDrag } from "../hooks/useElementDrag";
 import { useElementResize } from "../hooks/useElementResize";
 import { useEditorStore } from "../store";
-import { getElementModule } from "@compositions/elements/registry";
+import {
+  getElementModule,
+  getElementSourcePath,
+} from "@compositions/elements/registry";
+import { openInEditor } from "../utils/openInEditor";
 
 type Props = {
   element: TimelineElementType;
@@ -80,12 +84,20 @@ export const TimelineElement = ({ element, pxPerSec, height }: Props) => {
           background: isSelected ? "rgba(255,255,255,0.2)" : "transparent",
         }}
       />
-      {/* Body — click/drag to move, click to select */}
+      {/* Body — click/drag to move, click to select, double-click to open source */}
       <div
         onMouseDown={(e) => {
           drag.onMouseDown(e);
           selectElement(element.id);
         }}
+        onDoubleClick={() => {
+          const src = getElementSourcePath(element.type);
+          if (src) void openInEditor(src);
+        }}
+        title={(() => {
+          const src = getElementSourcePath(element.type);
+          return src ? `${element.label} — double-click to open ${src}` : element.label;
+        })()}
         style={{
           position: "absolute",
           left: HANDLE_W,

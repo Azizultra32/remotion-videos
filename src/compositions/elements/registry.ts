@@ -48,3 +48,28 @@ export const listByCategory = (): Record<string, ElementModule<any>[]> => {
   }
   return out;
 };
+
+// Repo-relative source path for each element module, consumed by the editor's
+// "double-click → open source" affordance (editor/src/utils/openInEditor.ts).
+// Keep in sync with module imports above; unit-tested against ELEMENT_MODULES.
+export const ELEMENT_SOURCE_PATHS: Record<string, string> = {
+  "audio.bassGlow": "src/compositions/elements/audio/BassGlowOverlay.tsx",
+  "audio.spectrumBars": "src/compositions/elements/audio/SpectrumBars.tsx",
+  "audio.waveformPath": "src/compositions/elements/audio/WaveformPath.tsx",
+  "overlay.preDropFadeHold": "src/compositions/elements/overlays/PreDropFadeHold.tsx",
+  "overlay.videoClip": "src/compositions/elements/overlays/VideoClip.tsx",
+  "overlay.watermarkMask": "src/compositions/elements/overlays/WatermarkMask.tsx",
+  "shape.neonStack": "src/compositions/elements/shapes/NeonStrokeStack.tsx",
+  "shape.pathReveal": "src/compositions/elements/shapes/PathReveal.tsx",
+  "shape.sonarRings": "src/compositions/elements/shapes/SonarRings.tsx",
+  "text.beatDrop": "src/compositions/elements/text/BeatDropWords.tsx",
+  "text.bellCurve": "src/compositions/elements/text/BellCurveReveal.tsx",
+  "text.fitboxSVG": "src/compositions/elements/text/FitboxSVGWord.tsx",
+  "text.glitch": "src/compositions/elements/text/GlitchText.tsx",
+  "text.popping": "src/compositions/elements/text/PoppingText.tsx",
+  "text.sliding": "src/compositions/elements/text/SlidingText.tsx",
+  "text.typing": "src/compositions/elements/text/TypingText.tsx",
+};
+
+export const getElementSourcePath = (type: string): string | null =>
+  ELEMENT_SOURCE_PATHS[type] ?? null;

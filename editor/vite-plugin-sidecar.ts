@@ -22,6 +22,7 @@ import {
   resolveProjectsDir,
   syncStaticProjectsSymlink,
 } from "../scripts/cli/paths";
+import { parseFileArg, sanitizeEditorPath } from "../scripts/cli/editorPath";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(REPO_ROOT, "out");
@@ -1588,6 +1589,54 @@ const handleChatStream = async (
 };
 
 // ---------------------------------------------------------------------------
+// /__open-in-editor   (POST — jump to a repo-relative file in $EDITOR)
+// ---------------------------------------------------------------------------
+//
+// Accepts ?file=<relPath>[:line[:col]]. Sanitizes the path to the repo root
+// and spawns the user's editor (EDITOR_OPEN_CMD env, default: `code`).
+// Dev-only — this plugin only runs under `vite dev` / `vite preview`.
+
+const handleOpenInEditor = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const url = new URL(req.url ?? "", "http://localhost");
+  const raw = url.searchParams.get("file") ?? undefined;
+  const parsed = parseFileArg(raw);
+  if (!parsed) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "missing or invalid 'file' query param" }));
+    return;
+  }
+  const abs = sanitizeEditorPath(parsed.filePath, REPO_ROOT);
+  if (!abs) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "path escapes repo root or not resolvable" }));
+    return;
+  }
+  const locator =
+    parsed.line !== undefined
+      ? `${abs}:${parsed.line}${parsed.column !== undefined ? `:${parsed.column}` : ""}`
+      : abs;
+  const editorCmd = process.env.EDITOR_OPEN_CMD ?? "code";
+  try {
+    const child = spawn(editorCmd, ["-g", locator], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    res.statusCode = 204;
+    res.end();
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: `failed to launch ${editorCmd}: ${String(err)}` }));
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Vite plugin wiring
 // ---------------------------------------------------------------------------
 
@@ -1635,5 +1684,6 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
     server.middlewares.use("/api/current-project", wrap("GET", handleCurrentGet));
     server.middlewares.use("/api/current-project", wrap("POST", handleCurrentSave));
+    server.middlewares.use("/__open-in-editor", wrap("POST", handleOpenInEditor));
   },
 });

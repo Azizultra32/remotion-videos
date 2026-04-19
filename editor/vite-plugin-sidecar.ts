@@ -916,6 +916,74 @@ const handleAnalyzeClear = async (
   res.end(JSON.stringify({ stem, cleared: true }));
 };
 
+// POST /api/analyze/events/update  {stem, events: number[]}
+// Replaces projects/<stem>/analysis.json's phase2_events_sec with the given
+// list (sorted ascending, deduped at 0.05s granularity). Treats user edits
+// as confirmed (phase 2 equivalent). All other fields preserved. Rejects if
+// a mv:analyze run is in flight (same lock as /api/analyze/clear). SSE
+// watcher auto-pushes the new events to every connected client.
+const handleAnalyzeEventsUpdate = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const stem: string = String(body?.stem ?? "").trim();
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.stem must match /^[a-z0-9_-]+$/i" }));
+    return;
+  }
+  const rawEvents = Array.isArray(body?.events) ? body.events : null;
+  if (!rawEvents) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.events must be an array of numbers" }));
+    return;
+  }
+  const events = rawEvents
+    .map((v: unknown) => typeof v === "number" ? v : Number(v))
+    .filter((v: number) => Number.isFinite(v) && v >= 0);
+  // Dedupe within 0.05s of each other; keep first occurrence.
+  events.sort((a: number, b: number) => a - b);
+  const deduped: number[] = [];
+  for (const v of events) {
+    if (deduped.length === 0 || v - deduped[deduped.length - 1] > 0.05) {
+      deduped.push(Math.round(v * 1000) / 1000);
+    }
+  }
+
+  const repoRoot = path.resolve(__dirname, "..");
+  const projectDir = path.join(repoRoot, "projects", stem);
+  const statusFile = path.join(projectDir, ".analyze-status.json");
+  try {
+    const raw = await fs.readFile(statusFile, "utf8");
+    const st = JSON.parse(raw);
+    if (st && st.startedAt && !st.endedAt) {
+      res.statusCode = 409;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "cannot edit events while analysis is running" }));
+      return;
+    }
+  } catch { /* no status — fine */ }
+
+  const analysisFile = path.join(projectDir, "analysis.json");
+  let existing: Record<string, unknown> = {};
+  try {
+    const raw = await fs.readFile(analysisFile, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") existing = parsed as Record<string, unknown>;
+  } catch { /* missing file is fine */ }
+  const merged = {
+    ...existing,
+    phase2_events_sec: deduped,
+  };
+  await fs.writeFile(analysisFile, JSON.stringify(merged, null, 2) + "\n", "utf8");
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ stem, events: deduped }));
+};
+
 const handleChat = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -1065,6 +1133,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/analyze/status/", wrap("GET", handleAnalyzeStatus));
     server.middlewares.use("/api/analyze/run", wrap("POST", handleAnalyzeRun));
     server.middlewares.use("/api/analyze/clear", wrap("POST", handleAnalyzeClear));
+    server.middlewares.use("/api/analyze/events/update", wrap("POST", handleAnalyzeEventsUpdate));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));

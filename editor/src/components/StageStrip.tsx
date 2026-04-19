@@ -4,15 +4,15 @@
 //
 // Three display modes, derived from two sources of truth:
 //
-//   1. beatData (from analysis.json via useBeatData) — the authoritative
+//   1. beatData (from analysis.json via useBeatData) - the authoritative
 //      "what events are confirmed right now" for Phase 1 + Phase 2.
-//   2. status    (from .analyze-status.json via SSE) — live phase progress
+//   2. status    (from .analyze-status.json via SSE) - live phase progress
 //      when a run is in flight.
 //
 // Modes:
-//   - IDLE + NOTHING RUN: [PHASE 1 —] [PHASE 2 —] Re-analyze (Clear dimmed)
-//   - IDLE + PHASE 1 DONE: [PHASE 1 ✓ N events] [PHASE 2 —] Re-analyze, Clear
-//   - IDLE + PHASE 2 DONE: [PHASE 1 ✓ N] [PHASE 2 ✓ M events] Re-analyze, Clear
+//   - IDLE + NOTHING RUN: [PHASE 1 -] [PHASE 2 -] Re-analyze (Clear dimmed)
+//   - IDLE + PHASE 1 DONE: [PHASE 1 done N events] [PHASE 2 -] Re-analyze, Clear
+//   - IDLE + PHASE 2 DONE: [PHASE 1 done N] [PHASE 2 done M events] Re-analyze, Clear
 //   - RUNNING:             live stage chips (SETUP → … → DONE) + Running… button
 
 import { useEffect, useRef, useState } from "react";
@@ -40,7 +40,7 @@ const STAGES = [
 
 // Reconnect EventSource with exponential backoff if browser gives up.
 // EventSource auto-reconnects on normal drops, but after enough failures
-// it transitions to CLOSED permanently — we need explicit recovery.
+// it transitions to CLOSED permanently - we need explicit recovery.
 const RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000, 30000];
 
 const btnStyle = (variant: "primary" | "danger" | "ghost", disabled: boolean): React.CSSProperties => ({
@@ -64,7 +64,7 @@ const btnStyle = (variant: "primary" | "danger" | "ghost", disabled: boolean): R
   opacity: disabled ? 0.6 : 1,
 });
 
-const phaseBadge = (label: string, done: boolean, count: number, active: boolean): React.CSSProperties => ({
+const phaseBadge = (done: boolean, active: boolean): React.CSSProperties => ({
   padding: "3px 8px",
   fontSize: 10,
   fontFamily: "monospace",
@@ -210,14 +210,14 @@ export const StageStrip = () => {
       </span>
 
       {/* Persistent Phase 1 + Phase 2 completion badges. */}
-      <span style={phaseBadge("phase1", phase1Count > 0, phase1Count, activePhase === "phase1")}>
-        Phase 1{phase1Count > 0 ? ` ✓ ${phase1Count}` : " —"}
+      <span style={phaseBadge(phase1Count > 0, activePhase === "phase1")}>
+        Phase 1{phase1Count > 0 ? `  ${phase1Count}` : "  -"}
       </span>
-      <span style={phaseBadge("phase2", phase2Count > 0, phase2Count, activePhase === "phase2")}>
-        Phase 2{phase2Count > 0 ? ` ✓ ${phase2Count}` : " —"}
+      <span style={phaseBadge(phase2Count > 0, activePhase === "phase2")}>
+        Phase 2{phase2Count > 0 ? `  ${phase2Count}` : "  -"}
       </span>
 
-      {/* Live stage chips only while running — gives the per-sub-phase detail
+      {/* Live stage chips only while running - gives the per-sub-phase detail
           that the two persistent badges don't surface. */}
       {isRunning && !isFailed && (
         <>
@@ -273,6 +273,29 @@ export const StageStrip = () => {
       )}
 
       <div style={{ flex: 1 }} />
+
+      <button
+        onClick={() => {
+          if (!stem || isRunning || busy) return;
+          const state = useEditorStore.getState();
+          const sec = state.currentTimeSec;
+          if (!Number.isFinite(sec) || sec < 0) return;
+          const current = (beatData?.phase2_events_sec?.length
+            ? beatData.phase2_events_sec
+            : beatData?.phase1_events_sec) ?? [];
+          const next = [...current, sec];
+          void fetch("/api/analyze/events/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stem, events: next }),
+          }).catch((err) => setError(String(err)));
+        }}
+        disabled={isRunning || busy !== null}
+        title="Drop a new event marker at the current playhead position. The marker persists to analysis.json and appears on the waveform + timeline."
+        style={btnStyle("ghost", isRunning || busy !== null)}
+      >
+        Add event at playhead
+      </button>
 
       <button
         onClick={runAnalysis}

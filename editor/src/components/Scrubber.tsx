@@ -154,7 +154,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
         }}
       >
         <span style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
-          Waveform{trackName ? ` — ${trackName}` : ""}
+          Waveform{trackName ? ` - ${trackName}` : ""}
         </span>
         <span>
           {(() => {
@@ -162,10 +162,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
             const parts: string[] = [];
             if (beatData.beats.length > 0) parts.push(`${beatData.beats.length} beats`);
             if (beatData.drops.length > 0) parts.push(`${beatData.drops.length} drops`);
-            const eventCount =
-              beatData.phase2_events_sec?.length ??
-              beatData.phase1_events_sec?.length ??
-              0;
+            const p2 = beatData.phase2_events_sec?.length ?? 0;
+            const p1 = beatData.phase1_events_sec?.length ?? 0;
+            const eventCount = p2 > 0 ? p2 : p1;
             if (eventCount > 0) parts.push(`${eventCount} events`);
             if (beatData.bpm_global > 0) parts.push(`${beatData.bpm_global.toFixed(1)} bpm`);
             return parts.length > 0 ? parts.join(" · ") : "no analysis loaded";
@@ -173,11 +172,37 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
         </span>
       </div>
 
-      <div style={{ position: "relative", width: "100%", height }}>
+      <div
+        style={{ position: "relative", width: "100%", height }}
+        onClick={(e) => {
+          // Shift-click on waveform adds an event at the click's time.
+          // Plain click passes through to wavesurfer for click-to-seek.
+          if (!e.shiftKey) return;
+          if (!beatData || totalSec <= 0) return;
+          const stem = audioSrc ? audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "") : null;
+          if (!stem) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const sec = (x / rect.width) * totalSec;
+          if (!Number.isFinite(sec) || sec < 0 || sec > totalSec) return;
+          const current = (beatData.phase2_events_sec?.length
+            ? beatData.phase2_events_sec
+            : beatData.phase1_events_sec) ?? [];
+          const next = [...current, sec];
+          void fetch("/api/analyze/events/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stem, events: next }),
+          }).catch(() => {});
+          e.stopPropagation();
+        }}
+      >
         <div ref={containerRef} style={{ width: "100%", height }} />
 
-        {/* Event lines + breakdown regions + drop markers, drawn in
-            the same coordinate space as the waveform below. */}
+        {/* Event lines + breakdown regions + drop markers. SVG is
+            pointer-events:auto but individual decoration elements are
+            set to "none" so only the event-line hit targets intercept
+            clicks; plain clicks fall through to wavesurfer. */}
         {ready && beatData && (
           <svg
             style={{
@@ -190,39 +215,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
             preserveAspectRatio="none"
             viewBox={`0 0 ${totalSec} 100`}
           >
-            {/* Phase-1 event markers (new-pipeline intermediate events).
-                Shown only when phase-2 isn't yet present — once phase-2 is
-                merged we don't want both layers competing visually. */}
-            {!beatData.phase2_events_sec?.length &&
-              beatData.phase1_events_sec?.map((t, i) => (
-                <line
-                  key={`ph1-${i}`}
-                  x1={t}
-                  x2={t}
-                  y1={0}
-                  y2={100}
-                  stroke="#ffaa44"
-                  strokeWidth={0.22}
-                  vectorEffect="non-scaling-stroke"
-                  opacity={0.7}
-                />
-              ))}
-            {/* Phase-2 event markers (final confirmed events from the
-                waveform-analysis-protocol workflow). Bright yellow, full
-                opacity — these are the canonical event lines. */}
-            {beatData.phase2_events_sec?.map((t, i) => (
-              <line
-                key={`ph2-${i}`}
-                x1={t}
-                x2={t}
-                y1={0}
-                y2={100}
-                stroke="#ffcc00"
-                strokeWidth={0.28}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-            {/* Breakdown regions */}
+            {/* Breakdown regions - purely decorative. */}
             {beatData.breakdowns.map((b, i) => (
               <rect
                 key={`bd${i}`}
@@ -233,7 +226,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
                 fill="rgba(255,80,80,0.08)"
               />
             ))}
-            {/* Drop markers */}
+            {/* Drop markers - decorative. */}
             {beatData.drops.map((t, i) => (
               <line
                 key={`d${i}`}
@@ -242,12 +235,79 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
                 y1={0}
                 y2={100}
                 stroke="#ff4444"
-                strokeWidth={0.15}
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+                opacity={0.55}
+              />
+            ))}
+            {/* Phase-1 event markers - shown only when phase-2 is empty. */}
+            {!beatData.phase2_events_sec?.length &&
+              beatData.phase1_events_sec?.map((t, i) => (
+                <line
+                  key={`ph1-${i}`}
+                  x1={t}
+                  x2={t}
+                  y1={0}
+                  y2={100}
+                  stroke="#ff8844"
+                  strokeWidth={2.5}
+                  vectorEffect="non-scaling-stroke"
+                  opacity={0.85}
+                />
+              ))}
+            {/* Phase-2 event markers - canonical confirmed events. */}
+            {beatData.phase2_events_sec?.map((t, i) => (
+              <line
+                key={`ph2-${i}`}
+                x1={t}
+                x2={t}
+                y1={0}
+                y2={100}
+                stroke="#ffcc00"
+                strokeWidth={3}
                 vectorEffect="non-scaling-stroke"
               />
             ))}
           </svg>
         )}
+
+        {/* Interactive event-line hit targets - rendered as absolutely-
+            positioned divs so they can be clicked (SVG sibling above is
+            pointer-events:none). Clicking a marker selects the
+            corresponding pipeline element in the store, which routes
+            Backspace/Delete through Timeline's tryDelete path (which
+            now persists the deletion to analysis.json). */}
+        {ready && beatData && audioSrc && (() => {
+          const events = (beatData.phase2_events_sec?.length
+            ? beatData.phase2_events_sec
+            : beatData.phase1_events_sec) ?? [];
+          const stem = audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "");
+          return events.map((t, i) => {
+            const left = (t / totalSec) * 100;
+            const pipelineId = `pipeline-${stem}-${t.toFixed(3)}`;
+            return (
+              <div
+                key={`hit-${i}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useEditorStore.getState().selectElement(pipelineId);
+                  useEditorStore.getState().setCurrentTime(t);
+                }}
+                title={`Event ${i + 1} at ${t.toFixed(2)}s - click to select, then Delete to remove`}
+                style={{
+                  position: "absolute",
+                  left: `calc(${left}% - 6px)`,
+                  top: 0,
+                  width: 12,
+                  height: "100%",
+                  cursor: "pointer",
+                  background: "transparent",
+                  zIndex: 2,
+                }}
+              />
+            );
+          });
+        })()}
 
         {/* Playhead — canonical store time. `left` is set imperatively by
             the subscribe hook above so this component does NOT re-render

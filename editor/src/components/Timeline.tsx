@@ -164,15 +164,41 @@ export const Timeline = () => {
 const LOCK_BORDER = "1px dashed #6af";
 
 const tryDelete = (id: string) => {
-  const el = useEditorStore.getState().elements.find((e) => e.id === id);
-  if (el?.locked) {
+  const state = useEditorStore.getState();
+  const el = state.elements.find((e) => e.id === id);
+  if (!el) return;
+  if (el.locked) {
     // eslint-disable-next-line no-alert
     const ok = window.confirm(
-      `"${el.label}" is locked (pipeline-created). Unlock first in the detail panel or confirm to delete anyway?`,
+      `"${el.label}" is locked (pipeline-created). Remove it from the event list too?`,
     );
     if (!ok) return;
   }
-  useEditorStore.getState().removeElement(id);
+  // For pipeline-origin elements, also persist the deletion to the
+  // authoritative analysis.json so the next SSE tick doesn't re-add it.
+  // The id encodes the stem + event timestamp: "pipeline-<stem>-<sec>".
+  if (el.origin === "pipeline") {
+    const match = /^pipeline-(.+)-(\d+(?:\.\d+)?)$/.exec(el.id);
+    if (match) {
+      const stem = match[1];
+      const removedSec = Number(match[2]);
+      const beat = state.beatData;
+      const current = (beat?.phase2_events_sec?.length
+        ? beat.phase2_events_sec
+        : beat?.phase1_events_sec) ?? [];
+      const next = current.filter(
+        (t) => Math.abs(t - removedSec) > 0.05,
+      );
+      void fetch("/api/analyze/events/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stem, events: next }),
+      }).catch(() => {
+        /* SSE won't refresh; store-level delete below is still applied */
+      });
+    }
+  }
+  state.removeElement(id);
 };
 
 // Timeline-scoped keyboard delete: Backspace / Delete on the selected element

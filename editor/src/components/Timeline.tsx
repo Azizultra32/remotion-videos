@@ -34,6 +34,8 @@ export const Timeline = () => {
   const beatData = useEditorStore((s) => s.beatData);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  useTimelineDeleteKey();
+
   const widthPx = compositionDuration * PX_PER_SEC;
   const tracksHeight = TRACK_COUNT * TRACK_HEIGHT;
 
@@ -152,6 +154,115 @@ export const Timeline = () => {
   );
 };
 
-const TimelineElementHost = ({ el, height }: { el: TimelineElementType; height: number }) => (
-  <TimelineElement element={el} pxPerSec={PX_PER_SEC} height={height} />
-);
+// Locked elements get a visual overlay + delete guard without touching
+// TimelineElement.tsx. Rationale: the Task 2 engine-lock allows edits to
+// Timeline.tsx only. The wrapper hosts:
+//   - opacity dim when locked
+//   - dashed #6af border as an absolutely-positioned overlay (pointer-events:none
+//     so it doesn't intercept drag/resize from the inner TimelineElement)
+//   - a tiny LOCK text badge pinned top-right of the block
+const LOCK_BORDER = "1px dashed #6af";
+
+const tryDelete = (id: string) => {
+  const el = useEditorStore.getState().elements.find((e) => e.id === id);
+  if (el?.locked) {
+    // eslint-disable-next-line no-alert
+    const ok = window.confirm(
+      `"${el.label}" is locked (pipeline-created). Unlock first in the detail panel or confirm to delete anyway?`,
+    );
+    if (!ok) return;
+  }
+  useEditorStore.getState().removeElement(id);
+};
+
+// Timeline-scoped keyboard delete: Backspace / Delete on the selected element
+// routes through tryDelete so locked elements prompt before removal. Skipped
+// when focus is inside an editable field so text inputs (ElementDetail) still
+// get their native backspace behavior.
+const isEditable = (el: EventTarget | null): boolean => {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName.toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select";
+};
+
+const useTimelineDeleteKey = () => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isEditable(e.target)) return;
+      if (e.key !== "Backspace" && e.key !== "Delete") return;
+      const id = useEditorStore.getState().selectedElementId;
+      if (!id) return;
+      e.preventDefault();
+      tryDelete(id);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+};
+
+const TimelineElementHost = ({ el, height }: { el: TimelineElementType; height: number }) => {
+  const locked = !!el.locked;
+  const leftPx = el.startSec * PX_PER_SEC;
+  const widthPx = Math.max(16, el.durationSec * PX_PER_SEC);
+  return (
+    <div
+      style={{
+        // Wrapper sits at (0,0) so the inner TimelineElement keeps its own
+        // absolute positioning math. Only opacity + cursor are applied here;
+        // the dashed border comes from the overlay sibling below.
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: 0,
+        height: 0,
+        opacity: locked ? 0.72 : 1,
+        cursor: locked ? "default" : "grab",
+      }}
+    >
+      <TimelineElement element={el} pxPerSec={PX_PER_SEC} height={height} />
+      {locked && (
+        <>
+          {/* Dashed border overlay — pointer-events:none so drag/resize on the
+              inner element still works if the user later unlocks via
+              ElementDetail. Sits atop the bar lane at the same bounds. */}
+          <div
+            style={{
+              position: "absolute",
+              left: leftPx,
+              top: 0,
+              width: widthPx,
+              height,
+              border: LOCK_BORDER,
+              borderRadius: 4,
+              boxSizing: "border-box",
+              pointerEvents: "none",
+              zIndex: 2,
+            }}
+          />
+          {/* LOCK badge — pinned inside the top-right corner of the block. */}
+          <span
+            style={{
+              position: "absolute",
+              left: leftPx + widthPx - 38,
+              top: 2,
+              fontSize: 9,
+              color: "#6af",
+              letterSpacing: "0.08em",
+              marginLeft: 4,
+              padding: "1px 4px",
+              border: "1px solid #6af",
+              borderRadius: 2,
+              background: "rgba(0,0,0,0.35)",
+              pointerEvents: "none",
+              zIndex: 3,
+              fontWeight: 600,
+            }}
+          >
+            LOCK
+          </span>
+        </>
+      )}
+    </div>
+  );
+};

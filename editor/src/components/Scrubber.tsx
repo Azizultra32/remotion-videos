@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import { useEditorStore } from "../store";
+import { NamedEventPills } from "./NamedEventPills";
 
 type Props = {
   audioUrl: string;
@@ -427,6 +428,11 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
             );
           });
         })()}
+
+        {/* Named time-event pills (§1b). Cyan, overlaid above amber pipeline
+            markers, drag to move / click to seek. Events come from the store
+            (fed by useEventsSync from projects/<stem>/events.json). */}
+        {ready && <NamedEventPills totalSec={totalSec} />}
 
         {/* Playhead — canonical store time. `left` is set imperatively by
             the subscribe hook above so this component does NOT re-render

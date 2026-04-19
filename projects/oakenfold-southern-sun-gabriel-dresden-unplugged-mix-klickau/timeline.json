@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "stem": "oakenfold-southern-sun-gabriel-dresden-unplugged-mix-klickau",
+  "fps": 24,
+  "compositionDuration": 524,
+  "elements": [
+    {
+      "id": "pipeline-oakenfold-southern-sun-gabriel-dresden-unplugged-mix-klickau-116.000",
+      "type": "text.bellCurve",
+      "trackIndex": 0,
+      "startSec": 115.0317,
+      "durationSec": 2,
+      "label": "ZETA 116.0s",
+      "props": {
+        "text": "",
+        "x": 50,
+        "y": 50,
+        "sigmaSec": 0.45,
+        "zoomFrom": 0.85,
+        "zoomTo": 1,
+        "textColor": "#ffffff",
+        "fontSize": 120,
+        "fontWeight": 800,
+        "fontFamily": "ui-serif, Georgia, serif",
+        "letterSpacing": "0.08em",
+        "bassGlowMax": 30
+      },
+      "origin": "pipeline",
+      "locked": true
+    },
+    {
+      "id": "pipeline-oakenfold-southern-sun-gabriel-dresden-unplugged-mix-klickau-203.000",
+      "type": "text.bellCurve",
+      "trackIndex": 0,
+      "startSec": 201.9904,
+      "durationSec": 2,
+      "label": "ZETA 203.0s",
+      "props": {
+        "text": "",
+        "x": 50,
+        "y": 50,
+        "sigmaSec": 0.45,
+        "zoomFrom": 0.85,
+        "zoomTo": 1,
+        "textColor": "#ffffff",
+        "fontSize": 120,
+        "fontWeight": 800,
+        "fontFamily": "ui-serif, Georgia, serif",
+        "letterSpacing": "0.08em",
+        "bassGlowMax": 30
+      },
+      "origin": "pipeline",
+      "locked": true
+    },
+    {
+      "id": "pipeline-oakenfold-southern-sun-gabriel-dresden-unplugged-mix-klickau-266.000",
+      "type": "text.bellCurve",
+      "trackIndex": 0,
+      "startSec": 265.1719,
+      "durationSec": 2,
+      "label": "ZETA 266.0s",
+      "props": {
+        "text": "",
+        "x": 50,
+        "y": 50,
+        "sigmaSec": 0.45,
+        "zoomFrom": 0.85,
+        "zoomTo": 1,
+        "textColor": "#ffffff",
+        "fontSize": 120,
+        "fontWeight": 800,
+        "fontFamily": "ui-serif, Georgia, serif",
+        "letterSpacing": "0.08em",
+        "bassGlowMax": 30
+      },
+      "origin": "pipeline",
+      "locked": true
+    },
+    {
+      "id": "pipeline-oakenfold-southern-sun-gabriel-dresden-unplugged-mix-klickau-458.000",
+      "type": "text.bellCurve",
+      "trackIndex": 0,
+      "startSec": 456.9919,
+      "durationSec": 2,
+      "label": "ZETA 458.0s",
+      "props": {
+        "text": "",
+        "x": 50,
+        "y": 50,
+        "sigmaSec": 0.45,
+        "zoomFrom": 0.85,
+        "zoomTo": 1,
+        "textColor": "#ffffff",
+        "fontSize": 120,
+        "fontWeight": 800,
+        "fontFamily": "ui-serif, Georgia, serif",
+        "letterSpacing": "0.08em",
+        "bassGlowMax": 30
+      },
+      "origin": "pipeline",
+      "locked": true
+    },
+    {
+      "id": "pipeline-oakenfold-southern-sun-gabriel-dresden-unplugged-mix-klickau-484.000",
+      "type": "text.bellCurve",
+      "trackIndex": 0,
+      "startSec": 482.9054,
+      "durationSec": 2,
+      "label": "ZETA 484.0s",
+      "props": {
+        "text": "",
+        "x": 50,
+        "y": 50,
+        "sigmaSec": 0.45,
+        "zoomFrom": 0.85,
+        "zoomTo": 1,
+        "textColor": "#ffffff",
+        "fontSize": 120,
+        "fontWeight": 800,
+        "fontFamily": "ui-serif, Georgia, serif",
+        "letterSpacing": "0.08em",
+        "bassGlowMax": 30
+      },
+      "origin": "pipeline",
+      "locked": true
+    }
+  ]
+}

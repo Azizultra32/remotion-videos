@@ -30,7 +30,7 @@ export const EventCycler = () => {
       : beatData?.phase1_events_sec) ?? [];
   if (!events.length) return null;
 
-  const currentTimeSec = useEditorStore.getState().currentTimeSec;
+  const currentTimeSec = useEditorStore((s) => s.currentTimeSec);
   const activeIndex = events.findIndex((t, i) => {
     const next = events[i + 1] ?? Number.POSITIVE_INFINITY;
     return currentTimeSec >= t - 0.5 && currentTimeSec < next - 0.5;

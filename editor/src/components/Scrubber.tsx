@@ -2,10 +2,14 @@
 // A click-to-seek waveform with beat/drop/breakdown overlays and a live
 // playhead. Replaces the old SpectrumDisplay (bass-bar readout) which
 // wasn't actually interactive.
+//
+// Waveform rendering is now pure-canvas via CanvasWaveform (no wavesurfer.js)
+// per the MC deep-dive §3 lift — AudioContext.decodeAudioData + extractPeaks
+// produces the bucket array, a 2D canvas draws it.
 import { useEffect, useRef, useState } from "react";
-import WaveSurfer from "wavesurfer.js";
 import { useEditorStore } from "../store";
 import { NamedEventPills } from "./NamedEventPills";
+import { CanvasWaveform } from "./CanvasWaveform";
 
 type Props = {
   audioUrl: string;
@@ -13,8 +17,6 @@ type Props = {
 };
 
 export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WaveSurfer | null>(null);
   const [ready, setReady] = useState(false);
   const [duration, setDuration] = useState(0);
   // Live-preview state during event-marker drag. Holds the in-flight sec value
@@ -62,71 +64,22 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
         .replace(/[-_]+/g, " ")
     : null;
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const ws = WaveSurfer.create({
-      container: containerRef.current,
-      waveColor: "#3a3a3a",
-      progressColor: "#6aa6ff",
-      cursorColor: "transparent", // we draw our own playhead on top
-      height,
-      barWidth: 2,
-      barGap: 1,
-      normalize: true,
-      interact: true,
-    });
-    ws.load(audioUrl);
-    ws.on("ready", () => {
-      setReady(true);
-      const d = ws.getDuration();
-      setDuration(d);
-      // Always defer to the actual decoded audio length. Prevents a stale
-      // (persisted or default) value from clamping seeks past its bound.
-      if (d) {
-        useEditorStore.setState({ compositionDuration: Math.ceil(d) });
-      }
-      // Kill wavesurfer's playback path entirely. We only want the waveform
-      // render — playback is owned by the Remotion Player. Merely muting the
-      // element isn't enough: HMR can leak detached audio elements that keep
-      // playing after unmount (that's the "mashed noise after closing the
-      // tab" symptom). Stripping src + pause is the reliable kill.
-      try {
-        ws.setVolume(0);
-      } catch {}
-      try {
-        // wavesurfer v7\'s public type surface omits stop() on some minor
-        // releases despite it being present at runtime. Feature-detect via
-        // optional chaining + swallow.
-        (ws as unknown as { stop?: () => void }).stop?.();
-      } catch {}
-      const media = ws.getMediaElement?.();
-      if (media) {
-        media.muted = true;
-        media.pause();
-        media.removeAttribute("src");
-        media.load();
-      }
-    });
-    ws.on("click", (progress: number) => {
-      const t = progress * ws.getDuration();
-      setCurrentTime(t);
-    });
-    wsRef.current = ws;
-    return () => {
-      ws.destroy();
-      wsRef.current = null;
-      setReady(false);
-    };
-  }, [audioUrl, height, setCurrentTime]);
+  // Waveform decode is owned by CanvasWaveform; onReady fires once the
+  // AudioBuffer has been decoded and peaks extracted. We mirror the old
+  // "persist decoded duration into the store" trick so seeks never get
+  // clamped against a stale compositionDuration.
+  const onWaveformReady = (d: number) => {
+    setDuration(d);
+    setReady(true);
+    if (d) {
+      useEditorStore.setState({ compositionDuration: Math.ceil(d) });
+    }
+  };
 
-  // Do NOT call ws.play()/pause() here. WaveSurfer's internal MediaElement
-  // would play its own audio in parallel with the Remotion Player, which
-  // either doubles up or (more often) kills both.
-  //
-  // Imperative playhead + wavesurfer sync: subscribe directly to the store,
-  // move the playhead DOM node via inline style, and call ws.setTime. No
-  // React re-render per frame. This is the hot path during playback; doing
-  // it via useState/useEffect re-renders was the root cause of the pause bug.
+  // Imperative playhead sync: move the playhead DOM node via inline style
+  // as currentTimeSec changes in the store. No React re-render per frame —
+  // this is the hot path during playback, and doing it via state caused the
+  // visible pause-lag before.
   useEffect(() => {
     if (!ready || !duration) return;
     const update = (t: number) => {
@@ -135,21 +88,8 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
         const pct = Math.min(100, Math.max(0, (t / duration) * 100));
         el.style.left = `${pct}%`;
       }
-      const ws = wsRef.current;
-      // wavesurfer v7 types don\'t expose setTime across all minor versions;
-      // feature-detect at call site rather than pinning to a specific version.
-      const wsWithSetTime = ws as unknown as { setTime?: (t: number) => void };
-      if (ws && typeof wsWithSetTime.setTime === "function") {
-        try {
-          wsWithSetTime.setTime!(t);
-        } catch {
-          // wavesurfer can throw after unmount or src removal; harmless.
-        }
-      }
     };
-    // Paint initial position before the first store tick.
     update(useEditorStore.getState().currentTimeSec);
-    // Listen for subsequent changes without re-rendering the component.
     return useEditorStore.subscribe((state, prev) => {
       if (state.currentTimeSec !== prev.currentTimeSec) {
         update(state.currentTimeSec);
@@ -204,8 +144,18 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
         style={{ position: "relative", width: "100%", height }}
         onClick={(e) => {
           // Shift-click on waveform adds an event at the click's time.
-          // Plain click passes through to wavesurfer for click-to-seek.
-          if (!e.shiftKey) return;
+          // Plain click falls through to CanvasWaveform's own seek handler.
+          if (!e.shiftKey) {
+            // Plain click -> seek. CanvasWaveform doesn't own clicks (we do),
+            // so map x to time here.
+            if (totalSec > 0) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const sec = Math.max(0, Math.min(totalSec, (x / rect.width) * totalSec));
+              setCurrentTime(sec);
+            }
+            return;
+          }
           if (!beatData || totalSec <= 0) return;
           const stem = audioSrc ? audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "") : null;
           if (!stem) return;
@@ -225,7 +175,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
           e.stopPropagation();
         }}
       >
-        <div ref={containerRef} style={{ width: "100%", height }} />
+        <CanvasWaveform audioUrl={audioUrl} height={height} onReady={onWaveformReady} />
 
         {/* Event lines + breakdown regions + drop markers. SVG is
             pointer-events:auto but individual decoration elements are

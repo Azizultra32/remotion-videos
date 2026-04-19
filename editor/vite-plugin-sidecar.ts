@@ -793,22 +793,42 @@ const handleAnalyzeRun = async (
 ): Promise<void> => {
   const body = await readJsonBody(req);
   const stem: string = String(body?.stem ?? "").trim();
-  if (!stem || stem.includes("/") || stem.includes("..")) {
+  if (!STEM_RE.test(stem)) {
     res.statusCode = 400;
-    res.end(JSON.stringify({ error: "body.stem required (safe path segment)" }));
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.stem must match /^[a-z0-9_-]+$/i" }));
     return;
   }
   const repoRoot = path.resolve(__dirname, "..");
-  const statusFile = path.join(repoRoot, "projects", stem, ".analyze-status.json");
+  const projectDir = path.join(repoRoot, "projects", stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a directory");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: `project ${stem} not found` }));
+    return;
+  }
+  const statusFile = path.join(projectDir, ".analyze-status.json");
   try {
     const existing = await fs.readFile(statusFile, "utf8");
-    const parsed = JSON.parse(existing);
+    let parsed: any = null;
+    try { parsed = JSON.parse(existing); } catch {
+      // Mid-write corrupt JSON means something IS running (mv-analyze is
+      // writing). Conservatively 409 to avoid a double-spawn.
+      res.statusCode = 409;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "status file mid-write; retry in a moment" }));
+      return;
+    }
     if (parsed && parsed.startedAt && !parsed.endedAt) {
       res.statusCode = 409;
+      res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "analysis already in flight", state: parsed }));
       return;
     }
-  } catch { /* no current run — fine to start */ }
+  } catch { /* no status file — no prior run */ }
 
   const { spawn: spawnChild } = await import("node:child_process");
   const child = spawnChild("npm", ["run", "mv:analyze", "--", "--project", stem], {
@@ -819,6 +839,7 @@ const handleAnalyzeRun = async (
   });
   child.unref();
   res.statusCode = 202;
+  res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({ stem, pid: child.pid }));
 };
 
@@ -834,16 +855,46 @@ const handleAnalyzeClear = async (
 ): Promise<void> => {
   const body = await readJsonBody(req);
   const stem: string = String(body?.stem ?? "").trim();
-  if (!stem || stem.includes("/") || stem.includes("..")) {
+  if (!STEM_RE.test(stem)) {
     res.statusCode = 400;
-    res.end(JSON.stringify({ error: "body.stem required (safe path segment)" }));
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.stem must match /^[a-z0-9_-]+$/i" }));
     return;
   }
   const repoRoot = path.resolve(__dirname, "..");
-  const analysisFile = path.join(repoRoot, "projects", stem, "analysis.json");
-  const empty = { source_audio: "", phase2_events_sec: [] as number[] };
-  await fs.writeFile(analysisFile, JSON.stringify(empty, null, 2) + "\n", "utf8");
+  const projectDir = path.join(repoRoot, "projects", stem);
+  const statusFile = path.join(projectDir, ".analyze-status.json");
+  // Reject CLEAR mid-run — otherwise we race mv-analyze's final
+  // `cp phase2-events.json analysis.json` and can leave either zombie
+  // state in the file.
+  try {
+    const raw = await fs.readFile(statusFile, "utf8");
+    const st = JSON.parse(raw);
+    if (st && st.startedAt && !st.endedAt) {
+      res.statusCode = 409;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "cannot clear while analysis is running" }));
+      return;
+    }
+  } catch { /* no status or corrupt — proceed (will be harmless) */ }
+
+  const analysisFile = path.join(projectDir, "analysis.json");
+  // Merge, don't overwrite. Preserve beats/downbeats/duration/energy_bands
+  // and other fields useBeatData depends on — only wipe the event lists.
+  let existing: Record<string, unknown> = {};
+  try {
+    const raw = await fs.readFile(analysisFile, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") existing = parsed as Record<string, unknown>;
+  } catch { /* missing file is fine */ }
+  const merged = {
+    ...existing,
+    phase1_events_sec: [],
+    phase2_events_sec: [],
+  };
+  await fs.writeFile(analysisFile, JSON.stringify(merged, null, 2) + "\n", "utf8");
   res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({ stem, cleared: true }));
 };
 

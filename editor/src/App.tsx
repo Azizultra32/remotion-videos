@@ -82,38 +82,43 @@ export const App = () => {
         </ErrorBoundary>
       </div>
 
-      {/* Transport Controls */}
-      <ErrorBoundary name="Transport Controls">
-        <TransportControls />
-      </ErrorBoundary>
+      {/* Transport Controls — pinned to row 1 col 2 (above Scrubber). */}
+      <div style={{ gridRow: 1, gridColumn: 2, minWidth: 0 }}>
+        <ErrorBoundary name="Transport Controls">
+          <TransportControls />
+        </ErrorBoundary>
+      </div>
 
-      {/* Scrubber — click-to-seek waveform with drop markers and playhead */}
-      <ErrorBoundary name="Scrubber">
-        {audioUrl ? (
-          <Scrubber audioUrl={audioUrl} />
-        ) : (
-          <div style={{ padding: 12, color: "#888", fontSize: 11 }}>
-            No audio source set.
-          </div>
-        )}
-      </ErrorBoundary>
+      {/* Scrubber — row 2 col 2. Click-to-seek waveform with drop markers
+          and playhead. */}
+      <div style={{ gridRow: 2, gridColumn: 2, minWidth: 0 }}>
+        <ErrorBoundary name="Scrubber">
+          {audioUrl ? (
+            <Scrubber audioUrl={audioUrl} />
+          ) : (
+            <div style={{ padding: 12, color: "#888", fontSize: 11 }}>
+              No audio source set.
+            </div>
+          )}
+        </ErrorBoundary>
+      </div>
 
-      {/* Preview */}
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", background: "#000" }}>
+      {/* Preview — row 3 col 2 (flexible middle section). */}
+      <div style={{ gridRow: 3, gridColumn: 2, display: "flex", justifyContent: "center", alignItems: "center", background: "#000", minWidth: 0, minHeight: 0 }}>
         <ErrorBoundary name="Preview">
           <Preview />
         </ErrorBoundary>
       </div>
 
-      {/* Timeline */}
-      <div style={{ borderTop: "1px solid #333" }}>
+      {/* Timeline — row 4 col 2 (fixed-height bottom). */}
+      <div style={{ gridRow: 4, gridColumn: 2, borderTop: "1px solid #333", minWidth: 0, overflow: "hidden" }}>
         <ErrorBoundary name="Timeline">
           <Timeline />
         </ErrorBoundary>
       </div>
 
       {/* Chat pane — natural-language mutations via /api/chat sidecar */}
-      <div style={{ gridRow: "1/5", gridColumn: 3, borderLeft: "1px solid #333", overflow: "hidden" }}>
+      <div style={{ gridRow: "1/5", gridColumn: 3, borderLeft: "1px solid #333", overflowY: "auto", minHeight: 0 }}>
         <ErrorBoundary name="Chat">
           <ChatPane />
         </ErrorBoundary>

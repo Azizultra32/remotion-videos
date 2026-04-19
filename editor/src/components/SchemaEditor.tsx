@@ -9,6 +9,8 @@
 //   schema.options                is the public array of enum values
 //   wrapper._def.innerType        is the wrapped schema (optional/default/nullable)
 import type { z } from "zod";
+import { EASING_NAMES } from "@utils/easing";
+import { isEasingField } from "../utils/schemaFields";
 
 const fieldStyle: React.CSSProperties = {
   padding: "6px 8px",
@@ -68,6 +70,24 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
             onChange={(e) => onChange(e.target.value)}
             style={{ ...fieldStyle, padding: 2, height: 28 }}
           />
+        </Row>
+      );
+    }
+    if (isEasingField(name)) {
+      const current = String(value ?? "linear");
+      return (
+        <Row label={prettyName}>
+          <select
+            value={current}
+            onChange={(e) => onChange(e.target.value)}
+            style={fieldStyle}
+          >
+            {EASING_NAMES.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
         </Row>
       );
     }

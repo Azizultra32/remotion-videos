@@ -17,6 +17,7 @@ export default defineConfig({
     alias: {
       "@compositions": path.resolve(__dirname, "../src/compositions"),
       "@hooks": path.resolve(__dirname, "../src/hooks"),
+      "@utils": path.resolve(__dirname, "../src/utils"),
       // Force a single React copy. Without this, `../src/compositions/*.tsx`
       // resolves React from the repo root's node_modules while the editor's
       // entry uses its own copy — two Reacts means useContext() sees a null

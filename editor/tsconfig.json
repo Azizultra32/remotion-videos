@@ -16,7 +16,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@compositions/*": ["../src/compositions/*"]
+      "@compositions/*": ["../src/compositions/*"],
+      "@utils/*": ["../src/utils/*"]
     }
   },
   "include": ["src"],

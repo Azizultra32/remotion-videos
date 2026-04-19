@@ -119,19 +119,60 @@ if (!match) {
 }
 let prompt = match[1];
 
-// Simple placeholder substitution. The prompt uses `<audio-stem>` in
-// example filenames; those remain as documentation (showing the pattern).
-// We only substitute the three real placeholders at the top:
-//   <AUDIO_PATH>, <AUDIO_STEM>, <OUT_DIR>
-prompt = prompt
-  .replace(/<AUDIO_PATH>/g, audioPath)
-  .replace(/<AUDIO_STEM>/g, stem)
-  .replace(/<OUT_DIR>/g, analysisDir);
+// The master prompt in docs/waveform-analysis-protocol.md is authoritative
+// protocol, not a per-run invocation. It contains <audio-stem> as a literal
+// illustrative token in filename EXAMPLES — we don't substitute those; they
+// stay as documentation. Instead we APPEND a concrete "run now" directive
+// with resolved paths + an explicit instruction to proceed autonomously.
+// Without this footer, claude -p reads the protocol as a role definition
+// and politely asks what track to analyze instead of starting.
+prompt = prompt + `
+
+---
+
+## Run-specific parameters for THIS invocation
+
+- Repo root: ${repoRoot}
+- AUDIO_PATH = ${audioPath}
+- AUDIO_STEM = ${stem}
+- OUT_DIR = ${analysisDir}
+- MODE = production (complete Phase 1 and Phase 2)
+
+Setup is ALREADY complete — ${stem}-full.png and source.json are at
+OUT_DIR/. Do NOT re-run energy-bands.py or plot-pioneer.py --hide-events;
+proceed directly to Phase 1 visual review of the unmarked full PNG.
+
+All artifacts MUST land in OUT_DIR with filenames from the Filenames
+table in the protocol above. When generating Phase 1 zoom PNGs or
+Phase 2 segment slices/zooms, call plot-pioneer.py and
+slice-pioneer-png.py (the slicer accepts --stem for compliant names).
+Use absolute paths for --audio, --beats, --out, --out-dir.
+
+When dispatching fresh subagents for zoom confirmation, give each one
+ONLY the absolute path to its zoom PNG and its [t_start, t_end]
+window. Each subagent replies \`confirmed_sec: <float>\`. If Task is
+unavailable in this context, emulate isolation by reading each zoom
+in its own Read call and treating that reading as the confirmation.
+
+After Phase 2 completes and ${stem}-phase2-events.json is written to
+OUT_DIR, the CLI wrapper will copy it to
+${projectDir}/analysis.json. No action required from you.
+
+Begin now. Do NOT ask for confirmation or clarification. Proceed
+autonomously through Phase 1 then Phase 2.
+`;
 
 console.log("");
 console.log("[mv:analyze] spawning claude -p (multi-agent Phase 1 + Phase 2; this takes 5-10 min)");
 
-const child = spawn("claude", ["-p", prompt], { stdio: "inherit", cwd: repoRoot });
+// --permission-mode bypassPermissions lets the child execute Read/Bash/Write
+// without per-call approval prompts. Without this, claude -p sits waiting
+// on stdin for approvals the CLI has no way to answer.
+const child = spawn(
+  "claude",
+  ["-p", "--permission-mode", "bypassPermissions", prompt],
+  { stdio: "inherit", cwd: repoRoot },
+);
 
 child.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "ENOENT") {

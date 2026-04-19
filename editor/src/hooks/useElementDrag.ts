@@ -46,6 +46,32 @@ export const useElementDrag = (elementId: string, pxPerSec: number) => {
       dragStart.current = null;
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      // If this was a pipeline element, persist the new time back to
+      // analysis.json. Without this, SSE's next tick restores the event
+      // at its authoritative original timestamp and the drag appears
+      // to revert.
+      const post = useEditorStore.getState();
+      const el = post.elements.find((x) => x.id === elementId);
+      if (!el || el.origin !== "pipeline") return;
+      const m = /^pipeline-(.+)-(\d+(?:\.\d+)?)$/.exec(el.id);
+      if (!m) return;
+      const stem = m[1];
+      const origSec = Number(m[2]);
+      // Pipeline elements are 2-s windows centered on the event.
+      const newSec = el.startSec + el.durationSec / 2;
+      if (!Number.isFinite(newSec) || Math.abs(newSec - origSec) < 0.05) return;
+      const beat = post.beatData;
+      const currentEvents = (beat?.phase2_events_sec?.length
+        ? beat.phase2_events_sec
+        : beat?.phase1_events_sec) ?? [];
+      const nextEvents = currentEvents
+        .filter((t) => Math.abs(t - origSec) > 0.05)
+        .concat(newSec);
+      void fetch("/api/analyze/events/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stem, events: nextEvents }),
+      }).catch(() => { /* SSE won't refresh; local store edit still stands */ });
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);

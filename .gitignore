@@ -35,3 +35,9 @@ estimations/
 # the editor's /api/analyze/status SSE. Per-machine, per-run; not versioned.
 .analyze-status.json
 projects/*/.analyze-status.json
+
+# Subagent leakage: `claude -p` children from mv:analyze sometimes write
+# .claude/settings.local.json into a project subdir if their cwd is set
+# there. These should never be versioned.
+projects/**/.claude/
+.claude/scheduled_tasks.lock

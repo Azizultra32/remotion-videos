@@ -285,24 +285,77 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
           return events.map((t, i) => {
             const left = (t / totalSec) * 100;
             const pipelineId = `pipeline-${stem}-${t.toFixed(3)}`;
+            const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+              e.stopPropagation();
+              e.preventDefault();
+              // Select + seek on click. Drag commits on up if moved.
+              useEditorStore.getState().selectElement(pipelineId);
+              useEditorStore.getState().setCurrentTime(t);
+              const target = e.currentTarget;
+              const parent = target.parentElement;
+              if (!parent) return;
+              const rect = parent.getBoundingClientRect();
+              const startX = e.clientX;
+              const startSec = t;
+              let dragged = false;
+              let newSec = t;
+              const onMove = (ev: PointerEvent) => {
+                const dx = ev.clientX - startX;
+                if (Math.abs(dx) > 2) dragged = true;
+                if (!dragged) return;
+                newSec = Math.max(
+                  0,
+                  Math.min(totalSec, startSec + (dx / rect.width) * totalSec),
+                );
+                // Live preview: move the corresponding pipeline element so
+                // both the waveform line (redrawn from the events list on
+                // POST completion) and the timeline element track the drag.
+                const eid = pipelineId;
+                const els = useEditorStore.getState().elements;
+                const el = els.find((x) => x.id === eid);
+                if (el) {
+                  useEditorStore
+                    .getState()
+                    .updateElement(eid, {
+                      startSec: Math.max(0, newSec - el.durationSec / 2),
+                    });
+                }
+              };
+              const onUp = () => {
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", onUp);
+                if (!dragged) return;
+                if (Math.abs(newSec - startSec) < 0.05) return;
+                const events = (beatData.phase2_events_sec?.length
+                  ? beatData.phase2_events_sec
+                  : beatData.phase1_events_sec) ?? [];
+                const next = events
+                  .filter((x) => Math.abs(x - startSec) > 0.05)
+                  .concat(newSec);
+                void fetch("/api/analyze/events/update", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ stem, events: next }),
+                }).catch(() => {});
+              };
+              window.addEventListener("pointermove", onMove);
+              window.addEventListener("pointerup", onUp);
+            };
             return (
               <div
                 key={`hit-${i}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  useEditorStore.getState().selectElement(pipelineId);
-                  useEditorStore.getState().setCurrentTime(t);
-                }}
-                title={`Event ${i + 1} at ${t.toFixed(2)}s - click to select, then Delete to remove`}
+                onPointerDown={onPointerDown}
+                title={`Event ${i + 1} at ${t.toFixed(2)}s - click to select, drag to move, Delete to remove`}
                 style={{
                   position: "absolute",
                   left: `calc(${left}% - 6px)`,
                   top: 0,
                   width: 12,
                   height: "100%",
-                  cursor: "pointer",
+                  cursor: "ew-resize",
                   background: "transparent",
                   zIndex: 2,
+                  touchAction: "none",
                 }}
               />
             );

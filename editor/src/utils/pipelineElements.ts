@@ -39,7 +39,7 @@ export const makePipelineElement = (
     trackIndex: 0,
     startSec,
     durationSec: 2,
-    label: `EVENT ${eventSec.toFixed(1)}s`,
+    label: `ZETA ${eventSec.toFixed(1)}s`,
     props: {
       text: "",
       x: 50,

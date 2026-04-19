@@ -1,0 +1,34 @@
+{
+  "source_audio": "love-in-traffic-phase1-confirmed-full.png",
+  "source_png": "love-in-traffic-phase1-confirmed-full.png",
+  "segments": [
+    {
+      "filename": "love-in-traffic-phase2-segment-01.png",
+      "start_sec": 0.0,
+      "end_sec": 0.0,
+      "start_px": 0,
+      "end_px": 100
+    },
+    {
+      "filename": "love-in-traffic-phase2-segment-02.png",
+      "start_sec": 0.0,
+      "end_sec": 0.0,
+      "start_px": 106,
+      "end_px": 748
+    },
+    {
+      "filename": "love-in-traffic-phase2-segment-03.png",
+      "start_sec": 0.0,
+      "end_sec": 0.0,
+      "start_px": 754,
+      "end_px": 1413
+    },
+    {
+      "filename": "love-in-traffic-phase2-segment-04.png",
+      "start_sec": 0.0,
+      "end_sec": 0.0,
+      "start_px": 1419,
+      "end_px": 1473
+    }
+  ]
+}

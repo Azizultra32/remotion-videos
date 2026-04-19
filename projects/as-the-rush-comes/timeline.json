@@ -49,36 +49,12 @@
       }
     },
     {
-      "id": "pipeline-as-the-rush-comes-147.500",
+      "id": "pipeline-as-the-rush-comes-150.000",
       "type": "text.bellCurve",
       "trackIndex": 0,
-      "startSec": 146.5,
+      "startSec": 148.8863,
       "durationSec": 2,
-      "label": "EVENT 147.5s",
-      "props": {
-        "text": "",
-        "x": 50,
-        "y": 50,
-        "sigmaSec": 0.45,
-        "zoomFrom": 0.85,
-        "zoomTo": 1,
-        "textColor": "#ffffff",
-        "fontSize": 120,
-        "fontWeight": 800,
-        "fontFamily": "ui-serif, Georgia, serif",
-        "letterSpacing": "0.08em",
-        "bassGlowMax": 30
-      },
-      "origin": "pipeline",
-      "locked": true
-    },
-    {
-      "id": "pipeline-as-the-rush-comes-250.000",
-      "type": "text.bellCurve",
-      "trackIndex": 0,
-      "startSec": 249,
-      "durationSec": 2,
-      "label": "EVENT 250.0s",
+      "label": "EVENT 150.0s",
       "props": {
         "text": "",
         "x": 50,
@@ -119,6 +95,54 @@
       }
     },
     {
+      "id": "pipeline-as-the-rush-comes-268.000",
+      "type": "text.bellCurve",
+      "trackIndex": 0,
+      "startSec": 266.7973,
+      "durationSec": 2,
+      "label": "EVENT 268.0s",
+      "props": {
+        "text": "",
+        "x": 50,
+        "y": 50,
+        "sigmaSec": 0.45,
+        "zoomFrom": 0.85,
+        "zoomTo": 1,
+        "textColor": "#ffffff",
+        "fontSize": 120,
+        "fontWeight": 800,
+        "fontFamily": "ui-serif, Georgia, serif",
+        "letterSpacing": "0.08em",
+        "bassGlowMax": 30
+      },
+      "origin": "pipeline",
+      "locked": true
+    },
+    {
+      "id": "pipeline-as-the-rush-comes-356.000",
+      "type": "text.bellCurve",
+      "trackIndex": 0,
+      "startSec": 354.9402,
+      "durationSec": 2,
+      "label": "EVENT 356.0s",
+      "props": {
+        "text": "",
+        "x": 50,
+        "y": 50,
+        "sigmaSec": 0.45,
+        "zoomFrom": 0.85,
+        "zoomTo": 1,
+        "textColor": "#ffffff",
+        "fontSize": 120,
+        "fontWeight": 800,
+        "fontFamily": "ui-serif, Georgia, serif",
+        "letterSpacing": "0.08em",
+        "bassGlowMax": 30
+      },
+      "origin": "pipeline",
+      "locked": true
+    },
+    {
       "id": "flash-4",
       "type": "text.bellCurve",
       "trackIndex": 0,
@@ -141,12 +165,12 @@
       }
     },
     {
-      "id": "pipeline-as-the-rush-comes-433.500",
+      "id": "pipeline-as-the-rush-comes-420.000",
       "type": "text.bellCurve",
       "trackIndex": 0,
-      "startSec": 432.5,
+      "startSec": 419.1202,
       "durationSec": 2,
-      "label": "EVENT 433.5s",
+      "label": "EVENT 420.0s",
       "props": {
         "text": "",
         "x": 50,
@@ -207,6 +231,30 @@
         "letterSpacing": "0.08em",
         "bassGlowMax": 20
       }
+    },
+    {
+      "id": "pipeline-as-the-rush-comes-538.000",
+      "type": "text.bellCurve",
+      "trackIndex": 0,
+      "startSec": 536.7757,
+      "durationSec": 2,
+      "label": "EVENT 538.0s",
+      "props": {
+        "text": "",
+        "x": 50,
+        "y": 50,
+        "sigmaSec": 0.45,
+        "zoomFrom": 0.85,
+        "zoomTo": 1,
+        "textColor": "#ffffff",
+        "fontSize": 120,
+        "fontWeight": 800,
+        "fontFamily": "ui-serif, Georgia, serif",
+        "letterSpacing": "0.08em",
+        "bassGlowMax": 30
+      },
+      "origin": "pipeline",
+      "locked": true
     }
   ]
 }

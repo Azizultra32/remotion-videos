@@ -5,7 +5,6 @@
 import { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import { useEditorStore } from "../store";
-import { stemFromAudioSrc } from "../utils/url";
 
 type Props = {
   audioUrl: string;
@@ -17,14 +16,6 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   const wsRef = useRef<WaveSurfer | null>(null);
   const [ready, setReady] = useState(false);
   const [duration, setDuration] = useState(0);
-  // URL of the confirmed-full PNG produced by the waveform-analysis
-  // pipeline (phase2-confirmed-full.png with all confirmed event lines
-  // drawn in). When present, we display it as the Scrubber's waveform
-  // instead of wavesurfer's generic render + SVG line overlay — the
-  // PNG already has the canonical lines placed by the multi-agent
-  // workflow. Falls back to phase1-confirmed-full if phase2 hasn't
-  // been produced yet; null when neither exists (pre-analysis).
-  const [confirmedPngUrl, setConfirmedPngUrl] = useState<string | null>(null);
 
   // Granular selectors — only re-render when THESE specific fields change.
   // currentTimeSec is deliberately NOT subscribed as state: it changes 24 Hz
@@ -142,27 +133,6 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   // pipeline. Prefer phase-2 (has all confirmed events merged); fall
   // back to phase-1 (Phase 2 not run yet); null if neither exists.
   // HEAD request is cheap; the sidecar's /api/projects/* handler
-  // returns 404 fast for missing files.
-  useEffect(() => {
-    const stem = stemFromAudioSrc(audioSrc);
-    if (!stem) { setConfirmedPngUrl(null); return; }
-    let cancelled = false;
-    const probe = async (url: string): Promise<boolean> => {
-      try {
-        const r = await fetch(url, { method: "HEAD" });
-        return r.ok;
-      } catch { return false; }
-    };
-    (async () => {
-      const p2 = `/api/projects/${stem}/analysis/${stem}-phase2-confirmed-full.png`;
-      const p1 = `/api/projects/${stem}/analysis/${stem}-phase1-confirmed-full.png`;
-      if (await probe(p2)) { if (!cancelled) setConfirmedPngUrl(p2); return; }
-      if (await probe(p1)) { if (!cancelled) setConfirmedPngUrl(p1); return; }
-      if (!cancelled) setConfirmedPngUrl(null);
-    })();
-    return () => { cancelled = true; };
-  }, [audioSrc]);
-
   const totalSec = duration || compositionDuration || 1;
 
   return (
@@ -206,33 +176,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
       <div style={{ position: "relative", width: "100%", height }}>
         <div ref={containerRef} style={{ width: "100%", height }} />
 
-        {/* Confirmed-full PNG from the analysis pipeline. When present,
-            it's the canonical visualization — shows the multi-agent
-            workflow's final line placements directly. Pointer-events:
-            none so clicks pass through to wavesurfer below for
-            click-to-seek. zIndex: 2 so it sits over wavesurfer but
-            below the playhead. */}
-        {confirmedPngUrl && (
-          <img
-            src={confirmedPngUrl}
-            alt="Confirmed waveform with analysis lines"
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "fill",
-              pointerEvents: "none",
-              zIndex: 2,
-              display: "block",
-            }}
-          />
-        )}
-
-        {/* Overlays drawn in the same coordinate space as the waveform.
-            Only shown when we fell back to wavesurfer — if the confirmed
-            PNG is present, it already has these lines drawn in. */}
-        {ready && beatData && !confirmedPngUrl && (
+        {/* Event lines + breakdown regions + drop markers, drawn in
+            the same coordinate space as the waveform below. */}
+        {ready && beatData && (
           <svg
             style={{
               position: "absolute",

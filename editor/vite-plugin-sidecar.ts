@@ -781,6 +781,72 @@ const handleAnalyzeStatus = async (
   }, 20000);
 };
 
+// POST /api/analyze/run  {stem}
+// Spawns `npm run mv:analyze -- --project <stem>` as a detached child so the
+// dev server doesn't block for the 5–10 min analysis wall clock. Status is
+// surfaced through the same .analyze-status.json → SSE channel the
+// StageStrip already reads from. Returns 202 immediately if kickoff
+// succeeded, 409 if another run is already in flight for this stem.
+const handleAnalyzeRun = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const stem: string = String(body?.stem ?? "").trim();
+  if (!stem || stem.includes("/") || stem.includes("..")) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: "body.stem required (safe path segment)" }));
+    return;
+  }
+  const repoRoot = path.resolve(__dirname, "..");
+  const statusFile = path.join(repoRoot, "projects", stem, ".analyze-status.json");
+  try {
+    const existing = await fs.readFile(statusFile, "utf8");
+    const parsed = JSON.parse(existing);
+    if (parsed && parsed.startedAt && !parsed.endedAt) {
+      res.statusCode = 409;
+      res.end(JSON.stringify({ error: "analysis already in flight", state: parsed }));
+      return;
+    }
+  } catch { /* no current run — fine to start */ }
+
+  const { spawn: spawnChild } = await import("node:child_process");
+  const child = spawnChild("npm", ["run", "mv:analyze", "--", "--project", stem], {
+    cwd: repoRoot,
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env },
+  });
+  child.unref();
+  res.statusCode = 202;
+  res.end(JSON.stringify({ stem, pid: child.pid }));
+};
+
+// POST /api/analyze/clear  {stem}
+// Sets analysis.json to an empty events list so the SSE EventSource next
+// tick pushes `{}` → replacePipelineElements(stem, []) → merge removes all
+// pipeline-origin elements. User-origin elements and on-disk artifacts
+// (analysis/**/*.png, phase*-events.json) are NOT touched; use Re-analyze
+// to regenerate.
+const handleAnalyzeClear = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const stem: string = String(body?.stem ?? "").trim();
+  if (!stem || stem.includes("/") || stem.includes("..")) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: "body.stem required (safe path segment)" }));
+    return;
+  }
+  const repoRoot = path.resolve(__dirname, "..");
+  const analysisFile = path.join(repoRoot, "projects", stem, "analysis.json");
+  const empty = { source_audio: "", phase2_events_sec: [] as number[] };
+  await fs.writeFile(analysisFile, JSON.stringify(empty, null, 2) + "\n", "utf8");
+  res.statusCode = 200;
+  res.end(JSON.stringify({ stem, cleared: true }));
+};
+
 const handleChat = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -928,6 +994,8 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/projects/", wrap("GET", handleProjectFile));
     server.middlewares.use("/api/analyze/events/", wrap("GET", handleAnalyzeEvents));
     server.middlewares.use("/api/analyze/status/", wrap("GET", handleAnalyzeStatus));
+    server.middlewares.use("/api/analyze/run", wrap("POST", handleAnalyzeRun));
+    server.middlewares.use("/api/analyze/clear", wrap("POST", handleAnalyzeClear));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));

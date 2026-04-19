@@ -19,8 +19,12 @@ const chipStyle = (active: boolean): React.CSSProperties => ({
 });
 
 export const EventCycler = () => {
+  // All hooks must run unconditionally — no early return before the last
+  // store subscription below. Otherwise React sees a changing hook count
+  // between renders and throws "Rendered more hooks than previous render".
   const beatData = useEditorStore((s) => s.beatData);
   const elements = useEditorStore((s) => s.elements);
+  const currentTimeSec = useEditorStore((s) => s.currentTimeSec);
   const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
   const selectElement = useEditorStore((s) => s.selectElement);
 
@@ -30,7 +34,6 @@ export const EventCycler = () => {
       : beatData?.phase1_events_sec) ?? [];
   if (!events.length) return null;
 
-  const currentTimeSec = useEditorStore((s) => s.currentTimeSec);
   const activeIndex = events.findIndex((t, i) => {
     const next = events[i + 1] ?? Number.POSITIVE_INFINITY;
     return currentTimeSec >= t - 0.5 && currentTimeSec < next - 0.5;

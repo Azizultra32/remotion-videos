@@ -128,8 +128,27 @@ export const useTimelineSync = () => {
         }
         const data = (await resp.json()) as Partial<OnDiskTimeline>;
         if (cancelled) return;
+        const fromFile = Array.isArray(data.elements) ? data.elements : [];
+        // Preserve any pipeline-origin elements already pushed by the SSE
+        // EventSource — if SSE won the race, replacing wholesale would
+        // clobber those placeholders until the next external mutation.
+        // The file is authoritative for user-origin elements; SSE is
+        // authoritative for pipeline-origin. Merge accordingly.
+        const fileHasPipeline = fromFile.some(
+          (e) => e.origin === "pipeline",
+        );
+        const currentPipeline = fileHasPipeline
+          ? []
+          : useEditorStore
+              .getState()
+              .elements.filter((e) => e.origin === "pipeline");
+        const mergedElements = fileHasPipeline
+          ? fromFile
+          : [...fromFile, ...currentPipeline].sort(
+              (a, b) => a.startSec - b.startSec,
+            );
         useEditorStore.setState({
-          elements: Array.isArray(data.elements) ? data.elements : [],
+          elements: mergedElements,
           fps: typeof data.fps === "number" ? data.fps : 24,
           compositionDuration:
             typeof data.compositionDuration === "number"

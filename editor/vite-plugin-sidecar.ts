@@ -644,14 +644,23 @@ const handleAnalyzeEvents = async (
   });
 
   const emit = async () => {
-    let data: string;
+    // SSE protocol: every continuation line in the message body must be
+    // prefixed with `data:`. Pretty-printed JSON contains real newlines,
+    // so the browser's EventSource only receives the first line ("{")
+    // and JSON.parse throws. Parse+stringify collapses to one line.
+    let payload: string;
     try {
-      data = await fs.readFile(file, "utf8");
+      const raw = await fs.readFile(file, "utf8");
+      try {
+        payload = JSON.stringify(JSON.parse(raw));
+      } catch {
+        payload = JSON.stringify({ error: "invalid-json" });
+      }
     } catch {
-      data = "{}";
+      payload = "{}";
     }
     try {
-      res.write(`event: events\ndata: ${data}\n\n`);
+      res.write(`event: events\ndata: ${payload}\n\n`);
     } catch {
       // connection closed between readFile and write; ignore
     }
@@ -726,14 +735,19 @@ const handleAnalyzeStatus = async (
   });
 
   const emit = async () => {
-    let data: string;
+    let payload: string;
     try {
-      data = await fs.readFile(file, "utf8");
+      const raw = await fs.readFile(file, "utf8");
+      try {
+        payload = JSON.stringify(JSON.parse(raw));
+      } catch {
+        payload = "null";
+      }
     } catch {
-      data = "null";
+      payload = "null";
     }
     try {
-      res.write(`event: status\ndata: ${data}\n\n`);
+      res.write(`event: status\ndata: ${payload}\n\n`);
     } catch {
       // connection closed
     }

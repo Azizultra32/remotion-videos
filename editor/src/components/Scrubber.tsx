@@ -93,7 +93,10 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
         ws.setVolume(0);
       } catch {}
       try {
-        (ws as any).stop?.();
+        // wavesurfer v7\'s public type surface omits stop() on some minor
+        // releases despite it being present at runtime. Feature-detect via
+        // optional chaining + swallow.
+        (ws as unknown as { stop?: () => void }).stop?.();
       } catch {}
       const media = ws.getMediaElement?.();
       if (media) {
@@ -132,9 +135,12 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
         el.style.left = `${pct}%`;
       }
       const ws = wsRef.current;
-      if (ws && typeof (ws as any).setTime === "function") {
+      // wavesurfer v7 types don\'t expose setTime across all minor versions;
+      // feature-detect at call site rather than pinning to a specific version.
+      const wsWithSetTime = ws as unknown as { setTime?: (t: number) => void };
+      if (ws && typeof wsWithSetTime.setTime === "function") {
         try {
-          (ws as any).setTime(t);
+          wsWithSetTime.setTime!(t);
         } catch {
           // wavesurfer can throw after unmount or src removal; harmless.
         }

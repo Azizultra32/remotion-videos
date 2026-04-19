@@ -89,7 +89,12 @@ export const Preview = () => {
     const handler = (e: { detail: { frame: number } }) => {
       useEditorStore.setState({ currentTimeSec: e.detail.frame / fps });
     };
+    // Remotion Player types addEventListener per-event and expects a narrower
+    // handler signature; our `handler` closes over fps and the ref. Both casts
+    // point at the same library-type gap.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     player.addEventListener("frameupdate", handler as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return () => player.removeEventListener("frameupdate", handler as any);
   }, [fps]);
 
@@ -101,6 +106,9 @@ export const Preview = () => {
       <Player
         ref={playerRef}
         component={MusicVideo}
+        // inputProps typing follows the component\'s schema generic; see Root.tsx
+        // for the same mismatch against Composition\'s schema prop.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         inputProps={inputProps as any}
         compositionWidth={848}
         compositionHeight={480}

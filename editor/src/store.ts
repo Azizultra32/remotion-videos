@@ -85,7 +85,13 @@ export const useEditorStore = create<EditorState>()(
       //     migrate — absent fields read as origin="user", locked=false,
       //     which is the correct default for existing persisted elements.
       version: 6,
+      // Zustand migrate returns the persisted DATA slice; zustand internally
+      // re-merges the current store\'s actions after hydrate. Typing the return
+      // as Partial<EditorState> fails because persisted may be an OLDER shape;
+      // typing it as unknown fails zustand\'s return-type check. `as any` here
+      // is the pragmatic boundary.
       migrate: (persisted, version) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (!persisted || typeof persisted !== "object") return persisted as any;
         let p = persisted as Record<string, unknown>;
         if (version < 4) {
@@ -110,6 +116,7 @@ export const useEditorStore = create<EditorState>()(
           // Pipeline-origin/locked fields added. Existing persisted elements are
           // user-origin unlocked by default; no mutation needed.
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return p as any;
       },
     },

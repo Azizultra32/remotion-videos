@@ -398,11 +398,17 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="MusicVideo"
         component={MusicVideo}
+        // Remotion's <Composition schema> is typed against z.ZodObject with
+        // specific generics; our imported musicVideoSchema satisfies it at
+        // runtime but TS's zod-4 generic propagation drops here. Same for
+        // defaultProps. Cast isolates the mismatch to this call site.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         schema={musicVideoSchema as any}
         durationInFrames={24 * 300}
         fps={24}
         width={848}
         height={480}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         defaultProps={defaultMusicVideoProps as any}
       />
       <Composition

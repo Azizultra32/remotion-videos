@@ -93,7 +93,11 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
           elementProgress,
         };
         const Renderer = mod.Renderer;
-        return <Renderer key={el.id} element={el as any} ctx={ctx} />;
+        // el is a discriminated union across the 16 element types; the registry
+        // lookup erases the discriminant, so each Renderer narrows its own
+        // prop at call time. Casting to `any` is the cleanest way to pass
+        // through without re-narrowing at every dispatch.
+        return <Renderer key={el.id} element={el as unknown as Parameters<typeof Renderer>[0]["element"]} ctx={ctx} />;
       })}
     </AbsoluteFill>
   );

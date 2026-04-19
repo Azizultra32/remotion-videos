@@ -50,7 +50,10 @@ export const ElementDetail = () => {
     beatData,
     snapMode,
   } = useEditorStore();
+  const setElementLocked = useEditorStore((s) => s.setElementLocked);
   const element = elements.find((e) => e.id === selectedElementId);
+  const isLocked = !!element?.locked;
+  const origin = element?.origin ?? "user";
 
   if (!element) {
     return (
@@ -90,6 +93,44 @@ export const ElementDetail = () => {
 
   return (
     <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+      {element && (
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            alignItems: "center",
+            marginBottom: 8,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9,
+              padding: "2px 6px",
+              border: "1px solid #555",
+              borderRadius: 2,
+              color: "#ccc",
+              letterSpacing: "0.08em",
+            }}
+          >
+            ORIGIN: {origin.toUpperCase()}
+          </span>
+          <button
+            onClick={() => setElementLocked(element.id, !isLocked)}
+            style={{
+              fontSize: 10,
+              padding: "2px 8px",
+              background: isLocked ? "#2196F3" : "#333",
+              color: "#fff",
+              border: `1px solid ${isLocked ? "#2196F3" : "#555"}`,
+              borderRadius: 3,
+              cursor: "pointer",
+            }}
+            title="Locked elements resist deletion and snap-to-beat when moved"
+          >
+            {isLocked ? "UNLOCK" : "LOCK"}
+          </button>
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
           {element.label}{" "}

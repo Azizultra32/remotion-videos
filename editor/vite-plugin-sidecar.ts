@@ -1118,6 +1118,72 @@ const handleAnalyzeClear = async (
 // as confirmed (phase 2 equivalent). All other fields preserved. Rejects if
 // a mv:analyze run is in flight (same lock as /api/analyze/clear). SSE
 // watcher auto-pushes the new events to every connected client.
+// POST /api/analyze/cancel  {stem}
+// Kills the in-flight mv:analyze child for a stem. Uses pgrep to find the
+// npm wrapper process whose args contain "--project <stem>"; sends SIGTERM
+// to the process group so energy-bands.py / plot-pioneer.py / claude -p
+// descendants all die together. Writes a final status frame with
+// phase:"cancelled" so the editor's SSE handler clears Running state.
+const handleAnalyzeCancel = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const stem: string = String(body?.stem ?? "").trim();
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.stem must match /^[a-z0-9_-]+$/i" }));
+    return;
+  }
+  const { spawn: spawnChild } = await import("node:child_process");
+  const killed: number[] = [];
+  try {
+    // pgrep -f matches the full command line; mv:analyze args include the
+    // stem so this isolates the per-stem run.
+    const pgrep = spawnChild("pgrep", ["-f", `mv:analyze .*--project ${stem}`], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let stdout = "";
+    pgrep.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+    await new Promise<void>((resolve) => pgrep.on("exit", () => resolve()));
+    const pids = stdout.trim().split(/\s+/).filter(Boolean).map(Number).filter(Number.isFinite);
+    for (const pid of pids) {
+      try {
+        // Negative pid targets the process group (all descendants).
+        process.kill(-pid, "SIGTERM");
+        killed.push(pid);
+      } catch {
+        // Process already gone or no perms — continue.
+      }
+    }
+  } catch {
+    /* pgrep unavailable — fall through with empty killed */
+  }
+
+  // Record a terminal status frame so SSE clients flip out of Running.
+  const repoRoot = path.resolve(__dirname, "..");
+  const projectDir = path.join(repoRoot, "projects", stem);
+  const statusFile = path.join(projectDir, ".analyze-status.json");
+  let startedAt = Date.now();
+  try {
+    const raw = await fs.readFile(statusFile, "utf8");
+    const st = JSON.parse(raw);
+    if (st?.startedAt) startedAt = st.startedAt;
+  } catch { /* fine */ }
+  const tmp = statusFile + ".tmp";
+  const now = Date.now();
+  await fs.writeFile(
+    tmp,
+    JSON.stringify({ startedAt, phase: "cancelled", stage: null, updatedAt: now, endedAt: now }, null, 2),
+  );
+  await fs.rename(tmp, statusFile);
+
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ stem, killed }));
+};
+
 const handleAnalyzeEventsUpdate = async (
   req: IncomingMessage,
   res: ServerResponse,
@@ -1332,6 +1398,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/projects/create", wrap("POST", handleProjectCreate));
     server.middlewares.use("/api/projects/create-from-path", wrap("POST", handleProjectCreateFromPath));
     server.middlewares.use("/api/analyze/clear", wrap("POST", handleAnalyzeClear));
+    server.middlewares.use("/api/analyze/cancel", wrap("POST", handleAnalyzeCancel));
     server.middlewares.use("/api/analyze/events/update", wrap("POST", handleAnalyzeEventsUpdate));
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));

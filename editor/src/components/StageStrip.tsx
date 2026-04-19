@@ -85,6 +85,14 @@ export const StageStrip = () => {
   const [error, setError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const retryRef = useRef<{ attempt: number; timer: number | null }>({ attempt: 0, timer: null });
+  // Local "I just clicked Run" flag. Flips true immediately on Re-analyze
+  // click; cleared on the first SSE status frame OR on a 60s timeout
+  // (stale SSE catches itself). Gives the user immediate visual feedback
+  // even when the sidecar hasn't written the first status frame yet.
+  const [kicking, setKicking] = useState(false);
+  // now() ticker — re-renders once per second so the "started X seconds ago"
+  // + watchdog comparisons update without a status frame arriving.
+  const [nowMs, setNowMs] = useState<number>(Date.now());
 
   useEffect(() => {
     setStatus(null);
@@ -100,8 +108,10 @@ export const StageStrip = () => {
           try {
             const parsed = e.data === "null" ? null : (JSON.parse(e.data) as Status);
             setStatus(parsed);
+            // Any live status frame means the run is real; stop showing
+            // the local "starting..." indicator.
+            setKicking(false);
             if (parsed && parsed.endedAt) setBusy(null);
-            // Successful frame resets the retry backoff.
             retryRef.current.attempt = 0;
           } catch { /* ignore malformed */ }
         });
@@ -130,6 +140,22 @@ export const StageStrip = () => {
     };
   }, [stem]);
 
+  // Tick every second so "X seconds ago" + watchdog thresholds update
+  // without needing a status frame or user interaction.
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Safety net: if kicking stays true for 60s with no SSE frame, force-clear
+  // it so the user isn't locked out. At that point we've shown a stale
+  // "starting..." for a minute and the watchdog UI takes over.
+  useEffect(() => {
+    if (!kicking) return;
+    const id = window.setTimeout(() => setKicking(false), 60_000);
+    return () => window.clearTimeout(id);
+  }, [kicking]);
+
   if (!stem) return null;
 
   const phase1Count = beatData?.phase1_events_sec?.length ?? 0;
@@ -148,6 +174,7 @@ export const StageStrip = () => {
   const runAnalysis = async () => {
     if (!stem || isRunning || busy) return;
     setBusy("run");
+    setKicking(true);
     setError(null);
     try {
       const r = await fetch("/api/analyze/run", {
@@ -159,11 +186,32 @@ export const StageStrip = () => {
         const j = await r.json().catch(() => ({}));
         setError(j?.error ?? `HTTP ${r.status}`);
         setBusy(null);
+        setKicking(false);
       }
-      // Success → busy clears when SSE delivers endedAt.
+      // Success → busy clears when SSE delivers endedAt; kicking clears
+      // on first status frame via the SSE listener above.
     } catch (err) {
       setError(String(err));
       setBusy(null);
+      setKicking(false);
+    }
+  };
+
+  const cancelRun = async () => {
+    if (!stem) return;
+    try {
+      await fetch("/api/analyze/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stem }),
+      });
+      setKicking(false);
+      // Status frame with phase:"cancelled" will arrive via SSE and clear
+      // isRunning, but also clear locally so the UI flips instantly even
+      // if SSE is dragging.
+      setBusy(null);
+    } catch (err) {
+      setError(String(err));
     }
   };
 
@@ -326,6 +374,64 @@ export const StageStrip = () => {
         </span>
       )}
 
+      {/* Kick-off indicator: shown from click until the first SSE frame
+          arrives. Gives the user "yes, I heard you" feedback even when
+          the sidecar hasn't written .analyze-status.json yet. */}
+      {kicking && !status && (
+        <span
+          style={{
+            padding: "3px 8px",
+            fontSize: 10,
+            fontFamily: "monospace",
+            background: "#1e3a5a",
+            color: "#9cf",
+            border: "1px solid #3a6ca8",
+            borderRadius: 3,
+            letterSpacing: "0.06em",
+            animation: "pulse 1.2s infinite",
+          }}
+        >
+          STARTING...
+        </span>
+      )}
+
+      {/* Watchdog: no status update in > 60s while run is nominally in-flight.
+          Surfaces the "is this actually running?" question to the user and
+          encourages Cancel + retry. */}
+      {(() => {
+        if (!isRunning || !status) return null;
+        const staleMs = nowMs - status.updatedAt;
+        if (staleMs < 60_000) return null;
+        return (
+          <span
+            style={{
+              padding: "3px 8px",
+              fontSize: 10,
+              fontFamily: "monospace",
+              background: "#3a2a10",
+              color: "#f9c47a",
+              border: "1px solid #a87c30",
+              borderRadius: 3,
+              letterSpacing: "0.06em",
+            }}
+            title={`No progress update from the analysis run in ${Math.floor(staleMs / 1000)}s. Either the run genuinely takes a while on this stage, the SSE stream is stuck, or mv:analyze is hung. Use Cancel + retry if you want to kill it.`}
+          >
+            NO UPDATE {Math.floor(staleMs / 1000)}s
+          </span>
+        );
+      })()}
+
+      {/* Last-run timestamp: when a run has ended (success or cancel), show
+          when. Clears the "am I looking at stale UI?" ambiguity. */}
+      {status?.endedAt && !isRunning && (
+        <span
+          style={{ fontSize: 10, color: "#666", fontFamily: "monospace" }}
+          title={`Run ${status.phase}. Last status update at ${new Date(status.updatedAt).toLocaleTimeString()}.`}
+        >
+          {status.phase === "cancelled" ? "CANCELLED" : status.phase === "failed" ? "FAILED" : "DONE"} {new Date(status.endedAt).toLocaleTimeString()}
+        </span>
+      )}
+
       {error && (
         <span style={{ fontSize: 10, color: "#f66", fontFamily: "monospace" }}>
           {error}
@@ -357,18 +463,23 @@ export const StageStrip = () => {
         Add event at playhead
       </button>
 
-      <button
-        onClick={runAnalysis}
-        disabled={isRunning || busy === "run"}
-        title={
-          isRunning
-            ? "Analysis already running."
-            : "Run npm run mv:analyze in the background. Takes 5–10 min. Live progress streams here."
-        }
-        style={btnStyle("primary", isRunning || busy === "run")}
-      >
-        {busy === "run" ? "Starting…" : isRunning ? "Running…" : phase2Count > 0 ? "Re-analyze" : "Analyze"}
-      </button>
+      {isRunning || busy === "run" || kicking ? (
+        <button
+          onClick={cancelRun}
+          title="Kill the in-flight mv:analyze process group and mark the run cancelled. Artifacts already written are kept."
+          style={btnStyle("danger", false)}
+        >
+          Cancel
+        </button>
+      ) : (
+        <button
+          onClick={runAnalysis}
+          title="Run npm run mv:analyze in the background. Takes 5-10 min. Live progress streams here."
+          style={btnStyle("primary", false)}
+        >
+          {phase2Count > 0 ? "Re-analyze" : "Analyze"}
+        </button>
+      )}
 
       <button
         onClick={clearEvents}

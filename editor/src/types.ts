@@ -13,6 +13,12 @@ export type TimelineElement = {
   durationSec: number;
   label: string;
   props: Record<string, unknown>; // element-specific (words, font, color, spring config, etc.)
+  // Provenance + mutation guard. Absent fields mean origin="user" + unlocked,
+  // which is the correct default for everything created via the Sidebar.
+  // Pipeline-injected placeholders (Sub-project 2) set origin="pipeline" and
+  // locked=true so they resist accidental delete/drag.
+  origin?: "pipeline" | "user";
+  locked?: boolean;
 };
 
 // Canonical shape after useBeatData normalizes the JSON. Missing legacy
@@ -57,6 +63,7 @@ export type EditorState = {
   setPlaying: (p: boolean) => void;
   addElement: (el: TimelineElement) => void;
   updateElement: (id: string, partial: Partial<TimelineElement>) => void;
+  setElementLocked: (id: string, locked: boolean) => void;
   removeElement: (id: string) => void;
   selectElement: (id: string | null) => void;
   setBeatData: (d: BeatData) => void;

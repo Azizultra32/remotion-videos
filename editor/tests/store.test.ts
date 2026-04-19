@@ -67,4 +67,23 @@ describe("editor store", () => {
     useEditorStore.getState().selectElement(null);
     expect(useEditorStore.getState().selectedElementId).toBeNull();
   });
+
+  it("setElementLocked toggles locked field", () => {
+    const store = useEditorStore.getState();
+    store.addElement({
+      id: "t1",
+      type: "text.bellCurve",
+      trackIndex: 0,
+      startSec: 1,
+      durationSec: 1,
+      label: "x",
+      props: {},
+    });
+    expect(useEditorStore.getState().elements[0].locked).toBeFalsy();
+    store.setElementLocked("t1", true);
+    expect(useEditorStore.getState().elements[0].locked).toBe(true);
+    store.setElementLocked("t1", false);
+    expect(useEditorStore.getState().elements[0].locked).toBe(false);
+    store.removeElement("t1");
+  });
 });

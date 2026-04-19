@@ -26,6 +26,12 @@ export const useEditorStore = create<EditorState>()(
         set((s) => ({
           elements: s.elements.map((e) => (e.id === id ? { ...e, ...partial } : e)),
         })),
+      setElementLocked: (id, locked) =>
+        set((s) => ({
+          elements: s.elements.map((e) =>
+            e.id === id ? { ...e, locked } : e,
+          ),
+        })),
       removeElement: (id) =>
         set((s) => ({
           elements: s.elements.filter((e) => e.id !== id),
@@ -70,7 +76,10 @@ export const useEditorStore = create<EditorState>()(
       // v5: bare-filename audioSrc/beatsSrc → projects/<stem>/... paths
       //     Legacy values are nulled so the initial-state defaults (which
       //     point at projects/love-in-traffic/...) win on next load.
-      version: 5,
+      // v6: TimelineElement gained optional origin + locked fields. No-op
+      //     migrate — absent fields read as origin="user", locked=false,
+      //     which is the correct default for existing persisted elements.
+      version: 6,
       migrate: (persisted, version) => {
         if (!persisted || typeof persisted !== "object") return persisted as any;
         let p = persisted as Record<string, unknown>;
@@ -91,6 +100,10 @@ export const useEditorStore = create<EditorState>()(
             // will then surface the right track after the user clicks.
             p = { ...p, audioSrc: null, beatsSrc: null };
           }
+        }
+        if (version < 6) {
+          // Pipeline-origin/locked fields added. Existing persisted elements are
+          // user-origin unlocked by default; no mutation needed.
         }
         return p as any;
       },

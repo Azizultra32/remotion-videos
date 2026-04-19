@@ -679,7 +679,9 @@ const handleAnalyzeEvents = async (
 
   try {
     watcher = fsWatch(projectDir, { persistent: false }, (eventType, filename) => {
-      if (filename !== "analysis.json") return;
+      // macOS FSEvents sometimes reports filename==null for dotfiles or on
+      // rename across inodes. Treat null as "unknown, re-emit to be safe".
+      if (filename != null && filename !== "analysis.json") return;
       if (eventType !== "change" && eventType !== "rename") return;
       void emit();
     });
@@ -766,7 +768,9 @@ const handleAnalyzeStatus = async (
 
   try {
     watcher = fsWatch(projectDir, { persistent: false }, (eventType, filename) => {
-      if (filename !== ".analyze-status.json") return;
+      // macOS FSEvents often reports filename==null for dotfiles —
+      // treat null as "unknown, re-emit to be safe".
+      if (filename != null && filename !== ".analyze-status.json") return;
       if (eventType !== "change" && eventType !== "rename") return;
       void emit();
     });
@@ -779,6 +783,27 @@ const handleAnalyzeStatus = async (
   keepalive = setInterval(() => {
     try { res.write(":keepalive\n\n"); } catch { /* closed */ }
   }, 20000);
+};
+
+// Merge empty event lists into projects/<stem>/analysis.json. Preserves
+// beats/downbeats/duration/energy_bands and every other field — only wipes
+// phase1_events_sec and phase2_events_sec. Shared by /api/analyze/clear and
+// the pre-clear at the head of /api/analyze/run so the editor doesn't hold
+// stale pipeline elements for the 5–10 min a fresh run is in flight.
+const clearAnalysisEvents = async (projectDir: string): Promise<void> => {
+  const analysisFile = path.join(projectDir, "analysis.json");
+  let existing: Record<string, unknown> = {};
+  try {
+    const raw = await fs.readFile(analysisFile, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") existing = parsed as Record<string, unknown>;
+  } catch { /* missing file is fine */ }
+  const merged = {
+    ...existing,
+    phase1_events_sec: [],
+    phase2_events_sec: [],
+  };
+  await fs.writeFile(analysisFile, JSON.stringify(merged, null, 2) + "\n", "utf8");
 };
 
 // POST /api/analyze/run  {stem}
@@ -830,6 +855,13 @@ const handleAnalyzeRun = async (
     }
   } catch { /* no status file — no prior run */ }
 
+  // Drop old pipeline events from analysis.json BEFORE spawning mv:analyze.
+  // The editor's SSE watcher picks up the emptied event arrays and calls
+  // replacePipelineElements(stem, []), so the timeline shows a clean slate
+  // while the new run is in flight. Fresh events flow in when mv:analyze
+  // writes the final analysis.json.
+  await clearAnalysisEvents(projectDir);
+
   const { spawn: spawnChild } = await import("node:child_process");
   const child = spawnChild("npm", ["run", "mv:analyze", "--", "--project", stem], {
     cwd: repoRoot,
@@ -878,21 +910,7 @@ const handleAnalyzeClear = async (
     }
   } catch { /* no status or corrupt — proceed (will be harmless) */ }
 
-  const analysisFile = path.join(projectDir, "analysis.json");
-  // Merge, don't overwrite. Preserve beats/downbeats/duration/energy_bands
-  // and other fields useBeatData depends on — only wipe the event lists.
-  let existing: Record<string, unknown> = {};
-  try {
-    const raw = await fs.readFile(analysisFile, "utf8");
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") existing = parsed as Record<string, unknown>;
-  } catch { /* missing file is fine */ }
-  const merged = {
-    ...existing,
-    phase1_events_sec: [],
-    phase2_events_sec: [],
-  };
-  await fs.writeFile(analysisFile, JSON.stringify(merged, null, 2) + "\n", "utf8");
+  await clearAnalysisEvents(projectDir);
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({ stem, cleared: true }));

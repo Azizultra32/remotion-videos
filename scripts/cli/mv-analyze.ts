@@ -19,7 +19,7 @@
 //   npm run mv:analyze -- --project love-in-traffic --setup-only
 //   npm run mv:analyze -- --project love-in-traffic --no-copy
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const repoRoot = resolve(__dirname, "..", "..");
@@ -34,8 +34,13 @@ const writeStatus = (
   stage: { current: number; total: number; label: string } | null = null,
 ) => {
   try {
+    const target = statusFile(stem);
+    const tmp = target + ".tmp";
+    // Write to sibling tmp then atomic rename — the editor's SSE reader
+    // reads the file on every watch event, and a partial write would
+    // throw JSON.parse. rename on same filesystem is atomic on POSIX.
     writeFileSync(
-      statusFile(stem),
+      tmp,
       JSON.stringify(
         {
           startedAt: statusStart,
@@ -48,6 +53,7 @@ const writeStatus = (
         2,
       ),
     );
+    renameSync(tmp, target);
   } catch {
     /* non-fatal — status reporting is best-effort */
   }

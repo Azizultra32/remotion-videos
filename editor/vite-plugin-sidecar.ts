@@ -1426,11 +1426,27 @@ const handleChatStream = async (
   const body = await readJsonBody(req);
   const message: string = String(body?.message ?? "").slice(0, 4000);
   const state = body?.state ?? {};
+  const rawHistory = Array.isArray(body?.history) ? body.history : [];
   if (!message) {
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "body.message required" }));
     return;
   }
+
+  // Render prior turns as a conversational prelude. Claude sees this inside
+  // the single-turn user prompt (the CLI\'s -p mode doesn\'t preserve state
+  // between spawns, so context is re-sent each turn). Bounded by the client
+  // to last 8 turns @ 600 chars each.
+  const historyBlock = rawHistory.length
+    ? "\n\nPrior conversation (most recent last, for context resolution — \"that event\", \"make it bigger\", etc.):\n" +
+      rawHistory
+        .filter((t: unknown): t is { role: string; content: string } =>
+          !!t && typeof t === "object" &&
+          typeof (t as { role?: unknown }).role === "string" &&
+          typeof (t as { content?: unknown }).content === "string")
+        .map((t) => `[${t.role}]: ${t.content}`)
+        .join("\n")
+    : "";
 
   const userPrompt = `Current editor state (for your reference):\n${JSON.stringify(
     {
@@ -1443,7 +1459,7 @@ const handleChatStream = async (
     },
     null,
     2,
-  )}\n\nUser request:\n${message}\n\nInvestigate with tools as needed, then end with the <final>{...}</final> block.`;
+  )}${historyBlock}\n\nUser request:\n${message}\n\nInvestigate with tools as needed, then end with the <final>{...}</final> block.`;
 
   res.writeHead(200, {
     "Content-Type": "application/x-ndjson",

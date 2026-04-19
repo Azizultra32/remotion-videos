@@ -178,7 +178,18 @@ export const useChat = () => {
         const resp = await fetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: trimmed, state: snapshotState() }),
+          body: JSON.stringify({
+            message: trimmed,
+            state: snapshotState(),
+            // Last 8 turns of conversation history (trimmed). Lets Claude
+            // resolve "that element" / "make it bigger" against prior turns
+            // without exceeding the prompt budget. Role-tagged; tool calls
+            // + mutations excluded (the reply summary is sufficient).
+            history: messages
+              .filter((m) => m.role === "user" || m.role === "assistant")
+              .slice(-8)
+              .map((m) => ({ role: m.role, content: m.content.slice(0, 600) })),
+          }),
           signal: ctrl.signal,
         });
 

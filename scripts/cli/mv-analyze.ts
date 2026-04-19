@@ -19,7 +19,7 @@
 //   npm run mv:analyze -- --project love-in-traffic --setup-only
 //   npm run mv:analyze -- --project love-in-traffic --no-copy
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const repoRoot = resolve(__dirname, "..", "..");
@@ -95,7 +95,7 @@ const fullPng = resolve(analysisDir, "full.png");
 
 // ---- Setup: Steps 1-3 of the master prompt ----
 console.log(`[mv:analyze] running Setup for ${stem}`);
-console.log(`  step 1/2: energy-bands.py -> projects/${stem}/analysis/source.json`);
+console.log(`  step 1/3: energy-bands.py -> projects/${stem}/analysis/source.json`);
 
 writeStatus(stem, "setup");
 
@@ -113,7 +113,23 @@ if (r1.status !== 0) {
   process.exit(r1.status ?? 1);
 }
 
-console.log(`  step 2/2: plot-pioneer.py -> projects/${stem}/analysis/full.png`);
+const beatsJson = resolve(analysisDir, "beats.json");
+console.log(`  step 2/3: detect-beats.py -> projects/${stem}/analysis/beats.json`);
+const rBeats = spawnSync(
+  "python3",
+  [
+    resolve(repoRoot, "scripts/detect-beats.py"),
+    "--audio", audioPath,
+    "--out", beatsJson,
+  ],
+  { stdio: "inherit", cwd: repoRoot },
+);
+if (rBeats.status !== 0) {
+  console.error("[mv:analyze] detect-beats.py failed");
+  process.exit(rBeats.status ?? 1);
+}
+
+console.log(`  step 3/3: plot-pioneer.py -> projects/${stem}/analysis/full.png`);
 const r2 = spawnSync(
   "python3",
   [
@@ -132,7 +148,36 @@ if (r2.status !== 0) {
 
 console.log(`[mv:analyze] Setup complete:`);
 console.log(`  projects/${stem}/analysis/source.json`);
+console.log(`  projects/${stem}/analysis/beats.json`);
 console.log(`  projects/${stem}/analysis/full.png`);
+
+// Seed projects/<stem>/analysis.json with beats + energy bands. The editor
+// reads this for useBeatData() → snap-to-beat, downbeat markers, spectrum
+// display. Phase 1 + Phase 2 run afterwards and only add phase2_events_sec
+// on top at close() — beats/bands persist across re-analyses.
+(() => {
+  const destAnalysis = resolve(projectDir, "analysis.json");
+  const source = JSON.parse(readFileSync(analysisJson, "utf8"));
+  const beats = JSON.parse(readFileSync(beatsJson, "utf8"));
+  let existing: Record<string, unknown> = {};
+  if (existsSync(destAnalysis)) {
+    try { existing = JSON.parse(readFileSync(destAnalysis, "utf8")); } catch { /* stale/corrupt — overwrite */ }
+  }
+  const seeded = {
+    ...existing,
+    source_audio: source.source_audio ?? audioPath,
+    duration_sec: source.duration_sec ?? beats.duration,
+    sample_rate_hz: source.sample_rate_hz,
+    bpm_global: beats.bpm_global,
+    beats: beats.beats,
+    downbeats: beats.downbeats,
+    tempo_curve: beats.tempo_curve,
+    energy_bands: source.energy_bands,
+    energy_bands_meta: source.energy_bands_meta,
+  };
+  writeFileSync(destAnalysis, JSON.stringify(seeded, null, 2) + "\n");
+  console.log(`  seeded projects/${stem}/analysis.json with ${beats.beats.length} beats + energy bands`);
+})();
 
 if (args.setupOnly) {
   console.log("");
@@ -247,10 +292,19 @@ child.on("close", (code) => {
   } else if (existsSync(phase2Events)) {
     const dest = resolve(projectDir, "analysis.json");
     try {
-      copyFileSync(phase2Events, dest);
-      console.log(`[mv:analyze] copied phase2-events -> projects/${stem}/analysis.json`);
+      // Merge, don't overwrite — preserve beats/downbeats/energy_bands/etc
+      // that Setup seeded. phase2-events.json contributes phase2_events_sec
+      // (and phase1_events_sec if present) on top.
+      const phase2 = JSON.parse(readFileSync(phase2Events, "utf8"));
+      let existing: Record<string, unknown> = {};
+      if (existsSync(dest)) {
+        try { existing = JSON.parse(readFileSync(dest, "utf8")); } catch { /* will be overwritten */ }
+      }
+      const merged = { ...existing, ...phase2 };
+      writeFileSync(dest, JSON.stringify(merged, null, 2) + "\n");
+      console.log(`[mv:analyze] merged phase2-events -> projects/${stem}/analysis.json (preserved beats + bands)`);
     } catch (err) {
-      console.warn(`[mv:analyze] warning: failed to copy phase2-events: ${(err as Error).message}`);
+      console.warn(`[mv:analyze] warning: failed to merge phase2-events: ${(err as Error).message}`);
     }
   } else {
     console.warn(`[mv:analyze] warning: ${stem}-phase2-events.json not found; skipping analysis.json copy`);

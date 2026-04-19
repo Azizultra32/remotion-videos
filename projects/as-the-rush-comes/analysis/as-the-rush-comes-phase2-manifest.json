@@ -1,41 +1,41 @@
 {
-  "source_audio": "as-the-rush-comes-phase1-confirmed-full.png",
+  "source_audio": "/Users/ali/remotion-videos/projects/as-the-rush-comes/audio.mp3",
   "source_png": "as-the-rush-comes-phase1-confirmed-full.png",
   "segments": [
     {
       "filename": "as-the-rush-comes-phase2-segment-01.png",
       "start_sec": 0.0,
-      "end_sec": 0.0,
+      "end_sec": 155.919,
       "start_px": 0,
-      "end_px": 411
+      "end_px": 416
     },
     {
       "filename": "as-the-rush-comes-phase2-segment-02.png",
-      "start_sec": 0.0,
-      "end_sec": 0.0,
-      "start_px": 417,
+      "start_sec": 158.168,
+      "end_sec": 269.11,
+      "start_px": 422,
       "end_px": 718
     },
     {
       "filename": "as-the-rush-comes-phase2-segment-03.png",
-      "start_sec": 0.0,
-      "end_sec": 0.0,
+      "start_sec": 271.359,
+      "end_sec": 414.91,
       "start_px": 724,
-      "end_px": 1076
+      "end_px": 1107
     },
     {
       "filename": "as-the-rush-comes-phase2-segment-04.png",
-      "start_sec": 0.0,
-      "end_sec": 0.0,
-      "start_px": 1082,
-      "end_px": 1414
+      "start_sec": 417.158,
+      "end_sec": 528.101,
+      "start_px": 1113,
+      "end_px": 1409
     },
     {
       "filename": "as-the-rush-comes-phase2-segment-05.png",
-      "start_sec": 0.0,
-      "end_sec": 0.0,
-      "start_px": 1420,
-      "end_px": 1470
+      "start_sec": 530.35,
+      "end_sec": 549.09,
+      "start_px": 1415,
+      "end_px": 1465
     }
   ]
 }

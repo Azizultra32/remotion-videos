@@ -5,30 +5,6 @@
   "compositionDuration": 546,
   "elements": [
     {
-      "id": "pipeline-as-the-rush-comes-74.000",
-      "type": "text.bellCurve",
-      "trackIndex": 0,
-      "startSec": 73,
-      "durationSec": 2,
-      "label": "EVENT 74.0s",
-      "props": {
-        "text": "",
-        "x": 50,
-        "y": 50,
-        "sigmaSec": 0.45,
-        "zoomFrom": 0.85,
-        "zoomTo": 1,
-        "textColor": "#ffffff",
-        "fontSize": 120,
-        "fontWeight": 800,
-        "fontFamily": "ui-serif, Georgia, serif",
-        "letterSpacing": "0.08em",
-        "bassGlowMax": 30
-      },
-      "origin": "pipeline",
-      "locked": true
-    },
-    {
       "id": "flash-1",
       "type": "text.bellCurve",
       "trackIndex": 0,
@@ -73,12 +49,36 @@
       }
     },
     {
-      "id": "pipeline-as-the-rush-comes-148.000",
+      "id": "pipeline-as-the-rush-comes-147.500",
       "type": "text.bellCurve",
       "trackIndex": 0,
-      "startSec": 147,
+      "startSec": 146.5,
       "durationSec": 2,
-      "label": "EVENT 148.0s",
+      "label": "EVENT 147.5s",
+      "props": {
+        "text": "",
+        "x": 50,
+        "y": 50,
+        "sigmaSec": 0.45,
+        "zoomFrom": 0.85,
+        "zoomTo": 1,
+        "textColor": "#ffffff",
+        "fontSize": 120,
+        "fontWeight": 800,
+        "fontFamily": "ui-serif, Georgia, serif",
+        "letterSpacing": "0.08em",
+        "bassGlowMax": 30
+      },
+      "origin": "pipeline",
+      "locked": true
+    },
+    {
+      "id": "pipeline-as-the-rush-comes-250.000",
+      "type": "text.bellCurve",
+      "trackIndex": 0,
+      "startSec": 249,
+      "durationSec": 2,
+      "label": "EVENT 250.0s",
       "props": {
         "text": "",
         "x": 50,
@@ -119,54 +119,6 @@
       }
     },
     {
-      "id": "pipeline-as-the-rush-comes-268.000",
-      "type": "text.bellCurve",
-      "trackIndex": 0,
-      "startSec": 267,
-      "durationSec": 2,
-      "label": "EVENT 268.0s",
-      "props": {
-        "text": "",
-        "x": 50,
-        "y": 50,
-        "sigmaSec": 0.45,
-        "zoomFrom": 0.85,
-        "zoomTo": 1,
-        "textColor": "#ffffff",
-        "fontSize": 120,
-        "fontWeight": 800,
-        "fontFamily": "ui-serif, Georgia, serif",
-        "letterSpacing": "0.08em",
-        "bassGlowMax": 30
-      },
-      "origin": "pipeline",
-      "locked": true
-    },
-    {
-      "id": "pipeline-as-the-rush-comes-330.000",
-      "type": "text.bellCurve",
-      "trackIndex": 0,
-      "startSec": 329,
-      "durationSec": 2,
-      "label": "EVENT 330.0s",
-      "props": {
-        "text": "",
-        "x": 50,
-        "y": 50,
-        "sigmaSec": 0.45,
-        "zoomFrom": 0.85,
-        "zoomTo": 1,
-        "textColor": "#ffffff",
-        "fontSize": 120,
-        "fontWeight": 800,
-        "fontFamily": "ui-serif, Georgia, serif",
-        "letterSpacing": "0.08em",
-        "bassGlowMax": 30
-      },
-      "origin": "pipeline",
-      "locked": true
-    },
-    {
       "id": "flash-4",
       "type": "text.bellCurve",
       "trackIndex": 0,
@@ -189,12 +141,12 @@
       }
     },
     {
-      "id": "pipeline-as-the-rush-comes-408.000",
+      "id": "pipeline-as-the-rush-comes-433.500",
       "type": "text.bellCurve",
       "trackIndex": 0,
-      "startSec": 407,
+      "startSec": 432.5,
       "durationSec": 2,
-      "label": "EVENT 408.0s",
+      "label": "EVENT 433.5s",
       "props": {
         "text": "",
         "x": 50,
@@ -255,30 +207,6 @@
         "letterSpacing": "0.08em",
         "bassGlowMax": 20
       }
-    },
-    {
-      "id": "pipeline-as-the-rush-comes-540.000",
-      "type": "text.bellCurve",
-      "trackIndex": 0,
-      "startSec": 539,
-      "durationSec": 2,
-      "label": "EVENT 540.0s",
-      "props": {
-        "text": "",
-        "x": 50,
-        "y": 50,
-        "sigmaSec": 0.45,
-        "zoomFrom": 0.85,
-        "zoomTo": 1,
-        "textColor": "#ffffff",
-        "fontSize": 120,
-        "fontWeight": 800,
-        "fontFamily": "ui-serif, Georgia, serif",
-        "letterSpacing": "0.08em",
-        "bassGlowMax": 30
-      },
-      "origin": "pipeline",
-      "locked": true
     }
   ]
 }

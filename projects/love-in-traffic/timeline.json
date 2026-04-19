@@ -42,30 +42,6 @@
       }
     },
     {
-      "id": "pipeline-love-in-traffic-58.050",
-      "type": "text.bellCurve",
-      "trackIndex": 0,
-      "startSec": 57.05,
-      "durationSec": 2,
-      "label": "EVENT 58.0s",
-      "props": {
-        "text": "",
-        "x": 50,
-        "y": 50,
-        "sigmaSec": 0.45,
-        "zoomFrom": 0.85,
-        "zoomTo": 1,
-        "textColor": "#ffffff",
-        "fontSize": 120,
-        "fontWeight": 800,
-        "fontFamily": "ui-serif, Georgia, serif",
-        "letterSpacing": "0.08em",
-        "bassGlowMax": 30
-      },
-      "origin": "pipeline",
-      "locked": true
-    },
-    {
       "id": "el-flash-event1",
       "type": "text.bellCurve",
       "trackIndex": 0,
@@ -181,30 +157,6 @@
       }
     },
     {
-      "id": "pipeline-love-in-traffic-352.450",
-      "type": "text.bellCurve",
-      "trackIndex": 0,
-      "startSec": 351.45,
-      "durationSec": 2,
-      "label": "EVENT 352.4s",
-      "props": {
-        "text": "",
-        "x": 50,
-        "y": 50,
-        "sigmaSec": 0.45,
-        "zoomFrom": 0.85,
-        "zoomTo": 1,
-        "textColor": "#ffffff",
-        "fontSize": 120,
-        "fontWeight": 800,
-        "fontFamily": "ui-serif, Georgia, serif",
-        "letterSpacing": "0.08em",
-        "bassGlowMax": 30
-      },
-      "origin": "pipeline",
-      "locked": true
-    },
-    {
       "id": "el-flash-event3",
       "type": "text.bellCurve",
       "trackIndex": 0,
@@ -226,30 +178,6 @@
         "x": 50,
         "y": 50
       }
-    },
-    {
-      "id": "pipeline-love-in-traffic-370.620",
-      "type": "text.bellCurve",
-      "trackIndex": 0,
-      "startSec": 369.62,
-      "durationSec": 2,
-      "label": "EVENT 370.6s",
-      "props": {
-        "text": "",
-        "x": 50,
-        "y": 50,
-        "sigmaSec": 0.45,
-        "zoomFrom": 0.85,
-        "zoomTo": 1,
-        "textColor": "#ffffff",
-        "fontSize": 120,
-        "fontWeight": 800,
-        "fontFamily": "ui-serif, Georgia, serif",
-        "letterSpacing": "0.08em",
-        "bassGlowMax": 30
-      },
-      "origin": "pipeline",
-      "locked": true
     }
   ]
 }

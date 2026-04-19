@@ -10,6 +10,11 @@ import { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../store";
 import { NamedEventPills } from "./NamedEventPills";
 import { CanvasWaveform } from "./CanvasWaveform";
+import {
+  anchoredZoom,
+  clampViewport,
+} from "../utils/timelineScale";
+import { useStorage } from "../hooks/useStorage";
 
 type Props = {
   audioUrl: string;
@@ -103,6 +108,92 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   // HEAD request is cheap; the sidecar's /api/projects/* handler
   const totalSec = duration || compositionDuration || 1;
 
+  // Point-anchored zoom + pan state (MC deep-dive §2). Persisted per-project
+  // via useStorage so track-specific zoom survives reloads and project
+  // switches. secPerPx = 0 is a sentinel meaning "natural fit" — used on
+  // first mount before we know containerWidth.
+  const stem = audioSrc
+    ? audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "")
+    : null;
+  const [secPerPx, setSecPerPx] = useStorage(
+    "scrubber-sec-per-px",
+    0,
+    stem ?? undefined,
+  );
+  const [offsetSec, setOffsetSec] = useStorage(
+    "scrubber-offset-sec",
+    0,
+    stem ?? undefined,
+  );
+
+  const scrollPortRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  useEffect(() => {
+    if (!scrollPortRef.current) return;
+    const el = scrollPortRef.current;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (typeof w === "number") setContainerWidth(w);
+    });
+    ro.observe(el);
+    setContainerWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  const naturalSecPerPx =
+    containerWidth > 0 && totalSec > 0 ? totalSec / containerWidth : 0;
+  const effectiveSecPerPx = secPerPx > 0 ? secPerPx : naturalSecPerPx;
+  const innerWidthPx =
+    effectiveSecPerPx > 0 ? totalSec / effectiveSecPerPx : 0;
+  const panPx = effectiveSecPerPx > 0 ? offsetSec / effectiveSecPerPx : 0;
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!effectiveSecPerPx || !containerWidth) return;
+    e.preventDefault();
+    if (e.shiftKey || e.deltaX !== 0) {
+      // Pan: shift-wheel or trackpad horizontal scroll
+      const deltaSec =
+        (e.deltaX !== 0 ? e.deltaX : e.deltaY) * effectiveSecPerPx;
+      const next = clampViewport({
+        offsetSec: offsetSec + deltaSec,
+        secPerPx: effectiveSecPerPx,
+        containerPx: containerWidth,
+        totalSec,
+      });
+      setOffsetSec(next);
+      return;
+    }
+    // Zoom anchored at cursor
+    const rect = scrollPortRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cursorPxInView = Math.max(
+      0,
+      Math.min(containerWidth, e.clientX - rect.left),
+    );
+    // deltaY < 0 = zoom IN (factor > 1); deltaY > 0 = zoom OUT
+    const zoomFactor = Math.pow(1.1, -e.deltaY / 100);
+    const maxSecPerPx = naturalSecPerPx || effectiveSecPerPx; // cap zoom-out at fit-to-view
+    const minSecPerPx = (naturalSecPerPx || effectiveSecPerPx) / 100; // cap zoom-in at 100x
+    const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
+      currentSecPerPx: effectiveSecPerPx,
+      currentOffsetSec: offsetSec,
+      zoomFactor,
+      anchorPx: cursorPxInView,
+      minSecPerPx,
+      maxSecPerPx,
+    });
+    setSecPerPx(nextSecPerPx);
+    setOffsetSec(
+      clampViewport({
+        offsetSec: nextOffset,
+        secPerPx: nextSecPerPx,
+        containerPx: containerWidth,
+        totalSec,
+      }),
+    );
+  };
+
   return (
     <div
       style={{
@@ -123,6 +214,28 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
       >
         <span style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
           Waveform{trackName ? ` - ${trackName}` : ""}
+          {naturalSecPerPx > 0 && effectiveSecPerPx > 0 && effectiveSecPerPx < naturalSecPerPx * 0.98 && (
+            <button
+              onClick={() => {
+                setSecPerPx(0);
+                setOffsetSec(0);
+              }}
+              title="Reset waveform zoom to fit"
+              style={{
+                marginLeft: 10,
+                padding: "1px 6px",
+                fontSize: 9,
+                background: "#1a2a3a",
+                border: "1px solid #368",
+                borderRadius: 3,
+                color: "#8cf",
+                cursor: "pointer",
+                textTransform: "none",
+              }}
+            >
+              {(naturalSecPerPx / effectiveSecPerPx).toFixed(1)}× · reset
+            </button>
+          )}
         </span>
         <span>
           {(() => {
@@ -141,13 +254,32 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
       </div>
 
       <div
-        style={{ position: "relative", width: "100%", height }}
+        ref={scrollPortRef}
+        onWheel={handleWheel}
+        style={{
+          position: "relative",
+          width: "100%",
+          height,
+          overflow: "hidden",
+        }}
+      >
+      <div
+        style={{
+          position: "relative",
+          width: innerWidthPx > 0 ? `${innerWidthPx}px` : "100%",
+          height,
+          transform: `translateX(${-panPx}px)`,
+          transformOrigin: "0 0",
+          willChange: "transform",
+        }}
         onClick={(e) => {
           // Shift-click on waveform adds an event at the click's time.
           // Plain click falls through to CanvasWaveform's own seek handler.
           if (!e.shiftKey) {
             // Plain click -> seek. CanvasWaveform doesn't own clicks (we do),
-            // so map x to time here.
+            // so map x to time here. currentTarget is the inner timeline div,
+            // so its rect reflects the zoomed/panned width and click math
+            // works at any zoom level.
             if (totalSec > 0) {
               const rect = e.currentTarget.getBoundingClientRect();
               const x = e.clientX - rect.left;
@@ -157,7 +289,6 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
             return;
           }
           if (!beatData || totalSec <= 0) return;
-          const stem = audioSrc ? audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "") : null;
           if (!stem) return;
           const rect = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - rect.left;
@@ -403,8 +534,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
           }}
         />
       </div>
+      </div>
 
-      {/* Fallback transport while wavesurfer is loading */}
+      {/* Fallback overlay while audio is decoding */}
       {!ready && (
         <div
           style={{

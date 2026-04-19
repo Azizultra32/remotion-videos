@@ -11,6 +11,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useBeatData } from "./hooks/useBeatData";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useTimelineSync } from "./hooks/useTimelineSync";
+import { useStoryboardSync } from "./hooks/useStoryboardSync";
 import { useEventsSync } from "./hooks/useEventsSync";
 import { useAutoSeedBeats } from "./hooks/useAutoSeedBeats";
 import { useUndoHistory } from "./hooks/useUndoHistory";
@@ -38,6 +39,8 @@ export const App = () => {
   // Hydrate timeline.json on project switch + debounced autosave on mutations
   // + .current-project signal file for external Claude Code sessions.
   useTimelineSync();
+  // Hydrate + autosave projects/<stem>/storyboard.json.
+  useStoryboardSync();
   // Same shape for the MC-style named time events (events.json).
   useEventsSync();
   // Cmd-Z / Cmd-Shift-Z undo/redo for element mutations (50 levels deep).

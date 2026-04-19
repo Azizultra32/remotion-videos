@@ -55,6 +55,22 @@ export type EventMark = {
   timeSec: number;
 };
 
+// Storyboard scenes — named chunks of the video with creative intent, sitting
+// ABOVE the timeline. A scene exists BEFORE specific elements are placed on
+// the timeline; the workflow is "plan the story, then execute it element by
+// element." Scenes can overlap (intro might overlap a first-drop scene) and
+// link to any pipeline- or user-origin TimelineElement they anchor.
+//
+// Persisted to projects/<stem>/storyboard.json via useStoryboardSync.
+export type Scene = {
+  id: string;
+  name: string;
+  startSec: number;
+  endSec: number;
+  intent: string;           // free-form creative direction ("slow build; text holds back until drop")
+  linkedElementIds: string[]; // element ids this scene is anchored to; links survive lock/unlock
+};
+
 export type EditorState = {
   elements: TimelineElement[];
   currentTimeSec: number;
@@ -62,6 +78,7 @@ export type EditorState = {
   selectedElementId: string | null;
   beatData: BeatData | null;
   events: EventMark[];
+  scenes: Scene[];
   compositionDuration: number; // seconds
   fps: number;
   snapMode: SnapMode;
@@ -86,4 +103,11 @@ export type EditorState = {
   upsertEventMark: (name: string, timeSec: number) => void;
   removeEventMark: (name: string) => void;
   renameEventMark: (oldName: string, newName: string) => void;
+  // Storyboard scenes
+  setScenes: (scenes: Scene[]) => void;
+  addScene: (scene: Scene) => void;
+  updateScene: (id: string, patch: Partial<Omit<Scene, "id">>) => void;
+  removeScene: (id: string) => void;
+  linkSceneElement: (sceneId: string, elementId: string) => void;
+  unlinkSceneElement: (sceneId: string, elementId: string) => void;
 };

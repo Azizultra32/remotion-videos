@@ -18,6 +18,7 @@ export const useEditorStore = create<EditorState>()(
       selectedElementId: null,
       beatData: null,
       events: [],
+      scenes: [],
       compositionDuration: 90,
       fps: 24,
       snapMode: "beat",
@@ -68,6 +69,7 @@ export const useEditorStore = create<EditorState>()(
           selectedElementId: null,
           beatData: null,
           events: [],
+          scenes: [],
         }),
       // Named time events — in-memory; persisted to disk by useEventsSync.
       setEvents: (events) => set({ events }),
@@ -78,6 +80,30 @@ export const useEditorStore = create<EditorState>()(
       renameEventMark: (oldName, newName) =>
         set((s) => ({
           events: renameEventMarkPure(s.events, oldName, newName),
+        })),
+      setScenes: (scenes) => set({ scenes }),
+      addScene: (scene) => set((s) => ({ scenes: [...s.scenes, scene] })),
+      updateScene: (id, patch) =>
+        set((s) => ({
+          scenes: s.scenes.map((sc) => (sc.id === id ? { ...sc, ...patch } : sc)),
+        })),
+      removeScene: (id) =>
+        set((s) => ({ scenes: s.scenes.filter((sc) => sc.id !== id) })),
+      linkSceneElement: (sceneId, elementId) =>
+        set((s) => ({
+          scenes: s.scenes.map((sc) =>
+            sc.id === sceneId && !sc.linkedElementIds.includes(elementId)
+              ? { ...sc, linkedElementIds: [...sc.linkedElementIds, elementId] }
+              : sc,
+          ),
+        })),
+      unlinkSceneElement: (sceneId, elementId) =>
+        set((s) => ({
+          scenes: s.scenes.map((sc) =>
+            sc.id === sceneId
+              ? { ...sc, linkedElementIds: sc.linkedElementIds.filter((eid) => eid !== elementId) }
+              : sc,
+          ),
         })),
     }),
     {

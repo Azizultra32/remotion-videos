@@ -277,6 +277,98 @@ const handleTimelineGet = async (
 };
 
 // ---------------------------------------------------------------------------
+// /api/storyboard/:stem  (GET) + /api/storyboard/save (POST)
+// ---------------------------------------------------------------------------
+//
+// Reads/writes projects/<stem>/storyboard.json. Shape on disk:
+//   { version: 1, stem, scenes: [{id, name, startSec, endSec, intent,
+//                                  linkedElementIds: []}] }
+// Missing file -> 404 on GET (client treats as empty scenes array).
+// POST writes atomically via tmp + rename; per-stem lock prevents interleaved
+// writes from the autosave debounce.
+
+const STORYBOARD_LOCK = new Map<string, Promise<void>>();
+
+const handleStoryboardGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  const full = path.join(PROJECTS_DIR, stem, "storyboard.json");
+  let content: string;
+  try {
+    content = await fs.readFile(full, "utf8");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "storyboard not found", stem }));
+    return;
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(content);
+};
+
+const handleStoryboardSave = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = await readJsonBody(req);
+  const stem = String(body?.stem ?? "");
+  const storyboard = body?.storyboard;
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  if (!storyboard || typeof storyboard !== "object") {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.storyboard required" }));
+    return;
+  }
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a directory");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project not found", stem }));
+    return;
+  }
+  const prev = STORYBOARD_LOCK.get(stem) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    const dest = path.join(projectDir, "storyboard.json");
+    const tmp = dest + ".tmp";
+    await fs.writeFile(tmp, JSON.stringify(storyboard, null, 2));
+    await fs.rename(tmp, dest);
+  });
+  STORYBOARD_LOCK.set(
+    stem,
+    next.catch(() => { /* surfaced below */ }),
+  );
+  try {
+    await next;
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "storyboard-write-failed", detail: String(err) }));
+    return;
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ ok: true }));
+};
+
+// ---------------------------------------------------------------------------
 // /api/current-project  (GET + POST — the "which project is active" pointer)
 // ---------------------------------------------------------------------------
 //
@@ -1776,6 +1868,8 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
+    server.middlewares.use("/api/storyboard/save", wrap("POST", handleStoryboardSave));
+    server.middlewares.use("/api/storyboard/", wrap("GET", handleStoryboardGet));
     server.middlewares.use("/api/events/", wrap("GET", handleEventsGet));
     server.middlewares.use("/api/events/", wrap("POST", handleEventsSave));
     server.middlewares.use("/api/current-project", wrap("GET", handleCurrentGet));

@@ -2,6 +2,7 @@
 import { useEditorStore } from "../store";
 import { ProjectActions } from "./ProjectActions";
 import { EventCycler } from "./EventCycler";
+import { StoryboardStrip } from "./StoryboardStrip";
 import { StageStrip } from "./StageStrip";
 import type { SnapMode } from "../types";
 
@@ -228,6 +229,7 @@ export const TransportControls = () => {
       </button>
     </div>
     <StageStrip />
+    <StoryboardStrip />
     <EventCycler />
     </>
   );

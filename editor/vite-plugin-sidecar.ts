@@ -1144,8 +1144,7 @@ const handleAnalyzeRun = async (
     res.end(JSON.stringify({ error: "body.stem must match /^[a-z0-9_-]+$/i" }));
     return;
   }
-  const repoRoot = path.resolve(__dirname, "..");
-  const projectDir = path.join(repoRoot, "projects", stem);
+  const projectDir = path.join(PROJECTS_DIR, stem);
   try {
     const st = await fs.stat(projectDir);
     if (!st.isDirectory()) throw new Error("not a directory");
@@ -1218,8 +1217,7 @@ const handleAnalyzeSeedBeats = async (
     res.end(JSON.stringify({ error: "body.stem must match /^[a-z0-9_-]+$/i" }));
     return;
   }
-  const repoRoot = path.resolve(__dirname, "..");
-  const projectDir = path.join(repoRoot, "projects", stem);
+  const projectDir = path.join(PROJECTS_DIR, stem);
   try {
     const st = await fs.stat(projectDir);
     if (!st.isDirectory()) throw new Error("not a directory");
@@ -1408,8 +1406,7 @@ const handleAnalyzeClear = async (
     res.end(JSON.stringify({ error: "body.stem must match /^[a-z0-9_-]+$/i" }));
     return;
   }
-  const repoRoot = path.resolve(__dirname, "..");
-  const projectDir = path.join(repoRoot, "projects", stem);
+  const projectDir = path.join(PROJECTS_DIR, stem);
   const statusFile = path.join(projectDir, ".analyze-status.json");
   // Reject CLEAR mid-run — otherwise we race mv-analyze's final
   // `cp phase2-events.json analysis.json` and can leave either zombie
@@ -1481,8 +1478,7 @@ const handleAnalyzeCancel = async (
   }
 
   // Record a terminal status frame so SSE clients flip out of Running.
-  const repoRoot = path.resolve(__dirname, "..");
-  const projectDir = path.join(repoRoot, "projects", stem);
+  const projectDir = path.join(PROJECTS_DIR, stem);
   const statusFile = path.join(projectDir, ".analyze-status.json");
   let startedAt = Date.now();
   try {
@@ -1534,8 +1530,7 @@ const handleAnalyzeEventsUpdate = async (
     }
   }
 
-  const repoRoot = path.resolve(__dirname, "..");
-  const projectDir = path.join(repoRoot, "projects", stem);
+  const projectDir = path.join(PROJECTS_DIR, stem);
   const statusFile = path.join(projectDir, ".analyze-status.json");
   try {
     const raw = await fs.readFile(statusFile, "utf8");

@@ -1,0 +1,188 @@
+// editor/tests/sidecar-integration.test.ts
+//
+// Integration test for the vite sidecar HTTP surface. Spawns vite as a
+// subprocess against a throwaway MV_PROJECTS_DIR, hits the real endpoints
+// with fetch(), asserts the on-disk side effects. Closes the gap from the
+// audit: before this, every test was a pure-function unit test; zero
+// coverage on /api/analyze/*, /api/timeline/*, /api/songs, etc. — the
+// most-changed code path this session.
+//
+// Scope is intentionally narrow — one representative smoke for each of
+// the critical ops. The goal is proving the pattern + catching
+// regressions on the handlers we hardened (clear, events/update, songs,
+// reconcile-on-boot). Exhaustive coverage is out of scope; add more
+// cases as specific bugs surface.
+
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const editorRoot = resolve(__dirname, "..");
+const PORT = 4521; // off the user's primary :4000
+
+let viteProc: ChildProcessWithoutNullStreams | null = null;
+let tmpProjects = "";
+const STEM = "integ-test-track";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const waitForPort = async (port: number, timeoutMs = 25_000): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(`http://localhost:${port}/`);
+      if (r.ok || r.status === 404) return;
+    } catch {
+      /* not up yet */
+    }
+    await sleep(200);
+  }
+  throw new Error(`vite did not bind :${port} within ${timeoutMs}ms`);
+};
+
+beforeAll(async () => {
+  tmpProjects = mkdtempSync(join(tmpdir(), "mv-integ-"));
+  // Seed a minimal project so /api/songs has something to enumerate.
+  const projectDir = join(tmpProjects, STEM);
+  mkdirSync(join(projectDir, "analysis"), { recursive: true });
+  writeFileSync(join(projectDir, "audio.mp3"), Buffer.alloc(16, 0)); // tiny placeholder
+  writeFileSync(
+    join(projectDir, "analysis.json"),
+    JSON.stringify(
+      {
+        source_audio: "stub",
+        duration_sec: 60,
+        beats: [0, 0.5, 1.0, 1.5, 2.0],
+        downbeats: [0, 2.0],
+        bpm_global: 120,
+        energy_bands: { low: [], mid: [], high: [] },
+        phase1_events_sec: [10, 20, 30],
+        phase2_events_sec: [10, 20, 30],
+      },
+      null,
+      2,
+    ),
+  );
+  writeFileSync(
+    join(projectDir, "timeline.json"),
+    JSON.stringify({ version: 1, stem: STEM, fps: 24, compositionDuration: 60, elements: [] }, null, 2),
+  );
+  // Stale orphan status file: should get reconciled at sidecar boot.
+  writeFileSync(
+    join(projectDir, ".analyze-status.json"),
+    JSON.stringify(
+      { startedAt: Date.now() - 600_000, phase: "phase1-review", stage: null, updatedAt: Date.now() - 600_000, endedAt: null },
+      null,
+      2,
+    ),
+  );
+
+  viteProc = spawn(
+    "npx",
+    ["vite", "--port", String(PORT)],
+    {
+      cwd: editorRoot,
+      env: { ...process.env, MV_PROJECTS_DIR: tmpProjects },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  ) as ChildProcessWithoutNullStreams;
+  // Don't let vite's output clog the test runner — drain streams.
+  viteProc.stdout.on("data", () => {});
+  viteProc.stderr.on("data", () => {});
+  await waitForPort(PORT);
+}, 30_000);
+
+afterAll(async () => {
+  if (viteProc && !viteProc.killed) {
+    viteProc.kill("SIGTERM");
+    // Give vite 2s to shut down gracefully, then SIGKILL if still alive.
+    await sleep(1500);
+    if (!viteProc.killed) viteProc.kill("SIGKILL");
+  }
+  if (tmpProjects && existsSync(tmpProjects)) {
+    rmSync(tmpProjects, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+describe("sidecar integration", () => {
+  it("GET /api/songs lists stems from MV_PROJECTS_DIR", async () => {
+    const r = await fetch(`http://localhost:${PORT}/api/songs`);
+    expect(r.ok).toBe(true);
+    const data = (await r.json()) as Array<{ stem: string }>;
+    expect(data.some((s) => s.stem === STEM)).toBe(true);
+  });
+
+  it("orphan .analyze-status.json is reconciled on boot", async () => {
+    // By the time vite is serving, the boot hook has already run.
+    const raw = readFileSync(
+      join(tmpProjects, STEM, ".analyze-status.json"),
+      "utf8",
+    );
+    const status = JSON.parse(raw);
+    expect(status.phase).toBe("orphaned-at-boot");
+    expect(status.endedAt).not.toBeNull();
+  });
+
+  it("POST /api/analyze/clear wipes events, preserves beats", async () => {
+    const r = await fetch(`http://localhost:${PORT}/api/analyze/clear`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stem: STEM }),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`clear failed: ${r.status} ${txt}`);
+    }
+    const body = (await r.json()) as { cleared: boolean };
+    expect(body.cleared).toBe(true);
+
+    const raw = readFileSync(join(tmpProjects, STEM, "analysis.json"), "utf8");
+    const data = JSON.parse(raw);
+    expect(data.phase1_events_sec).toEqual([]);
+    expect(data.phase2_events_sec).toEqual([]);
+    // Beats + duration survive (the pre-fix bug nuked these).
+    expect(data.beats).toEqual([0, 0.5, 1.0, 1.5, 2.0]);
+    expect(data.duration_sec).toBe(60);
+    expect(data.bpm_global).toBe(120);
+  });
+
+  it("POST /api/analyze/events/update writes new events list", async () => {
+    const r = await fetch(`http://localhost:${PORT}/api/analyze/events/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stem: STEM, events: [5.0, 15.5, 42.7] }),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`events/update failed: ${r.status} ${txt}`);
+    }
+    const body = (await r.json()) as { events: number[] };
+    // Endpoint dedupes within 50 ms and sorts ascending — already
+    // sorted + spaced here, so round-trip is identity.
+    expect(body.events).toEqual([5.0, 15.5, 42.7]);
+
+    const raw = readFileSync(join(tmpProjects, STEM, "analysis.json"), "utf8");
+    const data = JSON.parse(raw);
+    expect(data.phase2_events_sec).toEqual([5.0, 15.5, 42.7]);
+  });
+
+  it("rejects malformed stems with 400", async () => {
+    const r = await fetch(`http://localhost:${PORT}/api/analyze/clear`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stem: "../evil" }),
+    });
+    expect(r.status).toBe(400);
+  });
+});

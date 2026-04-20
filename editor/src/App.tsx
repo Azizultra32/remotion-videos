@@ -106,9 +106,6 @@ export const App = () => {
           <ErrorBoundary name="Asset Library">
             <AssetLibrary />
           </ErrorBoundary>
-          <ErrorBoundary name="Tree Inspector">
-            <TreeInspector />
-          </ErrorBoundary>
           <ErrorBoundary name="Element Detail">
             <ElementDetail />
           </ErrorBoundary>

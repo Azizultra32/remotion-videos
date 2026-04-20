@@ -58,6 +58,12 @@ esac
 # Engine path matchers. Keep in sync with OWNERSHIP.md.
 is_engine=false
 case "$rel" in
+    # Composition authoring surface — reusable "effects library" — is
+    # explicitly free-write. Adding new element modules is basic creative
+    # work, not engine infrastructure. Match BEFORE the broader src/* rule
+    # so compositions stay open even while the rest of src/ stays locked.
+    src/compositions/*)
+        is_engine=false ;;
     src/*|editor/*|scripts/*|docs/*|public/fonts/*|public/tokens/*|.claude/*)
         is_engine=true ;;
     package.json|package-lock.json|tsconfig.json|remotion.config.ts|.gitignore|.gitattributes|CLAUDE.md|ENGINE.md|OWNERSHIP.md|README.md)

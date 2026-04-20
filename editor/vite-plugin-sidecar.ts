@@ -773,7 +773,7 @@ Mutation shapes:
 
   Element ops (edit the timeline):
   { "op": "addElement",    "element": { id, type, trackIndex, startSec, durationSec, label, props } }
-  { "op": "updateElement", "id": "<elementId>", "patch": { startSec?, durationSec?, trackIndex?, label?, props? (shallow merge) } }
+  { "op": "updateElement", "id": "<elementId>", "patch": { startSec?, durationSec?, trackIndex?, label?, props? (shallow merge), startEvent? ("<eventName>" to anchor render-time start to a named event, null to clear) } }
   { "op": "removeElement", "id": "<elementId>" }
   { "op": "seekTo",        "sec": <number> }
   { "op": "setPlaying",    "playing": <boolean> }

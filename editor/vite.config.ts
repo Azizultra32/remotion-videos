@@ -32,6 +32,11 @@ export default defineConfig({
       "@compositions": path.resolve(__dirname, "../src/compositions"),
       "@hooks": path.resolve(__dirname, "../src/hooks"),
       "@utils": path.resolve(__dirname, "../src/utils"),
+      // Per-project custom-elements alias — see remotion.config.ts for
+      // why this exists. Both the editor's Vite plugin and the renderer's
+      // Webpack must resolve `@engine/types` to the same engine surface
+      // so a custom element file works in both pipelines unchanged.
+      "@engine": path.resolve(__dirname, "../src/compositions/elements"),
       // Force a single React copy. Without this, `../src/compositions/*.tsx`
       // resolves React from the repo root's node_modules while the editor's
       // entry uses its own copy — two Reacts means useContext() sees a null

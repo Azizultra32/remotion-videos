@@ -61,11 +61,20 @@ npm run mv:render -- --project my-song
 
 ## Import path for engine types
 
-`mv:scaffold` generates a template whose `import type { ElementModule } from ...` path is computed at scaffold time, so it works regardless of where `MV_PROJECTS_DIR` points. If you write a new element from scratch without using the template, mirror the computed relative path — from the default location that's:
+Custom elements import engine types via the `@engine/*` alias:
 
 ```ts
-import type { ElementModule, ElementRendererProps } from "../../../src/compositions/elements/types";
+import type { ElementModule, ElementRendererProps } from "@engine/types";
 ```
+
+The alias is wired in three places — keep it consistent if you ever add a new pipeline:
+- `remotion.config.ts` — Webpack `resolve.alias` for renderer bundles
+- `editor/vite.config.ts` — Vite `resolve.alias` for the editor preview
+- `tsconfig.json` `compilerOptions.paths` — TypeScript IDE intellisense
+
+The alias resolves to `src/compositions/elements/`. So `@engine/types` → `src/compositions/elements/types.ts`, `@engine/overlays/StaticImage` → that file, etc.
+
+Why an alias instead of a relative path: custom elements can live anywhere `MV_PROJECTS_DIR` points (external volumes, separate repos). A relative path baked at scaffold time would break the moment the project moves to a different machine. The alias is portable.
 
 ## Common pitfalls
 

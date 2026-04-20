@@ -10,7 +10,11 @@
     "resolveJsonModule": true,
     "declaration": true,
     "outDir": "./dist",
-    "types": ["vitest/globals", "node"]
+    "types": ["vitest/globals", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@engine/*": ["src/compositions/elements/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules"]

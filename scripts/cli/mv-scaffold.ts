@@ -11,7 +11,7 @@
 //
 // Suggests next steps at the end (run mv:analyze, pick the track in editor).
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { basename, extname, relative, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import { ensureProjectsDir, resolveProjectDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
@@ -90,12 +90,10 @@ writeFileSync(timelinePath, `${JSON.stringify(starterTimeline, null, 2)}\n`);
 
 // Seed the per-project custom-elements/ dir with a ready-to-activate example.
 // Writing as `.tsx.example` so the renderer's barrel scan (filters `*.tsx`)
-// ignores it until the author renames the file. The import path is computed
-// at scaffold time so MV_PROJECTS_DIR overrides still resolve correctly.
-const engineTypesPath = relative(
-  customElementsDir,
-  resolve(repoRoot, "src/compositions/elements/types"),
-).replace(/\\/g, "/");
+// ignores it until the author renames the file. Import path uses the
+// `@engine/*` alias (configured in remotion.config.ts + editor/vite.config.ts
+// + tsconfig.json) so the template works regardless of where MV_PROJECTS_DIR
+// points — even external volumes or differently-named engine clones.
 const exampleModuleName = "ExampleElement";
 const exampleModuleId = `custom.${stem.replace(/[^a-zA-Z0-9]/g, "")}.example`;
 const examplePath = resolve(customElementsDir, `${exampleModuleName}.tsx.example`);
@@ -112,7 +110,7 @@ const exampleBody = `// Per-project custom element — drop this file (renamed t
 import type React from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
-import type { ElementModule, ElementRendererProps } from "${engineTypesPath}";
+import type { ElementModule, ElementRendererProps } from "@engine/types";
 
 const schema = z.object({
   text: z.string(),

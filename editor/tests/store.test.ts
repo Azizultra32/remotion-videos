@@ -141,3 +141,58 @@ describe("editor store", () => {
     });
   });
 });
+
+
+describe("sections slice", () => {
+  it("addSection appends a new section", () => {
+    useEditorStore.setState({ sections: [] });
+    useEditorStore.getState().addSection({
+      id: "s1",
+      name: "Intro",
+      startSec: 0,
+      endSec: 30,
+      type: "intro",
+      color: "#5f8fbf",
+    });
+    expect(useEditorStore.getState().sections).toHaveLength(1);
+    expect(useEditorStore.getState().sections[0].name).toBe("Intro");
+  });
+
+  it("updateSection patches the matching id only", () => {
+    useEditorStore.setState({
+      sections: [
+        { id: "s1", name: "Intro", startSec: 0, endSec: 30, type: "intro", color: "#5f8fbf" },
+        { id: "s2", name: "Build", startSec: 30, endSec: 60, type: "build", color: "#bf9f5f" },
+      ],
+    });
+    useEditorStore.getState().updateSection("s2", { endSec: 90 });
+    const sections = useEditorStore.getState().sections;
+    expect(sections[0].endSec).toBe(30);
+    expect(sections[1].endSec).toBe(90);
+    expect(sections[1].name).toBe("Build");
+  });
+
+  it("removeSection filters by id", () => {
+    useEditorStore.setState({
+      sections: [
+        { id: "s1", name: "Intro", startSec: 0, endSec: 30, type: "intro", color: "#5f8fbf" },
+        { id: "s2", name: "Build", startSec: 30, endSec: 60, type: "build", color: "#bf9f5f" },
+      ],
+    });
+    useEditorStore.getState().removeSection("s1");
+    expect(useEditorStore.getState().sections).toHaveLength(1);
+    expect(useEditorStore.getState().sections[0].id).toBe("s2");
+  });
+
+  it("setSections replaces the whole array", () => {
+    useEditorStore.setState({
+      sections: [{ id: "old", name: "x", startSec: 0, endSec: 1, type: "custom", color: "#888" }],
+    });
+    useEditorStore.getState().setSections([
+      { id: "new", name: "Intro", startSec: 0, endSec: 30, type: "intro", color: "#5f8fbf" },
+    ]);
+    const s = useEditorStore.getState().sections;
+    expect(s).toHaveLength(1);
+    expect(s[0].id).toBe("new");
+  });
+});

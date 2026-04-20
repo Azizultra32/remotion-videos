@@ -80,6 +80,21 @@ export type Scene = {
   linkedEventNames?: string[];
 };
 
+// Song Sections — named, colored, time-ranged regions that mark the
+// musical structure of a track (intro / build / drop / breakdown / outro).
+// Replaces the older Scene data model; persisted to
+// projects/<stem>/sections.json via useSectionsSync.
+export type SectionType = "intro" | "build" | "drop" | "breakdown" | "outro" | "custom";
+
+export type Section = {
+  id: string;
+  name: string;
+  startSec: number;
+  endSec: number;
+  type: SectionType;
+  color: string; // resolved hex; mirrors type's preset except when type === "custom"
+};
+
 export type EditorState = {
   elements: TimelineElement[];
   currentTimeSec: number;
@@ -88,6 +103,11 @@ export type EditorState = {
   beatData: BeatData | null;
   events: EventMark[];
   scenes: Scene[];
+  sections: Section[];
+  addSection: (s: Section) => void;
+  updateSection: (id: string, patch: Partial<Omit<Section, "id">>) => void;
+  removeSection: (id: string) => void;
+  setSections: (ss: Section[]) => void;
   // In/Out render markers ([ / ] keybindings). Semi-persistent selection
   // on the timeline used to mark a subset for partial render / loop / export.
   // null = unset. Cleared on setTrack.

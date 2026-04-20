@@ -19,6 +19,7 @@ export const useEditorStore = create<EditorState>()(
       beatData: null,
       events: [],
       scenes: [],
+      sections: [],
       timelineSecPerPx: 0,
       timelineOffsetSec: 0,
       inPointSec: null,
@@ -116,6 +117,14 @@ export const useEditorStore = create<EditorState>()(
           scenes: s.scenes.map((sc) => (sc.id === id ? { ...sc, ...patch } : sc)),
         })),
       removeScene: (id) => set((s) => ({ scenes: s.scenes.filter((sc) => sc.id !== id) })),
+      addSection: (s) => set((prev) => ({ sections: [...prev.sections, s] })),
+      updateSection: (id, patch) =>
+        set((prev) => ({
+          sections: prev.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+        })),
+      removeSection: (id) =>
+        set((prev) => ({ sections: prev.sections.filter((s) => s.id !== id) })),
+      setSections: (ss) => set({ sections: ss }),
       linkSceneElement: (sceneId, elementId) =>
         set((s) => ({
           scenes: s.scenes.map((sc) =>

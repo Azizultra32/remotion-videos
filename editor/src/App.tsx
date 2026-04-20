@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { ChatPane } from "./components/ChatPane";
 import { ElementDetail } from "./components/ElementDetail";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { FloatingPreview } from "./components/FloatingPreview";
 import { Preview } from "./components/Preview";
 import { Scrubber } from "./components/Scrubber";
 import { Sidebar } from "./components/Sidebar";
@@ -178,6 +179,9 @@ export const App = () => {
           </ErrorBoundary>
         </div>
       </div>
+      <ErrorBoundary name="Floating Preview">
+        <FloatingPreview />
+      </ErrorBoundary>
     </ShortcutsProvider>
   );
 };

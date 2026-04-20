@@ -88,6 +88,7 @@ export const StoryboardStrip = () => {
         endSec: end,
         intent,
         linkedElementIds: [],
+        linkedEventNames: [],
       });
     } else {
       updateScene(editing.id, { name, startSec: start, endSec: end, intent });

@@ -59,7 +59,13 @@ export const useStoryboardSync = () => {
         }
         const payload = (await r.json()) as Partial<OnDiskStoryboard>;
         if (cancelled) return;
-        const loaded = Array.isArray(payload.scenes) ? payload.scenes : [];
+        const rawLoaded = Array.isArray(payload.scenes) ? payload.scenes : [];
+        // Back-compat: v1 scenes were persisted without linkedEventNames.
+        // Default missing arrays to [] so link actions are always safe.
+        const loaded = rawLoaded.map((sc) => ({
+          ...sc,
+          linkedEventNames: Array.isArray(sc.linkedEventNames) ? sc.linkedEventNames : [],
+        }));
         setScenes(loaded);
         lastSavedRef.current = JSON.stringify(loaded);
       })

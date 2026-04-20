@@ -72,6 +72,12 @@ export type Scene = {
   endSec: number;
   intent: string;           // free-form creative direction ("slow build; text holds back until drop")
   linkedElementIds: string[]; // element ids this scene is anchored to; links survive lock/unlock
+  // Named events (events.json entries) this scene is anchored to. Decoupled
+  // from linkedElementIds — events survive element deletes/rebuilds and
+  // timestamp drift in a way element-id links don\'t. Per MC-lift plan §1:
+  // "scene can linkedEventIds=[] and survive timestamp drift by reference
+  // name instead of frame." Optional for backward-compat with v1 scenes.
+  linkedEventNames?: string[];
 };
 
 export type EditorState = {
@@ -113,4 +119,6 @@ export type EditorState = {
   removeScene: (id: string) => void;
   linkSceneElement: (sceneId: string, elementId: string) => void;
   unlinkSceneElement: (sceneId: string, elementId: string) => void;
+  linkSceneEvent: (sceneId: string, eventName: string) => void;
+  unlinkSceneEvent: (sceneId: string, eventName: string) => void;
 };

@@ -105,6 +105,24 @@ export const useEditorStore = create<EditorState>()(
               : sc,
           ),
         })),
+      linkSceneEvent: (sceneId, eventName) =>
+        set((s) => ({
+          scenes: s.scenes.map((sc) => {
+            if (sc.id !== sceneId) return sc;
+            const current = sc.linkedEventNames ?? [];
+            return current.includes(eventName)
+              ? sc
+              : { ...sc, linkedEventNames: [...current, eventName] };
+          }),
+        })),
+      unlinkSceneEvent: (sceneId, eventName) =>
+        set((s) => ({
+          scenes: s.scenes.map((sc) => {
+            if (sc.id !== sceneId) return sc;
+            const current = sc.linkedEventNames ?? [];
+            return { ...sc, linkedEventNames: current.filter((n) => n !== eventName) };
+          }),
+        })),
     }),
     {
       name: "music-video-editor",

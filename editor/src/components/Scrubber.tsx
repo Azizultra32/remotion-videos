@@ -344,7 +344,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
             set to "none" so only the event-line hit targets intercept
             clicks; plain clicks fall through to wavesurfer. */}
           {ready && beatData && (
-            <svg role="img" aria-label="Audio scrubber overlay"
+            <svg
+              role="img"
+              aria-label="Audio scrubber overlay"
               style={{
                 position: "absolute",
                 inset: 0,

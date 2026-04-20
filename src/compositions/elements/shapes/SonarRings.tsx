@@ -46,7 +46,9 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const maxR = Math.min(ctx.width, ctx.height) * (maxRadiusPct / 100);
 
   return (
-    <svg role="img" aria-label="Sonar rings shape"
+    <svg
+      role="img"
+      aria-label="Sonar rings shape"
       width={ctx.width}
       height={ctx.height}
       style={{ position: "absolute", inset: 0, pointerEvents: "none" }}

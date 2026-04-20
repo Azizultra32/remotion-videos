@@ -8,7 +8,7 @@
 // Mounted inside StageStrip next to Clear / Re-analyze. Hidden when there
 // are zero runs (i.e. fresh project, never re-analyzed).
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../store";
 import { stemFromAudioSrc } from "../utils/url";
 
@@ -37,7 +37,7 @@ export const RunsMenu = () => {
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const fetchRuns = async () => {
+  const fetchRuns = useCallback(async () => {
     if (!stem) return;
     try {
       const r = await fetch(`/api/analyze/runs/${stem}`);
@@ -47,19 +47,17 @@ export const RunsMenu = () => {
     } catch {
       /* ignore */
     }
-  };
+  }, [stem]);
 
   // Refetch when opening or when stem changes.
   useEffect(() => {
     if (open) void fetchRuns();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, fetchRuns]);
 
   // Also refetch once on mount so the badge shows the count without needing
   // the dropdown to be opened first.
   useEffect(() => {
     void fetchRuns();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchRuns]);
 
   // Click-outside to close.

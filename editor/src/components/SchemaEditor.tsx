@@ -1,3 +1,5 @@
+// biome-ignore-all lint/suspicious/noExplicitAny: Zod schema introspection (unwrap, defType, ZodType<any>) requires the internal `any` typing
+
 // src/components/SchemaEditor.tsx
 // Introspects a Zod 4 object schema and renders a form control per field.
 // Handles: string, number, boolean, enum, array<string>. Transparently
@@ -27,6 +29,7 @@ const fieldStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = { fontSize: 11, color: "#aaa" };
 
 const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  // biome-ignore lint/a11y/noLabelWithoutControl: Row is a wrapper; control is rendered via children prop
   <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
     <span style={labelStyle}>{label}</span>
     {children}

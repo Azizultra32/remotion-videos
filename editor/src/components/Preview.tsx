@@ -98,6 +98,7 @@ export const Preview = () => {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* biome-ignore lint/a11y/useMediaCaption: editor preview audio — captions not applicable (raw track playback, no speech content) */}
       {audioUrl && <audio ref={audioElRef} src={audioUrl} preload="auto" />}
       <Player
         ref={playerRef}

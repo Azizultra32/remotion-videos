@@ -151,7 +151,7 @@ const SceneContent: React.FC<{
 
 export const ExplainerVideo: React.FC<ExplainerVideoProps> = ({ scenes }) => {
   const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
+  const { durationInFrames, fps } = useVideoConfig();
 
   if (scenes.length === 0) {
     return (
@@ -213,7 +213,7 @@ export const ExplainerVideo: React.FC<ExplainerVideoProps> = ({ scenes }) => {
         scene={currentScene}
         sceneFrame={sceneFrame}
         sceneDuration={sceneDuration}
-        fps={useVideoConfig().fps}
+        fps={fps}
       />
 
       {/* Progress bar */}

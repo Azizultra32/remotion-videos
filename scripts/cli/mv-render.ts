@@ -108,14 +108,12 @@ const fps = args.fps ?? timeline.fps ?? 24;
 
 const outDir = resolve(repoRoot, "out");
 mkdirSync(outDir, { recursive: true });
-const outBase = isMusicVideo
-  ? `${stem}-${Date.now()}.mp4`
-  : `${composition}-${Date.now()}.mp4`;
+const outBase = isMusicVideo ? `${stem}-${Date.now()}.mp4` : `${composition}-${Date.now()}.mp4`;
 const outPath = args.out ? resolve(args.out) : resolve(outDir, outBase);
 
 // Build props. MusicVideo: from timeline.json. Non-MusicVideo: user-supplied
 // --props-file or defaultProps (Remotion falls back when --props not passed).
-let inputProps: unknown = undefined;
+let inputProps: unknown;
 let propsSource = "defaultProps from Root.tsx";
 if (isMusicVideo) {
   inputProps = {
@@ -141,16 +139,12 @@ if (args.propsFile) {
   }
 }
 
-console.log(
-  `rendering composition=${composition} project=${stem} → ${basename(outPath)}`,
-);
+console.log(`rendering composition=${composition} project=${stem} → ${basename(outPath)}`);
 if (isMusicVideo) {
   console.log(`  audio:    projects/${stem}/audio.mp3`);
   console.log(`  analysis: projects/${stem}/analysis.json`);
   console.log(`  fps:      ${fps}`);
-  console.log(
-    `  elements: ${Array.isArray(timeline.elements) ? timeline.elements.length : 0}`,
-  );
+  console.log(`  elements: ${Array.isArray(timeline.elements) ? timeline.elements.length : 0}`);
 }
 console.log(`  props:    ${propsSource}`);
 if (!isMusicVideo) {
@@ -169,7 +163,7 @@ if (args.dryRun) {
   console.log(`  cwd: ${repoRoot}`);
   console.log(`  cmd: npx ${spawnArgs.join(" ")}`);
   console.log(
-    "  tip: if remotion errors with \"No composition with the ID <name> found\", run `npx remotion compositions src/index.ts` for the registered list.",
+    '  tip: if remotion errors with "No composition with the ID <name> found", run `npx remotion compositions src/index.ts` for the registered list.',
   );
   process.exit(0);
 }

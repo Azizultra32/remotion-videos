@@ -225,6 +225,7 @@ const ShaderCanvas: React.FC<{
     const program = programRef.current;
     if (!gl || !program) return;
 
+    // biome-ignore lint/correctness/useHookAtTopLevel: gl.useProgram is WebGL API, not a React hook
     gl.useProgram(program);
 
     // Set uniforms

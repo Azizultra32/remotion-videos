@@ -33,9 +33,11 @@ const defaults: Props = {
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { color, strokeWidth, amplitude, position, height, opacity, numberOfSamples } =
     element.props;
-  if (!ctx.audioSrc) return null;
-  const resolved =
-    ctx.audioSrc.startsWith("http") || ctx.audioSrc.startsWith("/")
+  // Always call the hook — return null AFTER hook invocation so call order is
+  // stable across renders.
+  const resolved = !ctx.audioSrc
+    ? ""
+    : ctx.audioSrc.startsWith("http") || ctx.audioSrc.startsWith("/")
       ? ctx.audioSrc
       : staticFile(ctx.audioSrc);
   const { audioData, dataOffsetInSeconds } = useWindowedAudioData({
@@ -44,7 +46,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     fps: ctx.fps,
     windowInSeconds: 10,
   });
-  if (!audioData) return null;
+  if (!ctx.audioSrc || !audioData) return null;
 
   const samples = visualizeAudioWaveform({
     fps: ctx.fps,
@@ -69,7 +71,9 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
         : (ctx.height - height) / 2;
 
   return (
-    <svg role="img" aria-label="Audio waveform path"
+    <svg
+      role="img"
+      aria-label="Audio waveform path"
       viewBox={`0 0 ${ctx.width} ${height}`}
       width={ctx.width}
       height={height}

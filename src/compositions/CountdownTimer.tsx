@@ -312,7 +312,9 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = (inputProps) => {
       )}
 
       {showCircle && (
-        <svg role="img" aria-label="Countdown visualization"
+        <svg
+          role="img"
+          aria-label="Countdown visualization"
           width={circleRadius * 2 + 80}
           height={circleRadius * 2 + 80}
           viewBox={`0 0 ${circleRadius * 2 + 80} ${circleRadius * 2 + 80}`}

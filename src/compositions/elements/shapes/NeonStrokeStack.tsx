@@ -86,7 +86,9 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const filterId2 = `neon-blur-mid-${element.id}`;
 
   return (
-    <svg role="img" aria-label="Neon stroke stack shape"
+    <svg
+      role="img"
+      aria-label="Neon stroke stack shape"
       viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
       width={svgW}
       height={svgH}

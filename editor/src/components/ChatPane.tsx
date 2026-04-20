@@ -341,8 +341,8 @@ const MessageBubble = ({
             const chipBorder = tc.isError ? "#b91c1c" : running ? "#3b82f6" : "#22c55e";
             const chipText = tc.isError ? "#fca5a5" : running ? "#93c5fd" : "#86efac";
             return (
-              {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
-              {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
+              // biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate
+              // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate
               <div
                 key={tc.id || tc.name}
                 style={{

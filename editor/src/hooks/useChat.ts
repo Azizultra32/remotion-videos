@@ -254,8 +254,9 @@ export const useChat = () => {
           const { done, value } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
-          let idx: number;
-          while ((idx = buf.indexOf("\n")) !== -1) {
+          while (true) {
+            const idx = buf.indexOf("\n");
+            if (idx === -1) break;
             const line = buf.slice(0, idx);
             buf = buf.slice(idx + 1);
             if (!line.trim()) continue;

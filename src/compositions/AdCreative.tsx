@@ -226,7 +226,14 @@ const FeatureHighlights: React.FC<{
                 flexShrink: 0,
               }}
             >
-              <svg role="img" aria-label="Ad creative decoration" width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <svg
+                role="img"
+                aria-label="Ad creative decoration"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
                 <path
                   d="M5 13l4 4L19 7"
                   stroke="#fff"

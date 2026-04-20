@@ -6,8 +6,7 @@
 
 const STORAGE_PREFIX = "peaks:v1:";
 
-export const cachedPeaksKey = (audioUrl: string): string =>
-  STORAGE_PREFIX + audioUrl;
+export const cachedPeaksKey = (audioUrl: string): string => STORAGE_PREFIX + audioUrl;
 
 // btoa/atob choke on very large strings if built via spread; chunk to stay
 // under the argument-count cap.
@@ -15,18 +14,11 @@ const BTOA_CHUNK = 0x8000;
 
 export const encodePeaks = (peaks: Float32Array): string => {
   if (peaks.length === 0) return "";
-  const bytes = new Uint8Array(
-    peaks.buffer,
-    peaks.byteOffset,
-    peaks.byteLength,
-  );
+  const bytes = new Uint8Array(peaks.buffer, peaks.byteOffset, peaks.byteLength);
   const parts: string[] = [];
   for (let i = 0; i < bytes.length; i += BTOA_CHUNK) {
     parts.push(
-      String.fromCharCode.apply(
-        null,
-        bytes.subarray(i, i + BTOA_CHUNK) as unknown as number[],
-      ),
+      String.fromCharCode.apply(null, bytes.subarray(i, i + BTOA_CHUNK) as unknown as number[]),
     );
   }
   return btoa(parts.join(""));
@@ -59,11 +51,7 @@ export const loadCachedPeaks = (
   }
 };
 
-export const saveCachedPeaks = (
-  audioUrl: string,
-  peaks: Float32Array,
-  duration: number,
-): void => {
+export const saveCachedPeaks = (audioUrl: string, peaks: Float32Array, duration: number): void => {
   try {
     const entry: CachedEntry = { duration, peaks: encodePeaks(peaks) };
     localStorage.setItem(cachedPeaksKey(audioUrl), JSON.stringify(entry));

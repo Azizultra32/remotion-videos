@@ -83,7 +83,9 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const svgH = ctx.height * (heightPct / 100);
 
   return (
-    <svg role="img" aria-label="Path reveal shape"
+    <svg
+      role="img"
+      aria-label="Path reveal shape"
       viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
       width={svgW}
       height={svgH}

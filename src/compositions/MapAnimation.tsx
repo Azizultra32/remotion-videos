@@ -385,7 +385,13 @@ export const MapAnimation: React.FC<MapAnimationProps> = ({
           height: MAP_HEIGHT,
         }}
       >
-        <svg role="img" aria-label="Map regions and connections" viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} width={MAP_WIDTH} height={MAP_HEIGHT}>
+        <svg
+          role="img"
+          aria-label="Map regions and connections"
+          viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+          width={MAP_WIDTH}
+          height={MAP_HEIGHT}
+        >
           {/* Background region dots */}
           {REGION_DOTS.map((dot, i) => (
             <circle

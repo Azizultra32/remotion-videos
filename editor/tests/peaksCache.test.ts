@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
-  encodePeaks,
-  decodePeaks,
-  saveCachedPeaks,
-  loadCachedPeaks,
   cachedPeaksKey,
+  decodePeaks,
+  encodePeaks,
+  loadCachedPeaks,
+  saveCachedPeaks,
 } from "../src/utils/peaksCache";
 
 beforeEach(() => {
@@ -78,12 +78,7 @@ describe("saveCachedPeaks / loadCachedPeaks", () => {
     if (!loaded) throw new Error("unreachable");
     expect(loaded.duration).toBe(42.5);
     expect(loaded.peaks.length).toBe(4);
-    expect(Array.from(loaded.peaks)).toEqual([
-      0.10000000149011612,
-      0.25,
-      -0.5,
-      0.75,
-    ]);
+    expect(Array.from(loaded.peaks)).toEqual([0.10000000149011612, 0.25, -0.5, 0.75]);
   });
 
   it("different urls have independent caches", () => {
@@ -105,9 +100,7 @@ describe("saveCachedPeaks / loadCachedPeaks", () => {
     localStorage.setItem = () => {
       throw new Error("QuotaExceededError");
     };
-    expect(() =>
-      saveCachedPeaks("/x.mp3", new Float32Array([0.1]), 1),
-    ).not.toThrow();
+    expect(() => saveCachedPeaks("/x.mp3", new Float32Array([0.1]), 1)).not.toThrow();
     localStorage.setItem = originalSet;
   });
 });

@@ -1,3 +1,5 @@
+// biome-ignore-all lint/suspicious/noExplicitAny: ElementModule<any> is the registry's heterogeneous-props typing root; per-module props are validated via Zod schemas
+
 import { BassGlowOverlayModule } from "./audio/BassGlowOverlay";
 import { SpectrumBarsModule } from "./audio/SpectrumBars";
 import { WaveformPathModule } from "./audio/WaveformPath";
@@ -45,7 +47,8 @@ export const getElementModule = (type: string): ElementModule<any> | null =>
 export const listByCategory = (): Record<string, ElementModule<any>[]> => {
   const out: Record<string, ElementModule<any>[]> = {};
   for (const m of ELEMENT_MODULES) {
-    (out[m.category] ||= []).push(m);
+    if (!out[m.category]) out[m.category] = [];
+    out[m.category].push(m);
   }
   return out;
 };

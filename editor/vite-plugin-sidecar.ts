@@ -116,7 +116,7 @@ const reconcileOrphanStatusFiles = async (projectsDir: string): Promise<void> =>
     } catch {
       continue;
     }
-    let parsed: any;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
@@ -287,10 +287,8 @@ const handleProjectFile = async (req: IncomingMessage, res: ServerResponse): Pro
     res.end("forbidden");
     return;
   }
-  let stat;
-  try {
-    stat = await fs.stat(full);
-  } catch {
+  const stat = await fs.stat(full).catch(() => null);
+  if (!stat) {
     res.statusCode = 404;
     res.end("not found");
     return;
@@ -599,7 +597,7 @@ const handleEventsGet = async (req: IncomingMessage, res: ServerResponse): Promi
     return;
   }
   const dest = path.join(PROJECTS_DIR, stem, "events.json");
-  let parsed;
+  let parsed: ReturnType<typeof parseEventsFile>;
   try {
     const content = await fs.readFile(dest, "utf8");
     parsed = parseEventsFile(JSON.parse(content));
@@ -686,10 +684,8 @@ const handleOut = async (req: IncomingMessage, res: ServerResponse): Promise<voi
     res.end("forbidden");
     return;
   }
-  let stat;
-  try {
-    stat = await fs.stat(full);
-  } catch {
+  const stat = await fs.stat(full).catch(() => null);
+  if (!stat) {
     res.statusCode = 404;
     res.end("not found");
     return;
@@ -1238,7 +1234,7 @@ const handleAnalyzeRun = async (req: IncomingMessage, res: ServerResponse): Prom
   const statusFile = path.join(projectDir, ".analyze-status.json");
   try {
     const existing = await fs.readFile(statusFile, "utf8");
-    let parsed: any = null;
+    let parsed: unknown = null;
     try {
       parsed = JSON.parse(existing);
     } catch {
@@ -1891,8 +1887,7 @@ const handleChat = async (req: IncomingMessage, res: ServerResponse): Promise<vo
   };
   const finalRe = /<final>([\s\S]*?)<\/final>/g;
   let lastFinal: string | null = null;
-  let m: RegExpExecArray | null;
-  while ((m = finalRe.exec(stdout)) !== null) lastFinal = m[1];
+  for (let m = finalRe.exec(stdout); m !== null; m = finalRe.exec(stdout)) lastFinal = m[1];
   const primary = lastFinal !== null ? tryParse(lastFinal) : null;
   if (primary) {
     payload = primary;
@@ -2070,8 +2065,7 @@ const handleChatStream = async (req: IncomingMessage, res: ServerResponse): Prom
       };
       const finalRe = /<final>([\s\S]*?)<\/final>/g;
       let lastFinal: string | null = null;
-      let m: RegExpExecArray | null;
-      while ((m = finalRe.exec(result)) !== null) lastFinal = m[1];
+      for (let m = finalRe.exec(result); m !== null; m = finalRe.exec(result)) lastFinal = m[1];
       const primary = lastFinal !== null ? tryParse(lastFinal) : null;
       const payload = primary ??
         tryParse(result) ?? { reply: result.trim() || "(no output)", mutations: [] };
@@ -2082,8 +2076,9 @@ const handleChatStream = async (req: IncomingMessage, res: ServerResponse): Prom
 
   child.stdout.on("data", (chunk: Buffer) => {
     buf += chunk.toString("utf8");
-    let idx: number;
-    while ((idx = buf.indexOf("\n")) !== -1) {
+    while (true) {
+      const idx = buf.indexOf("\n");
+      if (idx === -1) break;
       const line = buf.slice(0, idx);
       buf = buf.slice(idx + 1);
       processLine(line);

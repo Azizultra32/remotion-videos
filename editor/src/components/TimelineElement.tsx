@@ -67,7 +67,6 @@ export const TimelineElement = ({ element, pxPerSec, height }: Props) => {
     >
       {/* Left resize handle */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
       <div
         onMouseDown={(e) => {
           resizeL.onMouseDown(e);
@@ -85,7 +84,6 @@ export const TimelineElement = ({ element, pxPerSec, height }: Props) => {
       />
       {/* Body — click/drag to move, click to select, double-click to open source */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
       <div
         onMouseDown={(e) => {
           drag.onMouseDown(e);
@@ -119,7 +117,6 @@ export const TimelineElement = ({ element, pxPerSec, height }: Props) => {
       </div>
       {/* Right resize handle */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
       <div
         onMouseDown={(e) => {
           resizeR.onMouseDown(e);

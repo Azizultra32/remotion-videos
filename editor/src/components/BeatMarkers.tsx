@@ -15,7 +15,9 @@ export const BeatMarkers = ({
   const toX = (t: number) => ((t - start) / duration) * widthPx;
 
   return (
-    <svg role="img" aria-label="Beat markers"
+    <svg
+      role="img"
+      aria-label="Beat markers"
       style={{
         position: "absolute",
         top: 0,

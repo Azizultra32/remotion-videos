@@ -19,7 +19,7 @@
 //
 // Hook mounts once in App.tsx. Unmount is rare (only on full tab close).
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useEditorStore } from "../store";
 import type { TimelineElement } from "../types";
 import { stemFromAudioSrc } from "../utils/url";
@@ -53,7 +53,7 @@ export const useTimelineSync = () => {
   // pipeline-origin placeholders against the latest confirmed event list.
   const eventsRef = useRef<EventSource | null>(null);
 
-  const openWatcher = (stem: string, onRemoteChange: () => void) => {
+  const openWatcher = useCallback((stem: string, onRemoteChange: () => void) => {
     if (watchRef.current) {
       watchRef.current.close();
       watchRef.current = null;
@@ -70,9 +70,9 @@ export const useTimelineSync = () => {
       // EventSource unavailable (very old browser) — autosave still works;
       // only live-reload from external edits is lost.
     }
-  };
+  }, []);
 
-  const openEventsWatcher = (stem: string) => {
+  const openEventsWatcher = useCallback((stem: string) => {
     if (eventsRef.current) {
       eventsRef.current.close();
       eventsRef.current = null;
@@ -157,7 +157,7 @@ export const useTimelineSync = () => {
     } catch {
       /* EventSource unsupported — skip silently */
     }
-  };
+  }, []);
 
   // ---- (1) Hydrate on stem change + bootstrap on mount ----
   useEffect(() => {

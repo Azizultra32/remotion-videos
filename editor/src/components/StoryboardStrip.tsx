@@ -7,7 +7,7 @@
 //
 // Data lives in store.scenes; persistence is useStoryboardSync → storyboard.json.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../store";
 import type { Scene } from "../types";
 
@@ -72,7 +72,7 @@ export const StoryboardStrip = () => {
     setError(null);
   };
 
-  const save = () => {
+  const save = useCallback(() => {
     if (!editing) return;
     const start = Number(editing.startSec);
     const end = Number(editing.endSec);
@@ -101,7 +101,7 @@ export const StoryboardStrip = () => {
     }
     setEditing(null);
     setError(null);
-  };
+  }, [editing, addScene, updateScene]);
 
   const del = (sc: Scene) => {
     if (
@@ -122,7 +122,6 @@ export const StoryboardStrip = () => {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, save]);
 
   if (!audioSrc) return null; // nothing to storyboard against
@@ -158,8 +157,8 @@ export const StoryboardStrip = () => {
         sorted.map((sc) => {
           const isActive = sc.id === activeId;
           return (
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
+            // biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate
+            // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate
             <div
               key={sc.id}
               style={{
@@ -246,8 +245,8 @@ export const StoryboardStrip = () => {
       </button>
 
       {editing && (
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
+        // biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate
+        // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate
         <div
           style={{
             position: "fixed",

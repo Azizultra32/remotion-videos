@@ -16,6 +16,7 @@ const fieldStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = { fontSize: 11, color: "#aaa" };
 
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  // biome-ignore lint/a11y/noLabelWithoutControl: Field is a wrapper; control is rendered via children prop
   <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
     <span style={labelStyle}>{label}</span>
     {children}

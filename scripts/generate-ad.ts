@@ -241,7 +241,9 @@ async function main() {
   if (summary.length === 0) {
     console.log("  Nothing was generated (no options provided)");
   } else {
-    summary.forEach((s) => console.log(`  - ${s}`));
+    summary.forEach((s) => {
+      console.log(`  - ${s}`);
+    });
   }
   console.log("=".repeat(60));
 }

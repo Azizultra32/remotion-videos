@@ -212,7 +212,9 @@ describe("sidecar integration", () => {
     expect(data.phase2_events_sec.length).toBe(3);
   });
 
-  it("POST /api/chat parses the stub's <final> block into reply + mutations", { timeout: 15_000 }, async () => {
+  it("POST /api/chat parses the stub's <final> block into reply + mutations", {
+    timeout: 15_000,
+  }, async () => {
     const r = await fetch(`http://localhost:${PORT}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

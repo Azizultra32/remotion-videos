@@ -16,9 +16,16 @@ const D1 = 2.75;
 
 const bounceOut: EasingFn = (t) => {
   if (t < 1 / D1) return N1 * t * t;
-  if (t < 2 / D1) return N1 * (t -= 1.5 / D1) * t + 0.75;
-  if (t < 2.5 / D1) return N1 * (t -= 2.25 / D1) * t + 0.9375;
-  return N1 * (t -= 2.625 / D1) * t + 0.984375;
+  if (t < 2 / D1) {
+    const u = t - 1.5 / D1;
+    return N1 * u * u + 0.75;
+  }
+  if (t < 2.5 / D1) {
+    const u = t - 2.25 / D1;
+    return N1 * u * u + 0.9375;
+  }
+  const u = t - 2.625 / D1;
+  return N1 * u * u + 0.984375;
 };
 
 export const EASINGS: Record<string, EasingFn> = {

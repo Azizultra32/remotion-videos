@@ -6,7 +6,9 @@ const args = process.argv.slice(2);
 if (args[0] === "--list-voices") {
   const voices = await listVoices();
   console.log("\nAvailable voices:");
-  voices.forEach((v) => console.log(`  ${v.voice_id} — ${v.name}`));
+  voices.forEach((v) => {
+    console.log(`  ${v.voice_id} — ${v.name}`);
+  });
   process.exit(0);
 }
 

@@ -55,7 +55,9 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const probeFontSize = 400;
 
   return (
-    <svg role="img" aria-label="Rendered word text"
+    <svg
+      role="img"
+      aria-label="Rendered word text"
       viewBox={`0 0 ${svgW} ${svgH}`}
       width={svgW}
       height={svgH}

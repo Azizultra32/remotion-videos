@@ -801,7 +801,11 @@ const Scene5Forks: React.FC = () => {
         {/* Tree visualization */}
         <div style={{ position: "relative", width: 950, height: 500 }}>
           {/* Edges */}
-          <svg role="img" aria-label="Terminal network diagram" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
+          <svg
+            role="img"
+            aria-label="Terminal network diagram"
+            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+          >
             {edges.map(({ from, to, delay }, i) => {
               const progress = interpolate(frame - delay, [0, 20], [0, 1], {
                 extrapolateLeft: "clamp",

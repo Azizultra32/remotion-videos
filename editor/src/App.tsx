@@ -17,6 +17,7 @@ import { useAutoSeedBeats } from "./hooks/useAutoSeedBeats";
 import { useUndoHistory } from "./hooks/useUndoHistory";
 import { useEditorStore } from "./store";
 import { toEditorUrl } from "./utils/url";
+import { ShortcutsProvider } from "./contexts/shortcuts";
 
 const DEFAULT_BEATS_URL = "/api/projects/love-in-traffic/analysis.json";
 
@@ -75,6 +76,7 @@ export const App = () => {
   const audioUrl = toEditorUrl(audioSrc);
 
   return (
+    <ShortcutsProvider>
     <div style={{ display: "grid", gridTemplateColumns: "240px minmax(0, 1fr) 320px", gridTemplateRows: "auto auto minmax(0, 1fr) 360px", height: "100vh", width: "100vw", overflow: "hidden", background: "#111", color: "#fff" }}>
       {/* Sidebar column: Header → Element Library → Element Detail */}
       <div style={{ gridRow: "1/5", borderRight: "1px solid #333", padding: 0, overflowY: "auto" }}>
@@ -134,5 +136,6 @@ export const App = () => {
         </ErrorBoundary>
       </div>
     </div>
+    </ShortcutsProvider>
   );
 };

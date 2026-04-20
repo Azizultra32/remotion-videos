@@ -15,6 +15,10 @@ import {
   clampViewport,
 } from "../utils/timelineScale";
 import { useStorage } from "../hooks/useStorage";
+import {
+  useShortcutSurface,
+  useShortcuts,
+} from "../contexts/shortcuts";
 
 type Props = {
   audioUrl: string;
@@ -194,6 +198,47 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
     );
   };
 
+  // Center-anchored zoom (for keyboard shortcuts). Same math as handleWheel
+  // but anchor = containerWidth/2 instead of the mouse position.
+  const zoomBy = (zoomFactor: number) => {
+    if (!effectiveSecPerPx || !containerWidth) return;
+    const maxSecPerPx = naturalSecPerPx || effectiveSecPerPx;
+    const minSecPerPx = (naturalSecPerPx || effectiveSecPerPx) / 100;
+    const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
+      currentSecPerPx: effectiveSecPerPx,
+      currentOffsetSec: offsetSec,
+      zoomFactor,
+      anchorPx: containerWidth / 2,
+      minSecPerPx,
+      maxSecPerPx,
+    });
+    setSecPerPx(nextSecPerPx);
+    setOffsetSec(
+      clampViewport({
+        offsetSec: nextOffset,
+        secPerPx: nextSecPerPx,
+        containerPx: containerWidth,
+        totalSec,
+      }),
+    );
+  };
+
+  // Per-surface shortcuts: +/- zoom, 0 resets. Only fire when the pointer
+  // is over the Scrubber (see scrollPortRef's pointer handlers below).
+  const surfaceHandlers = useShortcutSurface("scrubber");
+  useShortcuts("scrubber", [
+    { pattern: "=", handler: () => zoomBy(1.2) }, // "+" without shift
+    { pattern: "+", handler: () => zoomBy(1.2) },
+    { pattern: "-", handler: () => zoomBy(1 / 1.2) },
+    {
+      pattern: "0",
+      handler: () => {
+        setSecPerPx(0);
+        setOffsetSec(0);
+      },
+    },
+  ]);
+
   return (
     <div
       style={{
@@ -256,6 +301,8 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
       <div
         ref={scrollPortRef}
         onWheel={handleWheel}
+        onPointerEnter={surfaceHandlers.onPointerEnter}
+        onPointerLeave={surfaceHandlers.onPointerLeave}
         style={{
           position: "relative",
           width: "100%",

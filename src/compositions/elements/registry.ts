@@ -1,10 +1,14 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: ElementModule<any> is the registry's heterogeneous-props typing root; per-module props are validated via Zod schemas
 
 import { BassGlowOverlayModule } from "./audio/BassGlowOverlay";
+import { OscilloscopeModule } from "./audio/Oscilloscope";
+import { SpectrumWaterfallModule } from "./audio/SpectrumWaterfall";
 import { SpectrumBarsModule } from "./audio/SpectrumBars";
 import { WaveformPathModule } from "./audio/WaveformPath";
 import { PreDropFadeHoldModule } from "./overlays/PreDropFadeHold";
 import { BeatShockModule } from "./overlays/BeatShock";
+import { BloomGlowModule } from "./overlays/BloomGlow";
+import { GlitchShockModule } from "./overlays/GlitchShock";
 import { PlasmaBackdropModule } from "./overlays/PlasmaBackdrop";
 import { ShaderPulseModule } from "./overlays/ShaderPulse";
 import { VideoClipModule } from "./overlays/VideoClip";
@@ -40,7 +44,11 @@ export const ELEMENT_MODULES: ElementModule<any>[] = [
   VideoClipModule,
   ShaderPulseModule,
   BeatShockModule,
+  BloomGlowModule,
+  GlitchShockModule,
+  OscilloscopeModule,
   PlasmaBackdropModule,
+  SpectrumWaterfallModule,
 ];
 
 export const ELEMENT_REGISTRY: Record<string, ElementModule<any>> = Object.fromEntries(

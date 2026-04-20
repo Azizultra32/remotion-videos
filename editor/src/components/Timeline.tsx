@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useEditorStore } from "../store";
 import type { TimelineElement as TimelineElementType } from "../types";
 import { TimelineBeatMarkers } from "./TimelineBeatMarkers";
+import { TimelineEventMarkers } from "./TimelineEventMarkers";
 import { TimelineElement } from "./TimelineElement";
 import { TimelinePlayhead } from "./TimelinePlayhead";
 import { TimelineRuler } from "./TimelineRuler";
@@ -133,6 +134,7 @@ export const Timeline = () => {
               beat-markers + playhead can span the whole height */}
           <div style={{ position: "relative", width: widthPx, height: tracksHeight }}>
             <TimelineBeatMarkers beatData={beatData} pxPerSec={PX_PER_SEC} height={tracksHeight} />
+            <TimelineEventMarkers pxPerSec={PX_PER_SEC} height={tracksHeight} />
             {Array.from({ length: TRACK_COUNT }, (_, i) => (
               <div
                 // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the track identity (trackIndex)

@@ -88,6 +88,11 @@ export type EditorState = {
   beatData: BeatData | null;
   events: EventMark[];
   scenes: Scene[];
+  // In/Out render markers ([ / ] keybindings). Semi-persistent selection
+  // on the timeline used to mark a subset for partial render / loop / export.
+  // null = unset. Cleared on setTrack.
+  inPointSec: number | null;
+  outPointSec: number | null;
   // Shared timeline view (zoom + pan). Scrubber and Timeline read + write
   // these so both stay at the same time-axis. secPerPx = seconds-per-pixel
   // (inverse of pxPerSec). Default 0.025 sec/px = 40 px/sec, matches the
@@ -124,6 +129,9 @@ export type EditorState = {
   updateScene: (id: string, patch: Partial<Omit<Scene, "id">>) => void;
   removeScene: (id: string) => void;
   setTimelineView: (patch: { secPerPx?: number; offsetSec?: number }) => void;
+  setInPoint: (sec: number | null) => void;
+  setOutPoint: (sec: number | null) => void;
+  clearInOut: () => void;
   linkSceneElement: (sceneId: string, elementId: string) => void;
   unlinkSceneElement: (sceneId: string, elementId: string) => void;
   linkSceneEvent: (sceneId: string, eventName: string) => void;

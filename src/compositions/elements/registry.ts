@@ -5,6 +5,7 @@ import { SpectrumBarsModule } from "./audio/SpectrumBars";
 import { WaveformPathModule } from "./audio/WaveformPath";
 import { PreDropFadeHoldModule } from "./overlays/PreDropFadeHold";
 import { BeatShockModule } from "./overlays/BeatShock";
+import { PlasmaBackdropModule } from "./overlays/PlasmaBackdrop";
 import { ShaderPulseModule } from "./overlays/ShaderPulse";
 import { VideoClipModule } from "./overlays/VideoClip";
 import { WatermarkMaskModule } from "./overlays/WatermarkMask";
@@ -39,6 +40,7 @@ export const ELEMENT_MODULES: ElementModule<any>[] = [
   VideoClipModule,
   ShaderPulseModule,
   BeatShockModule,
+  PlasmaBackdropModule,
 ];
 
 export const ELEMENT_REGISTRY: Record<string, ElementModule<any>> = Object.fromEntries(

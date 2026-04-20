@@ -39,6 +39,8 @@ export const Timeline = () => {
   const secPerPx = useEditorStore((s) => s.timelineSecPerPx);
   const offsetSec = useEditorStore((s) => s.timelineOffsetSec);
   const setTimelineView = useEditorStore((s) => s.setTimelineView);
+  const inPointSec = useEditorStore((state) => state.inPointSec);
+  const outPointSec = useEditorStore((state) => state.outPointSec);
   const effectiveSecPerPx = secPerPx > 0 ? secPerPx : DEFAULT_SEC_PER_PX;
   const pxPerSec = 1 / effectiveSecPerPx;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -173,6 +175,15 @@ export const Timeline = () => {
           >
             <TimelineBeatMarkers beatData={beatData} pxPerSec={pxPerSec} height={tracksHeight} />
             <TimelineEventMarkers pxPerSec={pxPerSec} height={tracksHeight} />
+            {inPointSec !== null && outPointSec !== null && (
+              <div style={{position:"absolute",left:inPointSec*pxPerSec,top:0,width:Math.max(2,(outPointSec-inPointSec)*pxPerSec),height:tracksHeight,background:"rgba(59,130,246,0.08)",borderLeft:"2px solid #3b82f6",borderRight:"2px solid #3b82f6",pointerEvents:"none",zIndex:3}} title={`IN ${inPointSec.toFixed(2)}s → OUT ${outPointSec.toFixed(2)}s · range ${(outPointSec-inPointSec).toFixed(2)}s`} />
+            )}
+            {inPointSec !== null && outPointSec === null && (
+              <div style={{position:"absolute",left:inPointSec*pxPerSec-1,top:0,width:2,height:tracksHeight,background:"#3b82f6",pointerEvents:"none",zIndex:3}} title={`IN ${inPointSec.toFixed(2)}s (set OUT with ])`} />
+            )}
+            {outPointSec !== null && inPointSec === null && (
+              <div style={{position:"absolute",left:outPointSec*pxPerSec-1,top:0,width:2,height:tracksHeight,background:"#3b82f6",pointerEvents:"none",zIndex:3}} title={`OUT ${outPointSec.toFixed(2)}s (set IN with [)`} />
+            )}
             {Array.from({ length: TRACK_COUNT }, (_, i) => (
               <div
                 // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the track identity (trackIndex)

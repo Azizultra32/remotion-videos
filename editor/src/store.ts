@@ -21,6 +21,8 @@ export const useEditorStore = create<EditorState>()(
       scenes: [],
       timelineSecPerPx: 0,
       timelineOffsetSec: 0,
+      inPointSec: null,
+      outPointSec: null,
       compositionDuration: 90,
       fps: 24,
       snapMode: "beat",
@@ -72,6 +74,8 @@ export const useEditorStore = create<EditorState>()(
           scenes: [],
           timelineSecPerPx: 0,
           timelineOffsetSec: 0,
+          inPointSec: null,
+          outPointSec: null,
         }),
       // Named time events — in-memory; persisted to disk by useEventsSync.
       setEvents: (events) => set({ events }),
@@ -88,6 +92,24 @@ export const useEditorStore = create<EditorState>()(
           timelineSecPerPx: patch.secPerPx !== undefined ? patch.secPerPx : s.timelineSecPerPx,
           timelineOffsetSec: patch.offsetSec !== undefined ? patch.offsetSec : s.timelineOffsetSec,
         })),
+      setInPoint: (sec) =>
+        set((s) => {
+          if (sec === null) return { inPointSec: null };
+          // If outPoint is set and we'd invert, swap instead so in <= out.
+          if (s.outPointSec !== null && sec > s.outPointSec) {
+            return { inPointSec: s.outPointSec, outPointSec: sec };
+          }
+          return { inPointSec: sec };
+        }),
+      setOutPoint: (sec) =>
+        set((s) => {
+          if (sec === null) return { outPointSec: null };
+          if (s.inPointSec !== null && sec < s.inPointSec) {
+            return { inPointSec: sec, outPointSec: s.inPointSec };
+          }
+          return { outPointSec: sec };
+        }),
+      clearInOut: () => set({ inPointSec: null, outPointSec: null }),
       addScene: (scene) => set((s) => ({ scenes: [...s.scenes, scene] })),
       updateScene: (id, patch) =>
         set((s) => ({

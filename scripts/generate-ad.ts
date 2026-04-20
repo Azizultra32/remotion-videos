@@ -76,6 +76,7 @@ async function main() {
   // ------------------------------------------------------------------
   // Step 1: Load brand config (if --brand)
   // ------------------------------------------------------------------
+  // biome-ignore lint/suspicious/noExplicitAny: brand config is a user-authored JSON bag with arbitrary shape
   let brandConfig: Record<string, any> | undefined;
 
   if (brandName) {
@@ -168,6 +169,7 @@ async function main() {
   // ------------------------------------------------------------------
   log("PROPS", "Assembling composition props...");
 
+  // biome-ignore lint/suspicious/noExplicitAny: composition props are heterogeneous across AdCreative/BrandedDemo
   const props: Record<string, any> = {
     productName: brandConfig?.name || "Product",
     productImage: productImagePath || "",

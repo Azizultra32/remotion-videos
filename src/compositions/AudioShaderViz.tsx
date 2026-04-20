@@ -149,6 +149,7 @@ const ShaderCanvas: React.FC<{
     glRef.current = gl;
 
     // Compile vertex shader
+    // biome-ignore lint/style/noNonNullAssertion: WebGL createShader returns null only under OOM; unrecoverable anyway
     const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
     gl.shaderSource(
       vertexShader,
@@ -164,6 +165,7 @@ const ShaderCanvas: React.FC<{
     }
 
     // Compile fragment shader
+    // biome-ignore lint/style/noNonNullAssertion: see vertexShader note above
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
     gl.shaderSource(fragmentShader, sonarShaderSource);
     gl.compileShader(fragmentShader);
@@ -177,6 +179,7 @@ const ShaderCanvas: React.FC<{
     }
 
     // Link program
+    // biome-ignore lint/style/noNonNullAssertion: WebGL createProgram returns null only under OOM
     const program = gl.createProgram()!;
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
@@ -260,7 +263,7 @@ const ShaderCanvas: React.FC<{
 export const AudioShaderViz: React.FC<z.infer<typeof audioShaderVizSchema>> = ({
   audioSrc,
   beatsSrc,
-  shaderPreset,
+  shaderPreset: _shaderPreset,
   colorPalette,
   beatSensitivity,
 }) => {

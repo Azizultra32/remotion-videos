@@ -33,7 +33,7 @@ export const ProductDemo: React.FC<ProductDemoProps> = ({
   textColor,
 }) => {
   const _frame = useCurrentFrame();
-  const { fps, durationInFrames } = useVideoConfig();
+  const { fps: _fps, durationInFrames } = useVideoConfig();
 
   return (
     <AbsoluteFill style={{ backgroundColor }}>

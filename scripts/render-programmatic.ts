@@ -160,6 +160,7 @@ async function main() {
     while (idx < jobs.length) {
       const current = idx++;
       const job = jobs[current];
+      // biome-ignore lint/style/noNonNullAssertion: compositionMap is built from the same id list as jobs; lookup cannot miss
       const composition = compositionMap.get(job.compositionId)!;
       const outputFile = path.join(outDir, job.outputFile ?? `${job.compositionId}.mp4`);
 

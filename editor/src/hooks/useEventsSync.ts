@@ -114,7 +114,10 @@ export const useEventsSync = () => {
     let currentStem: string | null = null;
 
     const openFor = (stem: string) => {
-      if (es) { es.close(); es = null; }
+      if (es) {
+        es.close();
+        es = null;
+      }
       if (!stem) return;
       try {
         es = new EventSource(`/api/events/watch/${encodeURIComponent(stem)}`);
@@ -128,13 +131,17 @@ export const useEventsSync = () => {
             if (serialized === lastSavedJsonRef.current) return;
             useEditorStore.getState().setEvents(parsed.events);
             lastSavedJsonRef.current = serialized;
-          } catch { /* malformed payload */ }
+          } catch {
+            /* malformed payload */
+          }
         });
         es.addEventListener("error", () => {
           // EventSource auto-reconnects. If the backoff exhausts, re-open
           // on the next stem change. No explicit reconnect logic here.
         });
-      } catch { /* EventSource unsupported */ }
+      } catch {
+        /* EventSource unsupported */
+      }
     };
 
     const unsub = useEditorStore.subscribe((state, prev) => {
@@ -143,16 +150,25 @@ export const useEventsSync = () => {
       if (nextStem !== prevStem) {
         currentStem = nextStem;
         if (nextStem) openFor(nextStem);
-        else if (es) { es.close(); es = null; }
+        else if (es) {
+          es.close();
+          es = null;
+        }
       }
     });
 
     const initialStem = stemFromAudioSrc(useEditorStore.getState().audioSrc);
-    if (initialStem) { currentStem = initialStem; openFor(initialStem); }
+    if (initialStem) {
+      currentStem = initialStem;
+      openFor(initialStem);
+    }
 
     return () => {
       unsub();
-      if (es) { es.close(); es = null; }
+      if (es) {
+        es.close();
+        es = null;
+      }
       void currentStem; // keep var reference alive for the closure
     };
   }, []);

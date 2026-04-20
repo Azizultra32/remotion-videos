@@ -112,6 +112,7 @@ export const SpeedRamp: React.FC<z.infer<typeof speedRampSchema>> = ({
     for (let i = 1; i <= totalFrames; i++) {
       const compTimeAtFrame = (i - 0.5) / fps; // midpoint of frame
       const e = sampleEnergyAt(energy, energyFps, startSec + compTimeAtFrame);
+      // biome-ignore lint/style/noNonNullAssertion: lo/hi set together above this block; both present when we reach here
       const speed = interpolate(e, [lo!, hi!], [minSpeed, maxSpeed], {
         extrapolateLeft: "clamp",
         extrapolateRight: "clamp",

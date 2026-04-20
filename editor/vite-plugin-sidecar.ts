@@ -162,6 +162,7 @@ const EVENTS_LOCK = new Map<string, Promise<void>>();
 
 const STEM_RE = /^[a-z0-9_-]+$/i;
 
+// biome-ignore lint/suspicious/noExplicitAny: JSON.parse produces arbitrary shape; callers narrow at use site
 const readJsonBody = (req: IncomingMessage): Promise<any> =>
   new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -396,10 +397,7 @@ const STORYBOARD_LOCK = new Map<string, Promise<void>>();
 // (chat Write tool, vim, other processes) through to the editor store so the
 // cyan NamedEventPills appear without a manual reload. Mirrors
 // handleAnalyzeEvents / handleTimelineWatch.
-const handleEventsWatch = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleEventsWatch = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
   if (!STEM_RE.test(stem)) {
@@ -439,17 +437,30 @@ const handleEventsWatch = async (
     } catch {
       payload = JSON.stringify(parseEventsFile(undefined));
     }
-    try { res.write(`event: events\ndata: ${payload}\n\n`); } catch { /* closed */ }
+    try {
+      res.write(`event: events\ndata: ${payload}\n\n`);
+    } catch {
+      /* closed */
+    }
   };
 
   let watcher: FSWatcher | null = null;
   let keepalive: ReturnType<typeof setInterval> | null = null;
   const cleanup = () => {
-    if (keepalive) { clearInterval(keepalive); keepalive = null; }
-    if (watcher) { watcher.close(); watcher = null; }
+    if (keepalive) {
+      clearInterval(keepalive);
+      keepalive = null;
+    }
+    if (watcher) {
+      watcher.close();
+      watcher = null;
+    }
   };
   req.on("close", cleanup);
-  if (req.destroyed) { cleanup(); return; }
+  if (req.destroyed) {
+    cleanup();
+    return;
+  }
 
   await emit();
 
@@ -464,7 +475,11 @@ const handleEventsWatch = async (
   }
 
   keepalive = setInterval(() => {
-    try { res.write(":keepalive\n\n"); } catch { /* closed */ }
+    try {
+      res.write(":keepalive\n\n");
+    } catch {
+      /* closed */
+    }
   }, 20000);
 };
 

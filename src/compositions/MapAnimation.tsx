@@ -197,7 +197,7 @@ const ConnectionLine: React.FC<{
   locationCount: number;
   fps: number;
   connectionSpeed: number;
-}> = ({ from, to, index, locationCount, fps, connectionSpeed }) => {
+}> = ({ from, to, index, locationCount, fps: _fps, connectionSpeed }) => {
   const frame = useCurrentFrame();
 
   const baseDelay = locationCount * Math.max(3, Math.round(15 / connectionSpeed));

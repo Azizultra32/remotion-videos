@@ -119,7 +119,7 @@ const StageCard: React.FC<{
   stage: StageData;
   index: number;
   total: number;
-}> = ({ stage, index, total }) => {
+}> = ({ stage, index, total: _total }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -218,7 +218,7 @@ const Summary: React.FC<{
   totalCost: string;
 }> = ({ stages, totalCost }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps: _fps } = useVideoConfig();
 
   const fadeIn = interpolate(frame, [0, 30], [0, 1], {
     extrapolateLeft: "clamp",

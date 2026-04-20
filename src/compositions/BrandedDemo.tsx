@@ -62,7 +62,7 @@ export const brandedDemoSchema = z.object({
 
 // ── Types (derived from schema) ─────────────────────────────────────────────────
 
-type BrandColors = z.infer<typeof brandColorsSchema>;
+type _BrandColors = z.infer<typeof brandColorsSchema>; // kept for schema visibility
 type BrandConfig = z.infer<typeof brandConfigSchema>;
 type Feature = z.infer<typeof featureSchema>;
 export type BrandedDemoProps = z.infer<typeof brandedDemoSchema>;

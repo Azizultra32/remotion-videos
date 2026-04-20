@@ -241,7 +241,7 @@ const CtaScene: React.FC<{
   totalScenes: number;
 }> = ({ scene, sceneIndex, totalScenes }) => {
   const frame = useCurrentFrame();
-  const { fps, durationInFrames } = useVideoConfig();
+  const { fps, durationInFrames: _durationInFrames } = useVideoConfig();
 
   const entryScale = spring({
     frame,
@@ -332,7 +332,7 @@ const TransitionScene: React.FC<{
   scene: Scene;
   sceneIndex: number;
   totalScenes: number;
-}> = ({ scene, sceneIndex, totalScenes }) => {
+}> = ({ scene, sceneIndex: _sceneIndex, totalScenes: _totalScenes }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
 

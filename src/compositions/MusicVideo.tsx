@@ -1,10 +1,44 @@
-import type React from "react";
+import React from "react";
 import { AbsoluteFill, Audio, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
 import { useBeats } from "../hooks/useBeats";
 import { type EventMark, resolveStartSec } from "../utils/events";
 import { ELEMENT_REGISTRY } from "./elements/registry";
-import type { RenderCtx, TimelineElement } from "./elements/types";
+import type { ElementRendererProps, RenderCtx, TimelineElement } from "./elements/types";
+
+// Per-element error boundary. One broken element module — custom or
+// built-in — can't take down the render or the editor preview. It just
+// logs, returns null for that element, and keeps the rest of the
+// composition rendering.
+type SafeRenderProps = {
+  elementId: string;
+  elementType: string;
+  // biome-ignore lint/suspicious/noExplicitAny: Renderer is heterogeneous across element types
+  Renderer: React.FC<ElementRendererProps<any>>;
+  // biome-ignore lint/suspicious/noExplicitAny: element's P is erased at dispatch
+  element: ElementRendererProps<any>["element"];
+  ctx: RenderCtx;
+};
+class SafeElement extends React.Component<
+  SafeRenderProps,
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: Error) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[MusicVideo] element ${this.props.elementId} (${this.props.elementType}) threw: ${err.message}`,
+    );
+  }
+  render() {
+    if (this.state.hasError) return null;
+    const { Renderer, element, ctx } = this.props;
+    return <Renderer element={element} ctx={ctx} />;
+  }
+}
 
 export const musicVideoSchema = z.object({
   audioSrc: z.string().nullable(),
@@ -104,13 +138,15 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
           events,
         };
         const Renderer = mod.Renderer;
-        // el is a discriminated union across the 16 element types; the registry
-        // lookup erases the discriminant, so each Renderer narrows its own
-        // prop at call time. Casting to `any` is the cleanest way to pass
-        // through without re-narrowing at every dispatch.
+        // Per-element ErrorBoundary — a broken custom element can't brick
+        // the whole render. See SafeElement above. `el` loses its prop
+        // discriminant at registry dispatch; cast through as the union.
         return (
-          <Renderer
+          <SafeElement
             key={el.id}
+            elementId={el.id}
+            elementType={el.type}
+            Renderer={Renderer}
             element={el as unknown as Parameters<typeof Renderer>[0]["element"]}
             ctx={ctx}
           />

@@ -135,15 +135,22 @@ export const applyMutations = (mutations: unknown): MutationResult => {
             result.errors.push(`[${i}] addElement: invalid element`);
             break;
           }
-          // Gap A — reject unknown element types. This is the LAST line of
-          // defense before the renderer tries to look up the module.
+          // Unknown element types are NOT rejected here anymore — the
+          // renderer handles them gracefully (logs + returns null) and
+          // per-project custom elements land only in the render-time
+          // barrel, so the editor store legitimately sees types that
+          // aren't in ELEMENT_REGISTRY until the next render cycle.
+          // Warn in devtools but accept the mutation so authoring flows
+          // work for both engine + per-project types.
           if (!(el.type in ELEMENT_REGISTRY)) {
-            result.skipped++;
-            const known = Object.keys(ELEMENT_REGISTRY).join(", ");
-            result.errors.push(
-              `[${i}] addElement: unknown element type "${el.type}". Known types: ${known}`,
-            );
-            break;
+            if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+              // eslint-disable-next-line no-console
+              console.warn(
+                `[applyMutations] addElement: type "${el.type}" not in engine registry. ` +
+                  `If this is a per-project custom element, it will render once the project's ` +
+                  `custom-elements/ barrel is regenerated.`,
+              );
+            }
           }
           // De-dupe by id — if an id collides, swap to update semantics.
           const existing = useEditorStore.getState().elements.find((x) => x.id === el.id);

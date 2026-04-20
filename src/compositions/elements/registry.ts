@@ -28,9 +28,15 @@ import { GlitchTextModule } from "./text/GlitchText";
 import { PoppingTextModule } from "./text/PoppingText";
 import { SlidingTextModule } from "./text/SlidingText";
 import { TypingTextModule } from "./text/TypingText";
+// Per-project custom elements — populated by the renderer barrel generator
+// (scripts/cli/mv-render.ts) before each bundle, empty by default in the
+// editor. See ./_generated-custom-elements.ts for the contract.
+import { PROJECT_CUSTOM_ELEMENTS } from "./_generated-custom-elements";
 import type { ElementModule } from "./types";
 
-export const ELEMENT_MODULES: ElementModule<any>[] = [
+// Engine built-in modules — the shared effects library. Stable across projects.
+// Per-project custom modules are appended below via PROJECT_CUSTOM_ELEMENTS.
+const ENGINE_ELEMENT_MODULES: ElementModule<any>[] = [
   TypingTextModule,
   GlitchTextModule,
   PoppingTextModule,
@@ -59,6 +65,14 @@ export const ELEMENT_MODULES: ElementModule<any>[] = [
   OscilloscopeModule,
   PlasmaBackdropModule,
   SpectrumWaterfallModule,
+];
+
+// Merge built-ins with per-project custom elements. Later entries win on id
+// collision, so a project can override an engine module for its own render
+// (intentional — lets a track tune a primitive without forking the engine).
+export const ELEMENT_MODULES: ElementModule<any>[] = [
+  ...ENGINE_ELEMENT_MODULES,
+  ...PROJECT_CUSTOM_ELEMENTS,
 ];
 
 export const ELEMENT_REGISTRY: Record<string, ElementModule<any>> = Object.fromEntries(

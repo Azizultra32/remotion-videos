@@ -13,6 +13,8 @@ export type ChatMutation =
       id: string;
       patch: Partial<Omit<TimelineElement, "id" | "type">> & {
         props?: Record<string, unknown>;
+        // null clears the anchor; a string sets it to that event name.
+        startEvent?: string | null;
       };
     }
   | { op: "removeElement"; id: string }
@@ -182,6 +184,13 @@ export const applyMutations = (mutations: unknown): MutationResult => {
           if (typeof patch.label === "string") merged.label = patch.label;
           if (isObject(patch.props))
             merged.props = { ...current.props, ...patch.props };
+          // startEvent can be cleared by passing null; any other non-string
+          // value is ignored. Empty string clears too (common LLM shape).
+          if (patch.startEvent === null || patch.startEvent === "") {
+            merged.startEvent = undefined;
+          } else if (typeof patch.startEvent === "string") {
+            merged.startEvent = patch.startEvent;
+          }
           rememberPrior(m.id);
           s.updateElement(m.id, merged);
           result.applied++;

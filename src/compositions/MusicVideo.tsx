@@ -10,7 +10,7 @@ import { z } from "zod";
 import { useBeats } from "../hooks/useBeats";
 import { ELEMENT_REGISTRY } from "./elements/registry";
 import type { RenderCtx, TimelineElement } from "./elements/types";
-import type { EventMark } from "../utils/events";
+import { resolveStartSec, type EventMark } from "../utils/events";
 
 export const musicVideoSchema = z.object({
   audioSrc: z.string().nullable(),
@@ -42,8 +42,14 @@ export type MusicVideoProps = {
   analysisAudioSrc?: string | null;
 };
 
-const isActive = (el: TimelineElement, t: number): boolean =>
-  t >= el.startSec && t < el.startSec + el.durationSec;
+const isActive = (
+  el: TimelineElement,
+  t: number,
+  events: EventMark[],
+): boolean => {
+  const start = resolveStartSec(el, events);
+  return t >= start && t < start + el.durationSec;
+};
 
 export const MusicVideo: React.FC<MusicVideoProps> = ({
   audioSrc,
@@ -74,7 +80,7 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
       {audioSrc && !muteAudioTag && <Audio src={audioSrc.startsWith("http") || audioSrc.startsWith("/") ? audioSrc : staticFile(audioSrc)} />}
 
       {sorted.map((el) => {
-        if (!isActive(el, absTimeSec)) return null;
+        if (!isActive(el, absTimeSec, events)) return null;
         const mod = ELEMENT_REGISTRY[el.type];
         if (!mod) {
           if (process.env.NODE_ENV !== "production") {
@@ -82,7 +88,8 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
           }
           return null;
         }
-        const elementLocalSec = absTimeSec - el.startSec;
+        const effectiveStart = resolveStartSec(el, events);
+        const elementLocalSec = absTimeSec - effectiveStart;
         const elementProgress = Math.max(
           0,
           Math.min(1, elementLocalSec / Math.max(0.0001, el.durationSec)),

@@ -49,6 +49,7 @@ export const ElementDetail = () => {
     removeElement,
     beatData,
     snapMode,
+    events,
   } = useEditorStore();
   const setElementLocked = useEditorStore((s) => s.setElementLocked);
   const element = elements.find((e) => e.id === selectedElementId);
@@ -203,6 +204,37 @@ export const ElementDetail = () => {
           </button>
         )}
       </div>
+
+      <Field label="Anchor start to event">
+        <select
+          value={element.startEvent ?? ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            updateElement(element.id, {
+              startEvent: v === "" ? undefined : v,
+            });
+          }}
+          style={fieldStyle}
+          title={
+            element.startEvent
+              ? `Render-time start tracks event "${element.startEvent}". Unset to use Start Time (sec) directly.`
+              : "Pick a named event to anchor this element's start to. When the event moves, so does the element."
+          }
+        >
+          <option value="">— none (use start time above)</option>
+          {events.map((ev) => (
+            <option key={ev.name} value={ev.name}>
+              {ev.name} @ {ev.timeSec.toFixed(2)}s
+            </option>
+          ))}
+          {element.startEvent &&
+            !events.some((ev) => ev.name === element.startEvent) && (
+              <option value={element.startEvent}>
+                ⚠ {element.startEvent} (event missing)
+              </option>
+            )}
+        </select>
+      </Field>
 
       <Field label="Duration (sec)">
         <input

@@ -106,6 +106,42 @@ describe("applyMutations · events", () => {
     expect(r.errors[0]).toMatch(/no event "missing"/);
   });
 
+  it("updateElement sets startEvent when the patch names an event", () => {
+    const el = {
+      id: "el-1",
+      type: "text.bellCurve",
+      trackIndex: 0,
+      startSec: 10,
+      durationSec: 2,
+      label: "x",
+      props: {},
+    };
+    useEditorStore.getState().addElement(el);
+    const r = applyMutations([
+      { op: "updateElement", id: "el-1", patch: { startEvent: "drop1" } },
+    ]);
+    expect(r.applied).toBe(1);
+    expect(useEditorStore.getState().elements[0].startEvent).toBe("drop1");
+  });
+
+  it("updateElement clears startEvent when patch sets it to null", () => {
+    useEditorStore.getState().addElement({
+      id: "el-1",
+      type: "text.bellCurve",
+      trackIndex: 0,
+      startSec: 10,
+      durationSec: 2,
+      label: "x",
+      props: {},
+      startEvent: "drop1",
+    });
+    const r = applyMutations([
+      { op: "updateElement", id: "el-1", patch: { startEvent: null } },
+    ]);
+    expect(r.applied).toBe(1);
+    expect(useEditorStore.getState().elements[0].startEvent).toBeUndefined();
+  });
+
   it("a mixed batch applies good ops and records errors for bad ones", () => {
     const r = applyMutations([
       { op: "addEvent", name: "ok", timeSec: 1 },

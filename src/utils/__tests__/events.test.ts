@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   resolveEvent,
   resolveEventFrame,
+  resolveStartSec,
   type EventMark,
 } from "../events";
 
@@ -25,6 +26,26 @@ describe("resolveEvent", () => {
       { name: "drop", timeSec: 30 },
     ];
     expect(resolveEvent(events, "drop", 0)).toBe(10);
+  });
+});
+
+describe("resolveStartSec", () => {
+  it("returns el.startSec when no startEvent is set", () => {
+    expect(resolveStartSec({ startSec: 42 }, [])).toBe(42);
+  });
+
+  it("returns the event's timeSec when startEvent is set and the event exists", () => {
+    const events: EventMark[] = [{ name: "drop", timeSec: 30 }];
+    expect(resolveStartSec({ startSec: 10, startEvent: "drop" }, events)).toBe(30);
+  });
+
+  it("falls back to el.startSec when startEvent names a missing event", () => {
+    const events: EventMark[] = [{ name: "other", timeSec: 99 }];
+    expect(resolveStartSec({ startSec: 10, startEvent: "drop" }, events)).toBe(10);
+  });
+
+  it("falls back to el.startSec when events is undefined", () => {
+    expect(resolveStartSec({ startSec: 10, startEvent: "drop" }, undefined)).toBe(10);
   });
 });
 

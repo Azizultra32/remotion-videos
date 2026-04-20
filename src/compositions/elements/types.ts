@@ -13,6 +13,11 @@ export type TimelineElement = {
   durationSec: number;
   label: string;
   props: Record<string, unknown>;
+  // Optional anchor to a named time event. When set and the event exists,
+  // the element's render-time start is the event's timeSec (via
+  // resolveStartSec). Absent or missing-event falls back to startSec so
+  // events.json deletes can't hide the element.
+  startEvent?: string;
 };
 
 export type RenderCtx = {

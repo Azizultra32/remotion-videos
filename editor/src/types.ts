@@ -19,6 +19,9 @@ export type TimelineElement = {
   // locked=true so they resist accidental delete/drag.
   origin?: "pipeline" | "user";
   locked?: boolean;
+  // Optional anchor to a named time event. When set and the event exists,
+  // render-time start = event.timeSec; otherwise falls back to startSec.
+  startEvent?: string;
 };
 
 // Canonical shape after useBeatData normalizes the JSON. Missing legacy

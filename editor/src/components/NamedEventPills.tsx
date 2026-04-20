@@ -107,7 +107,7 @@ export const NamedEventPills = ({ totalSec }: Props) => {
               style={{
                 position: "absolute",
                 left: "50%",
-                top: -20,
+                top: 2,
                 transform: "translateX(-50%)",
                 fontSize: 10,
                 fontWeight: 600,

@@ -23,6 +23,10 @@ import {
 } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import {
+  generateCustomElementsBarrel,
+  resetCustomElementsBarrel,
+} from "./custom-elements-barrel";
 import { resolveProjectDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
@@ -158,6 +162,16 @@ if (inputProps !== undefined) {
   spawnArgs.push(`--props=${JSON.stringify(inputProps)}`);
 }
 
+// Generate the per-project custom-elements barrel BEFORE bundling so
+// Webpack picks up the project's *.tsx. Reset on exit (success OR
+// failure) so the source tree doesn't drift between renders.
+const customElementsResult = generateCustomElementsBarrel(repoRoot, projectDir);
+if (customElementsResult.moduleCount > 0) {
+  console.log(
+    `  custom-elements: ${customElementsResult.moduleCount} (${customElementsResult.files.join(", ")})`,
+  );
+}
+
 if (args.dryRun) {
   console.log("--dry-run: would spawn:");
   console.log(`  cwd: ${repoRoot}`);
@@ -165,6 +179,7 @@ if (args.dryRun) {
   console.log(
     '  tip: if remotion errors with "No composition with the ID <name> found", run `npx remotion compositions src/index.ts` for the registered list.',
   );
+  resetCustomElementsBarrel(repoRoot);
   process.exit(0);
 }
 
@@ -212,5 +227,9 @@ child.on("close", (code) => {
       console.warn("[mv:render] failed to update manifest:", err);
     }
   }
+  // Reset the barrel on BOTH success and failure so the source tree never
+  // drifts between renders. If we crashed mid-render, the next render (or
+  // the editor) would otherwise import stale project modules by path.
+  resetCustomElementsBarrel(repoRoot);
   process.exit(code ?? 1);
 });

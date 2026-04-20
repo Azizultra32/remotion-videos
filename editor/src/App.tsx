@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { AssetLibrary } from "./components/AssetLibrary";
 import { ChatPane } from "./components/ChatPane";
 import { ElementDetail } from "./components/ElementDetail";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -6,7 +7,6 @@ import { FloatingPreview } from "./components/FloatingPreview";
 import { Preview } from "./components/Preview";
 import { Scrubber } from "./components/Scrubber";
 import { Sidebar } from "./components/Sidebar";
-import { TreeInspector } from "./components/TreeInspector";
 import { SongPicker } from "./components/SongPicker";
 import { Timeline } from "./components/Timeline";
 import { TransportControls } from "./components/TransportControls";
@@ -102,6 +102,9 @@ export const App = () => {
           </div>
           <ErrorBoundary name="Sidebar">
             <Sidebar />
+          </ErrorBoundary>
+          <ErrorBoundary name="Asset Library">
+            <AssetLibrary />
           </ErrorBoundary>
           <ErrorBoundary name="Tree Inspector">
             <TreeInspector />

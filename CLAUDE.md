@@ -66,6 +66,14 @@ When a track needs a new visual effect, write it at `projects/<stem>/custom-elem
 
 Engine commits become rare by design — they're reserved for truly reusable infrastructure (new hooks, new analysis, engine-level fixes), not per-track creative content.
 
+**Verifying element renders (two-step loop — non-negotiable for visual changes):**
+Any change that touches the elements pipeline (a new custom element, a registry edit, a barrel-generator change, an alias tweak, an editor Vite-plugin change) must end with this loop before the task is reported complete:
+
+1. `npm run mv:verify-element` — runs the 5 mechanical assertions (barrel pickup, alias resolves, bundle succeeds, PNG > 2KB, barrel resets clean). Exit-0 means "something was drawn" + "the pipeline didn't bring itself down". It does NOT mean "the right thing was drawn".
+2. After exit-0, multimodal-`Read` the PNG at `/tmp/verify-element-render.png` and describe what you see. Confirm it matches the spec — magenta rectangle for the default verify element; for custom work, whatever the change was supposed to produce. If the visual doesn't match, the script can't catch it — only your eyes can.
+
+The script intentionally leaves the PNG on disk after a successful run for exactly this reason. Skipping step 2 turns "verified" into a lie. Multiple prior sessions shipped "task complete" claims that fell apart when the user opened the editor and saw nothing — every one of them would have been caught by step 2. Don't repeat the mistake.
+
 ## Parallel Agent Coordination
 If you suspect another Claude Code / coding-agent session is running on this
 repo, claim files before editing:

@@ -15,16 +15,24 @@
 // is the answer — non-zero exit on any failure, and it cleans up after
 // itself so it can be wired into CI or a pre-commit hook.
 //
-// What it asserts (each step exits non-zero on failure):
+// What it asserts MECHANICALLY (each step exits non-zero on failure):
 //   1. The barrel generator picks up *.tsx files under
 //      <projectDir>/custom-elements/ and emits a valid TS module.
 //   2. The Webpack bundle resolves "@engine/types" via the alias.
 //   3. A composition that includes a custom element renders to a
-//      non-blank PNG (>1KB heuristic; pure-black would be ~1.1KB at
+//      non-blank PNG (>2KB heuristic; pure-black would be ~1.1KB at
 //      848x480 from compression overhead).
 //   4. The barrel is reset to the empty stub on exit.
 //   5. The tracked stub on disk is the same content as EMPTY_BARREL — no
 //      drift between the generator's reset output and the committed file.
+//
+// What it does NOT assert: that the rendered pixels match the SPEC. The
+// size threshold catches "nothing drawn", but cannot tell you the element
+// rendered the wrong color, in the wrong position, or with text that
+// overflowed the canvas. On a successful run the PNG is left at
+// /tmp/verify-element-render.png — the invoking AGENT must multimodal-Read
+// it to visually confirm. Only the agent has eyes; this script does not.
+// See CLAUDE.md "Verifying element renders" for the full two-step loop.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync, rmdirSync } from "node:fs";
@@ -60,14 +68,19 @@ const barrelPath = resolve(REPO, BARREL_PATH_FROM_REPO_ROOT);
 
 let createdCustomDir = false;
 
-const cleanup = (): void => {
+// `keepPng=true` after a successful run leaves the PNG on disk so the
+// invoking agent can multimodal-Read it for visual confirmation. The
+// script's mechanical checks (size, barrel pickup, etc.) only prove
+// that SOMETHING was drawn — confirming WHAT was drawn requires eyes,
+// which only the agent has. See CLAUDE.md "Verifying element renders".
+const cleanup = ({ keepPng = false }: { keepPng?: boolean } = {}): void => {
   try {
     if (existsSync(elementPath)) unlinkSync(elementPath);
     if (createdCustomDir && existsSync(customElementsDir)) {
       try { rmdirSync(customElementsDir); } catch { /* not empty, leave alone */ }
     }
     resetCustomElementsBarrel(REPO);
-    if (existsSync(STILL_OUT)) unlinkSync(STILL_OUT);
+    if (!keepPng && existsSync(STILL_OUT)) unlinkSync(STILL_OUT);
   } catch (e) {
     console.warn(`(cleanup warning: ${(e as Error).message})`);
   }
@@ -199,9 +212,17 @@ const main = (): void => {
   }
   ok("tracked stub matches generator output (clean git status after render)");
 
-  cleanup();
+  // Keep the PNG on a successful run so the invoking agent can Read it.
+  // The mechanical checks above prove SOMETHING was drawn; only a
+  // multimodal Read can confirm WHAT was drawn matches the spec.
+  cleanup({ keepPng: true });
   console.log("");
-  console.log("verify-element-render: 5/5 PASS");
+  console.log("verify-element-render: 5/5 mechanical checks PASS");
+  console.log("");
+  console.log(`→ Agent: now Read ${STILL_OUT} (multimodal) to visually confirm.`);
+  console.log("  The expected frame is a magenta rectangle filling the canvas at frame 24.");
+  console.log("  If you see anything else (black, partial, wrong color), the pipeline is broken");
+  console.log("  in a way the size-threshold check above could not catch.");
 };
 
 try {

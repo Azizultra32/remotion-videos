@@ -177,6 +177,46 @@ describe("sidecar integration", () => {
     expect(data.phase2_events_sec).toEqual([5.0, 15.5, 42.7]);
   });
 
+  it("GET /api/analyze/runs lists snapshots newest-first", async () => {
+    // Trigger a snapshot by calling clear (which snapshots before wiping).
+    // The first clear in the earlier test already triggered one; listing
+    // should now return >= 1 run.
+    const r = await fetch(`http://localhost:${PORT}/api/analyze/runs/${STEM}`);
+    expect(r.ok).toBe(true);
+    const data = (await r.json()) as { runs: Array<{ id: string; events: number }> };
+    expect(data.runs.length).toBeGreaterThan(0);
+    // The first snapshot should capture the PRE-CLEAR events (3 phase2).
+    const firstSnapshot = data.runs[data.runs.length - 1]; // oldest
+    expect(firstSnapshot.events).toBe(3);
+  });
+
+  it("POST /api/analyze/runs/:stem/restore round-trips events", async () => {
+    // Get the list again and pick the oldest snapshot (3 events, pre-clear).
+    const list = await (
+      await fetch(`http://localhost:${PORT}/api/analyze/runs/${STEM}`)
+    ).json();
+    const oldest = list.runs[list.runs.length - 1];
+
+    const r = await fetch(
+      `http://localhost:${PORT}/api/analyze/runs/${STEM}/restore`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: oldest.id }),
+      },
+    );
+    expect(r.ok).toBe(true);
+    const body = (await r.json()) as { restored: string; phase2: number };
+    expect(body.restored).toBe(oldest.id);
+    // Restored snapshot had phase2: 3 (pre-clear state).
+    expect(body.phase2).toBe(3);
+
+    // analysis.json should now have the restored events.
+    const raw = readFileSync(join(tmpProjects, STEM, "analysis.json"), "utf8");
+    const data = JSON.parse(raw);
+    expect(data.phase2_events_sec.length).toBe(3);
+  });
+
   it("rejects malformed stems with 400", async () => {
     const r = await fetch(`http://localhost:${PORT}/api/analyze/clear`, {
       method: "POST",

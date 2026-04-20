@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../store";
+import { RunsMenu } from "./RunsMenu";
 import { stemFromAudioSrc } from "../utils/url";
 
 type Status = {
@@ -548,6 +549,7 @@ export const StageStrip = () => {
         </button>
       )}
 
+      <RunsMenu />
       <button
         onClick={clearEvents}
         disabled={busy === "clear" || isRunning || (phase1Count === 0 && phase2Count === 0)}

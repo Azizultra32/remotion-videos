@@ -1110,6 +1110,47 @@ const handleAnalyzeStatus = async (
 // phase1_events_sec and phase2_events_sec. Shared by /api/analyze/clear and
 // the pre-clear at the head of /api/analyze/run so the editor doesn't hold
 // stale pipeline elements for the 5–10 min a fresh run is in flight.
+// Snapshot the project's current analysis.json to analysis/runs/<ISO>.json
+// before any destructive operation (clear, re-analyze, seed-beats, events
+// update). Lets the user revert to a prior analysis without git. Retention
+// cap keeps the latest ANALYSIS_RUN_KEEP snapshots per project.
+const ANALYSIS_RUN_KEEP = 10;
+const snapshotAnalysisJson = async (projectDir: string): Promise<void> => {
+  const analysisFile = path.join(projectDir, "analysis.json");
+  try {
+    await fs.access(analysisFile);
+  } catch {
+    return; // no analysis.json yet — nothing to snapshot
+  }
+  const runsDir = path.join(projectDir, "analysis", "runs");
+  try {
+    await fs.mkdir(runsDir, { recursive: true });
+  } catch {
+    return; // directory creation failed; skip snapshot rather than block
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const dest = path.join(runsDir, `${stamp}.json`);
+  try {
+    await fs.copyFile(analysisFile, dest);
+  } catch {
+    return; // snapshot is best-effort; don't block the destructive op
+  }
+  // Retention: keep the newest ANALYSIS_RUN_KEEP files, prune the rest.
+  try {
+    const entries = await fs.readdir(runsDir);
+    const dated = entries
+      .filter((n) => n.endsWith(".json"))
+      .map((n) => ({ n, full: path.join(runsDir, n) }));
+    // Filename is ISO-ish → lexical sort == chronological.
+    dated.sort((a, b) => (a.n < b.n ? 1 : -1));
+    for (const stale of dated.slice(ANALYSIS_RUN_KEEP)) {
+      await fs.unlink(stale.full).catch(() => {});
+    }
+  } catch {
+    /* pruning is optional */
+  }
+};
+
 const clearAnalysisEvents = async (projectDir: string): Promise<void> => {
   const analysisFile = path.join(projectDir, "analysis.json");
   let existing: Record<string, unknown> = {};
@@ -1179,6 +1220,7 @@ const handleAnalyzeRun = async (
   // replacePipelineElements(stem, []), so the timeline shows a clean slate
   // while the new run is in flight. Fresh events flow in when mv:analyze
   // writes the final analysis.json.
+  await snapshotAnalysisJson(projectDir);
   await clearAnalysisEvents(projectDir);
 
   const { spawn: spawnChild } = await import("node:child_process");
@@ -1227,6 +1269,7 @@ const handleAnalyzeSeedBeats = async (
     res.end(JSON.stringify({ error: `project ${stem} not found` }));
     return;
   }
+  await snapshotAnalysisJson(projectDir);
   const { spawn: spawnChild } = await import("node:child_process");
   const seedArgs = ["run", "mv:seed-beats", "--", "--project", stem];
   const logStream = openAnalyzeLogStream(projectDir, "mv:seed-beats", seedArgs);
@@ -1422,10 +1465,112 @@ const handleAnalyzeClear = async (
     }
   } catch { /* no status or corrupt — proceed (will be harmless) */ }
 
+  await snapshotAnalysisJson(projectDir);
   await clearAnalysisEvents(projectDir);
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({ stem, cleared: true }));
+};
+
+// GET /api/analyze/runs/:stem
+// Lists the per-run analysis.json snapshots retained for a project. Returns
+// [{ id, timestamp, events: number }] sorted newest-first. UI consumes this
+// via the StageStrip "runs" dropdown so users can revert to a prior run.
+const handleAnalyzeRunsList = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  // Connect strips the "/api/analyze/runs/" mount; req.url is "<stem>" or similar
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, "").split("/")[0]);
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "stem must match /^[a-z0-9_-]+$/i" }));
+    return;
+  }
+  const runsDir = path.join(PROJECTS_DIR, stem, "analysis", "runs");
+  let files: string[] = [];
+  try {
+    files = (await fs.readdir(runsDir)).filter((n) => n.endsWith(".json"));
+  } catch {
+    // No runs dir yet — fine, return empty list.
+  }
+  files.sort((a, b) => (a < b ? 1 : -1)); // newest first (ISO name → lexical)
+  const runs = await Promise.all(
+    files.map(async (n) => {
+      const id = n.replace(/\.json$/, "");
+      const fp = path.join(runsDir, n);
+      let events = 0;
+      try {
+        const raw = await fs.readFile(fp, "utf8");
+        const parsed = JSON.parse(raw);
+        events =
+          (parsed?.phase2_events_sec?.length ?? 0) ||
+          (parsed?.phase1_events_sec?.length ?? 0);
+      } catch {
+        /* unreadable run — still list the id */
+      }
+      return { id, timestamp: id.replace(/-/g, (m, i) => (i < 10 ? "-" : i < 13 ? "T" : ":")), events };
+    }),
+  );
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ stem, runs }));
+};
+
+// POST /api/analyze/runs/:stem/restore  {id}
+// Copy analysis/runs/<id>.json back over analysis.json. Also snapshots the
+// current state first so a restore is itself reversible. Returns the
+// restored events list.
+const handleAnalyzeRunsRestore = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  // Connect strips "/api/analyze/runs/"; req.url is "<stem>/restore".
+  const urlPath = (req.url ?? "").split("?")[0];
+  const m = urlPath.replace(/^\/+/, "").match(/^([^/]+)\/restore$/);
+  if (!m || !STEM_RE.test(m[1])) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "URL must be /api/analyze/runs/<stem>/restore" }));
+    return;
+  }
+  const stem = m[1];
+  const body = await readJsonBody(req);
+  const id: string = String(body?.id ?? "").trim();
+  if (!id || !/^[0-9T:.\-Z]+$/.test(id)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.id required (ISO-ish timestamp)" }));
+    return;
+  }
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  const src = path.join(projectDir, "analysis", "runs", `${id}.json`);
+  try {
+    await fs.access(src);
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: `run ${id} not found for ${stem}` }));
+    return;
+  }
+  // Snapshot the current state so the restore itself is reversible.
+  await snapshotAnalysisJson(projectDir);
+  const dest = path.join(projectDir, "analysis.json");
+  await fs.copyFile(src, dest);
+  const raw = await fs.readFile(dest, "utf8");
+  const parsed = JSON.parse(raw);
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
+  res.end(
+    JSON.stringify({
+      stem,
+      restored: id,
+      phase1: parsed?.phase1_events_sec?.length ?? 0,
+      phase2: parsed?.phase2_events_sec?.length ?? 0,
+    }),
+  );
 };
 
 // POST /api/analyze/events/update  {stem, events: number[]}
@@ -1550,6 +1695,7 @@ const handleAnalyzeEventsUpdate = async (
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") existing = parsed as Record<string, unknown>;
   } catch { /* missing file is fine */ }
+  await snapshotAnalysisJson(projectDir);
   const merged = {
     ...existing,
     phase2_events_sec: deduped,
@@ -1956,6 +2102,33 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/analyze/clear", wrap("POST", handleAnalyzeClear));
     server.middlewares.use("/api/analyze/cancel", wrap("POST", handleAnalyzeCancel));
     server.middlewares.use("/api/analyze/events/update", wrap("POST", handleAnalyzeEventsUpdate));
+    // Single /api/analyze/runs/ prefix; the dispatcher below branches by
+    // method + whether the URL ends with /restore.
+    server.middlewares.use("/api/analyze/runs/", (req, res, next) => {
+      const url = req.url ?? "";
+      const isRestore = url.includes("/restore");
+      if (req.method === "POST" && isRestore) {
+        handleAnalyzeRunsRestore(req, res).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error("[sidecar] runs/restore", err);
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: String(err?.message ?? err) }));
+        });
+        return;
+      }
+      if ((req.method === "GET" || req.method === "HEAD") && !isRestore) {
+        handleAnalyzeRunsList(req, res).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error("[sidecar] runs/list", err);
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: String(err?.message ?? err) }));
+        });
+        return;
+      }
+      next();
+    });
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));

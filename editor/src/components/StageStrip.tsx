@@ -85,6 +85,15 @@ export const StageStrip = () => {
   const [error, setError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const retryRef = useRef<{ attempt: number; timer: number | null }>({ attempt: 0, timer: null });
+  // Holds the latest `connect` closure so the stale-stream watchdog effect
+  // below can force-reconnect without being bound to the connect-lifecycle
+  // effect's closure. Populated in the connect effect.
+  const connectRef = useRef<(() => void) | null>(null);
+  // Timestamp (ms) of the most recent force-reconnect triggered by the
+  // stale-stream watchdog. Used to debounce: we require at least 30s between
+  // force reconnects so a genuinely-stuck run doesn't cause a reconnect
+  // storm every render tick.
+  const lastForceReconnectRef = useRef<number>(0);
   // Local "I just clicked Run" flag. Flips true immediately on Re-analyze
   // click; cleared on the first SSE status frame OR on a 60s timeout
   // (stale SSE catches itself). Gives the user immediate visual feedback
@@ -102,6 +111,10 @@ export const StageStrip = () => {
     const connect = () => {
       if (esRef.current) { esRef.current.close(); esRef.current = null; }
       if (!stem) return;
+      // Any reconnect (manual or automatic) resets the force-reconnect
+      // debounce window so we don't count the connect we just performed
+      // against the next real stale-stream recovery.
+      lastForceReconnectRef.current = Date.now();
       try {
         const es = new EventSource(`/api/analyze/status/${stem}`);
         es.addEventListener("status", (e: MessageEvent) => {
@@ -129,9 +142,11 @@ export const StageStrip = () => {
         esRef.current = es;
       } catch { /* EventSource unsupported */ }
     };
+    connectRef.current = connect;
     connect();
 
     return () => {
+      connectRef.current = null;
       if (esRef.current) { esRef.current.close(); esRef.current = null; }
       if (retryRef.current.timer !== null) {
         window.clearTimeout(retryRef.current.timer);
@@ -156,8 +171,6 @@ export const StageStrip = () => {
     return () => window.clearTimeout(id);
   }, [kicking]);
 
-  if (!stem) return null;
-
   const phase1Count = beatData?.phase1_events_sec?.length ?? 0;
   const phase2Count = beatData?.phase2_events_sec?.length ?? 0;
   const isRunning = !!status && !!status.startedAt && !status.endedAt;
@@ -170,6 +183,44 @@ export const StageStrip = () => {
     : status!.phase.startsWith("phase1") ? "phase1"
     : status!.phase.startsWith("phase2") || status!.phase === "done" ? "phase2"
     : null;
+
+  // Stale-stream force-reconnect watchdog.
+  //
+  // The EventSource error handler only reconnects when readyState === CLOSED,
+  // which covers normal drops. It does NOT cover the "stream is OPEN but
+  // silent" failure mode — e.g. macOS FSEvents misses a dotfile rename and
+  // the sidecar never emits, so the browser's SSE socket sits happily idle
+  // forever. When that happens the user's tab stays on an old phase (e.g.
+  // phase1-review) indefinitely.
+  //
+  // Recovery: when the run is nominally in-flight (isRunning) and the last
+  // status frame is > 60s old, tear down the current EventSource and call
+  // connect() again. On reconnect the server's /api/analyze/status handler
+  // re-emits the current status frame, unblocking us.
+  //
+  // Debounce: require >= 30s between force reconnects. If the first
+  // reconnect succeeds but the run is genuinely stuck at the same
+  // updatedAt, we do NOT want to hammer reconnect every render tick —
+  // the user already has the NO UPDATE chip and a Cancel button.
+  useEffect(() => {
+    if (!isRunning || !status) return;
+    const staleMs = nowMs - status.updatedAt;
+    if (staleMs < 60_000) return;
+    const sinceLastForce = nowMs - lastForceReconnectRef.current;
+    if (sinceLastForce < 30_000) return;
+    const doReconnect = connectRef.current;
+    if (!doReconnect) return;
+    lastForceReconnectRef.current = nowMs;
+    // Close + re-open. connect() handles the close of the existing ES and
+    // creates a fresh one; the server's emit-on-connect replays current
+    // status so the UI catches up within one RTT.
+    doReconnect();
+  }, [isRunning, status, nowMs]);
+
+  // Render guard — placed AFTER hooks so hook order stays stable across
+  // renders (React Rules of Hooks). The connect effect is keyed on `stem`
+  // and early-returns internally when stem is null, so no SSE is opened.
+  if (!stem) return null;
 
   const runAnalysis = async () => {
     if (!stem || isRunning || busy) return;

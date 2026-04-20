@@ -9,7 +9,7 @@
 // Lives inside editor/ but shells out from the repo root.
 import type { Plugin, ViteDevServer, Connect } from "vite";
 import { spawn, spawnSync } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, statSync, unlinkSync } from "node:fs";
 import os from "node:os";
 import { promises as fs, watch as fsWatch, type FSWatcher } from "node:fs";
 import path from "node:path";
@@ -43,6 +43,92 @@ try { syncStaticProjectsSymlink(REPO_ROOT); } catch (err) {
   // eslint-disable-next-line no-console
   console.warn("[sidecar] could not sync public/projects symlink:", err);
 }
+
+// ---------------------------------------------------------------------------
+// Analyze log / orphan status helpers
+// ---------------------------------------------------------------------------
+// Cap the per-project .analyze.log at ~10 MB. If the file is bigger than
+// this at spawn time, we delete it and start fresh — cheaper than rotating
+// and keeps recent failures readable without unbounded growth.
+const ANALYZE_LOG_MAX_BYTES = 10 * 1024 * 1024;
+
+// Open (or rotate) the per-project .analyze.log stream for a new run. Called
+// from handleAnalyzeRun + handleAnalyzeSeedBeats right before spawning the
+// child. Always appends; only truncates if the log is already over the 10 MB
+// cap so multi-run history stays navigable via the `=== <ts> ... ===` headers.
+const openAnalyzeLogStream = (
+  projectDir: string,
+  scriptLabel: string,
+  args: readonly string[],
+): import("node:fs").WriteStream => {
+  const logPath = path.join(projectDir, ".analyze.log");
+  try {
+    const st = statSync(logPath);
+    if (st.size > ANALYZE_LOG_MAX_BYTES) {
+      unlinkSync(logPath);
+    }
+  } catch { /* file missing or stat failed — fine, appending creates it */ }
+  const stream = createWriteStream(logPath, { flags: "a" });
+  const header = `\n=== ${new Date().toISOString()} ${scriptLabel} ${args.join(" ")} ===\n`;
+  stream.write(header);
+  return stream;
+};
+
+// Sweep orphaned .analyze-status.json files on sidecar boot.
+// When vite is killed mid-run, the status file keeps startedAt set but never
+// gets its endedAt. The SSE clients then show a permanent "Running..." until
+// the user manually kicks off a new analysis. We don't record child PIDs in
+// the status file (would require a migration), so we use updatedAt as a
+// liveness proxy: if the mtime on the marker hasn't advanced in >60s, any
+// child process writing to it would have died anyway.
+const ORPHAN_STALE_MS = 60_000;
+const reconcileOrphanStatusFiles = async (projectsDir: string): Promise<void> => {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(projectsDir);
+  } catch {
+    return; // projects dir doesn't exist yet — nothing to reconcile.
+  }
+  const now = Date.now();
+  for (const name of entries) {
+    const projectDir = path.join(projectsDir, name);
+    let isDir = false;
+    try {
+      const st = await fs.stat(projectDir);
+      isDir = st.isDirectory();
+    } catch { continue; }
+    if (!isDir) continue;
+    const statusFile = path.join(projectDir, ".analyze-status.json");
+    let raw: string;
+    try { raw = await fs.readFile(statusFile, "utf8"); } catch { continue; }
+    let parsed: any;
+    try { parsed = JSON.parse(raw); } catch { continue; }
+    if (!parsed || typeof parsed !== "object") continue;
+    if (!parsed.startedAt || parsed.endedAt) continue;
+    const lastTouch = typeof parsed.updatedAt === "number" ? parsed.updatedAt : parsed.startedAt;
+    if (now - lastTouch < ORPHAN_STALE_MS) continue;
+    const reconciled = {
+      ...parsed,
+      phase: "orphaned-at-boot",
+      endedAt: now,
+      updatedAt: now,
+    };
+    const tmp = statusFile + ".tmp";
+    try {
+      await fs.writeFile(tmp, JSON.stringify(reconciled, null, 2));
+      await fs.rename(tmp, statusFile);
+      // eslint-disable-next-line no-console
+      console.log(`[sidecar] reconciled orphan analyze run for ${name} (stale ${now - lastTouch}ms)`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(`[sidecar] failed to reconcile orphan status for ${name}:`, err);
+    }
+  }
+};
+
+// Fire-and-forget: boot-time orphan sweep. We don't block plugin init on it.
+void reconcileOrphanStatusFiles(PROJECTS_DIR);
+
 const PUBLIC_DIR = path.join(REPO_ROOT, "public"); // kept for legacy engine assets (fonts, etc.)
 
 // Per-stem in-process lock so concurrent /api/timeline/save calls don't
@@ -1097,12 +1183,17 @@ const handleAnalyzeRun = async (
   await clearAnalysisEvents(projectDir);
 
   const { spawn: spawnChild } = await import("node:child_process");
-  const child = spawnChild("npm", ["run", "mv:analyze", "--", "--project", stem], {
+  const analyzeArgs = ["run", "mv:analyze", "--", "--project", stem];
+  const logStream = openAnalyzeLogStream(projectDir, "mv:analyze", analyzeArgs);
+  const child = spawnChild("npm", analyzeArgs, {
     cwd: repoRoot,
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env },
   });
+  child.stdout?.pipe(logStream, { end: false });
+  child.stderr?.pipe(logStream, { end: false });
+  child.on("close", () => { try { logStream.end(); } catch { /* ignore */ } });
   child.unref();
   res.statusCode = 202;
   res.setHeader("Content-Type", "application/json");
@@ -1139,12 +1230,17 @@ const handleAnalyzeSeedBeats = async (
     return;
   }
   const { spawn: spawnChild } = await import("node:child_process");
-  const child = spawnChild("npm", ["run", "mv:seed-beats", "--", "--project", stem], {
+  const seedArgs = ["run", "mv:seed-beats", "--", "--project", stem];
+  const logStream = openAnalyzeLogStream(projectDir, "mv:seed-beats", seedArgs);
+  const child = spawnChild("npm", seedArgs, {
     cwd: repoRoot,
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env },
   });
+  child.stdout?.pipe(logStream, { end: false });
+  child.stderr?.pipe(logStream, { end: false });
+  child.on("close", () => { try { logStream.end(); } catch { /* ignore */ } });
   child.unref();
   res.statusCode = 202;
   res.setHeader("Content-Type", "application/json");

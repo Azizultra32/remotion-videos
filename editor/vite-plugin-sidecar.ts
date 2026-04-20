@@ -390,6 +390,84 @@ const handleTimelineGet = async (req: IncomingMessage, res: ServerResponse): Pro
 
 const STORYBOARD_LOCK = new Map<string, Promise<void>>();
 
+// SSE stream of projects/<stem>/events.json. Initial `events` event on
+// connect with the parsed file contents (empty doc on missing file); subsequent
+// `events` events whenever the file changes on disk. Wires external writes
+// (chat Write tool, vim, other processes) through to the editor store so the
+// cyan NamedEventPills appear without a manual reload. Mirrors
+// handleAnalyzeEvents / handleTimelineWatch.
+const handleEventsWatch = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  const file = path.join(projectDir, "events.json");
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a dir");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project not found", stem }));
+    return;
+  }
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const emit = async () => {
+    let payload: string;
+    try {
+      const raw = await fs.readFile(file, "utf8");
+      try {
+        payload = JSON.stringify(parseEventsFile(JSON.parse(raw)));
+      } catch {
+        payload = JSON.stringify(parseEventsFile(undefined));
+      }
+    } catch {
+      payload = JSON.stringify(parseEventsFile(undefined));
+    }
+    try { res.write(`event: events\ndata: ${payload}\n\n`); } catch { /* closed */ }
+  };
+
+  let watcher: FSWatcher | null = null;
+  let keepalive: ReturnType<typeof setInterval> | null = null;
+  const cleanup = () => {
+    if (keepalive) { clearInterval(keepalive); keepalive = null; }
+    if (watcher) { watcher.close(); watcher = null; }
+  };
+  req.on("close", cleanup);
+  if (req.destroyed) { cleanup(); return; }
+
+  await emit();
+
+  try {
+    watcher = fsWatch(projectDir, { persistent: false }, (eventType, filename) => {
+      if (filename != null && filename !== "events.json") return;
+      if (eventType !== "change" && eventType !== "rename") return;
+      void emit();
+    });
+  } catch (err) {
+    res.write(`event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`);
+  }
+
+  keepalive = setInterval(() => {
+    try { res.write(":keepalive\n\n"); } catch { /* closed */ }
+  }, 20000);
+};
+
 const handleStoryboardGet = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
@@ -2240,6 +2318,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
     server.middlewares.use("/api/storyboard/save", wrap("POST", handleStoryboardSave));
     server.middlewares.use("/api/storyboard/", wrap("GET", handleStoryboardGet));
+    server.middlewares.use("/api/events/watch/", wrap("GET", handleEventsWatch));
     server.middlewares.use("/api/events/", wrap("GET", handleEventsGet));
     server.middlewares.use("/api/events/", wrap("POST", handleEventsSave));
     server.middlewares.use("/api/current-project", wrap("GET", handleCurrentGet));

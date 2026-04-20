@@ -9,8 +9,11 @@
 //   2. Autosave — debounced POST /api/events/:stem when the events slice
 //                 mutates in memory. 500ms window.
 //
-// Simpler than useTimelineSync because events.json has no SSE watcher (yet)
-// and no external-session coordination — the editor is the sole writer.
+// Three responsibilities now:
+//   1. Hydrate on mount + stem change (GET).
+//   2. Debounced autosave on local mutations (POST).
+//   3. SSE watcher (GET /api/events/watch/:stem) — picks up external writes
+//      like the chat's Write tool so NamedEventPills refresh without a reload.
 
 import { useEffect, useRef } from "react";
 import { useEditorStore } from "../store";
@@ -102,6 +105,55 @@ export const useEventsSync = () => {
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
+    };
+  }, []);
+
+  // ---- (3) SSE watcher: external writes to events.json refresh the store ----
+  useEffect(() => {
+    let es: EventSource | null = null;
+    let currentStem: string | null = null;
+
+    const openFor = (stem: string) => {
+      if (es) { es.close(); es = null; }
+      if (!stem) return;
+      try {
+        es = new EventSource(`/api/events/watch/${encodeURIComponent(stem)}`);
+        es.addEventListener("events", (e: MessageEvent) => {
+          try {
+            const parsed = parseEventsFile(JSON.parse(e.data));
+            const serialized = JSON.stringify(parsed.events);
+            // Skip if this matches what we just autosaved — avoids an echo
+            // refresh (useEventsSync save → sidecar write → fs.watch → SSE →
+            // hydrate a change we already applied locally).
+            if (serialized === lastSavedJsonRef.current) return;
+            useEditorStore.getState().setEvents(parsed.events);
+            lastSavedJsonRef.current = serialized;
+          } catch { /* malformed payload */ }
+        });
+        es.addEventListener("error", () => {
+          // EventSource auto-reconnects. If the backoff exhausts, re-open
+          // on the next stem change. No explicit reconnect logic here.
+        });
+      } catch { /* EventSource unsupported */ }
+    };
+
+    const unsub = useEditorStore.subscribe((state, prev) => {
+      const nextStem = stemFromAudioSrc(state.audioSrc);
+      const prevStem = stemFromAudioSrc(prev.audioSrc);
+      if (nextStem !== prevStem) {
+        currentStem = nextStem;
+        if (nextStem) openFor(nextStem);
+        else if (es) { es.close(); es = null; }
+      }
+    });
+
+    const initialStem = stemFromAudioSrc(useEditorStore.getState().audioSrc);
+    if (initialStem) { currentStem = initialStem; openFor(initialStem); }
+
+    return () => {
+      unsub();
+      if (es) { es.close(); es = null; }
+      void currentStem; // keep var reference alive for the closure
     };
   }, []);
 

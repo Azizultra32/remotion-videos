@@ -97,7 +97,16 @@ export const Preview = () => {
   }, [fps]);
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
       {/* biome-ignore lint/a11y/useMediaCaption: editor preview audio — captions not applicable (raw track playback, no speech content) */}
       {audioUrl && <audio ref={audioElRef} src={audioUrl} preload="auto" />}
       <Player
@@ -111,7 +120,16 @@ export const Preview = () => {
         fps={fps}
         durationInFrames={Math.round(compositionDuration * fps)}
         controls={false}
-        style={{ width: "100%", maxHeight: "100%" }}
+        // Fit the 848×480 (16:9) composition entirely inside the container —
+        // aspectRatio preserves shape, maxWidth/maxHeight 100% letterboxes
+        // instead of clipping edges.
+        style={{
+          maxWidth: "100%",
+          maxHeight: "100%",
+          aspectRatio: "848 / 480",
+          width: "auto",
+          height: "auto",
+        }}
         clickToPlay={false}
         errorFallback={({ error }) => (
           <div

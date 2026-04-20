@@ -17,7 +17,7 @@ The render pipeline. Every composition that Remotion knows how to render lives h
 Notable files:
 - `src/Root.tsx` — composition registrations
 - `src/compositions/MusicVideo.tsx` — the generic dispatcher that powers the editor
-- `src/compositions/elements/` — the 16-element library (7 text, 3 audio-reactive, 3 shapes, 3 overlays)
+- `src/compositions/elements/` — the 28-element built-in library (7 text, 5 audio-reactive, 3 shapes, 12 overlays, 1 video). Per-project custom elements live at `projects/<stem>/custom-elements/` and are merged in at render/preview time via `_generated-custom-elements.ts` — see `projects/_plans/HOW-TO-ADD-AN-ELEMENT.md`.
 - `src/hooks/useBeats.ts`, `useFFT.ts` — composition-side helpers
 
 ### `editor/` — Vite editor app + sidecar

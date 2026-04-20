@@ -17,7 +17,8 @@
     "mv:seed-beats": "tsx scripts/cli/mv-seed-beats.ts",
     "mv:clear-events": "tsx scripts/cli/mv-clear-events.ts",
     "mv:switch": "tsx scripts/cli/mv-switch.ts",
-    "mv:project-init-repo": "tsx scripts/cli/mv-project-init-repo.ts"
+    "mv:project-init-repo": "tsx scripts/cli/mv-project-init-repo.ts",
+    "mv:verify-element": "tsx scripts/verify-element-render.ts"
   },
   "keywords": [],
   "author": "ali",

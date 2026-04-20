@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { extractPeaks, normalizePeaks } from "../utils/audioPeaks";
+import { loadCachedPeaks, saveCachedPeaks } from "../utils/peaksCache";
 
 type Props = {
   audioUrl: string;
@@ -84,6 +85,18 @@ export const CanvasWaveform = ({
     setPeaks(null);
     setDuration(0);
 
+    // Fast path — cached peaks from a previous decode. Skips fetch +
+    // decodeAudioData + extractPeaks entirely; typical 1–2s → 0ms.
+    const cached = loadCachedPeaks(audioUrl);
+    if (cached) {
+      setPeaks(cached.peaks);
+      setDuration(cached.duration);
+      onReady?.(cached.duration);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const load = async () => {
       try {
         const resp = await fetch(audioUrl);
@@ -103,6 +116,7 @@ export const CanvasWaveform = ({
         setPeaks(normalized);
         setDuration(audio.duration);
         onReady?.(audio.duration);
+        saveCachedPeaks(audioUrl, normalized, audio.duration);
       } catch {
         // Decode errors are rare in practice (all ingested tracks are
         // normalized mp3/wav by mv:scaffold). Silent fail: the fallback
@@ -124,7 +138,7 @@ export const CanvasWaveform = ({
     // onReady captured at load time — it's intentionally not a dep to avoid
     // re-decode on every parent re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioUrl]);
+  }, [audioUrl, onReady]);
 
   // Track the container's CSS width via ResizeObserver so the canvas resizes
   // with the layout without a window.resize listener round-trip.

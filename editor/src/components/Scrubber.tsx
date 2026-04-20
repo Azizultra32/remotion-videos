@@ -7,18 +7,12 @@
 // per the MC deep-dive §3 lift — AudioContext.decodeAudioData + extractPeaks
 // produces the bucket array, a 2D canvas draws it.
 import { useEffect, useRef, useState } from "react";
-import { useEditorStore } from "../store";
-import { NamedEventPills } from "./NamedEventPills";
-import { CanvasWaveform } from "./CanvasWaveform";
-import {
-  anchoredZoom,
-  clampViewport,
-} from "../utils/timelineScale";
+import { useShortcutSurface, useShortcuts } from "../contexts/shortcuts";
 import { useStorage } from "../hooks/useStorage";
-import {
-  useShortcutSurface,
-  useShortcuts,
-} from "../contexts/shortcuts";
+import { useEditorStore } from "../store";
+import { anchoredZoom, clampViewport } from "../utils/timelineScale";
+import { CanvasWaveform } from "./CanvasWaveform";
+import { NamedEventPills } from "./NamedEventPills";
 
 type Props = {
   audioUrl: string;
@@ -60,7 +54,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
     if (!beatData) return;
     const events = beatData.phase2_events_sec?.length
       ? beatData.phase2_events_sec
-      : beatData.phase1_events_sec ?? [];
+      : (beatData.phase1_events_sec ?? []);
     if (events.some((t) => Math.abs(t - dragState.sec) < 0.1)) {
       setDragState(null);
     }
@@ -116,19 +110,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   // via useStorage so track-specific zoom survives reloads and project
   // switches. secPerPx = 0 is a sentinel meaning "natural fit" — used on
   // first mount before we know containerWidth.
-  const stem = audioSrc
-    ? audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "")
-    : null;
-  const [secPerPx, setSecPerPx] = useStorage(
-    "scrubber-sec-per-px",
-    0,
-    stem ?? undefined,
-  );
-  const [offsetSec, setOffsetSec] = useStorage(
-    "scrubber-offset-sec",
-    0,
-    stem ?? undefined,
-  );
+  const stem = audioSrc ? audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "") : null;
+  const [secPerPx, setSecPerPx] = useStorage("scrubber-sec-per-px", 0, stem ?? undefined);
+  const [offsetSec, setOffsetSec] = useStorage("scrubber-offset-sec", 0, stem ?? undefined);
 
   const scrollPortRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -145,11 +129,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
     return () => ro.disconnect();
   }, []);
 
-  const naturalSecPerPx =
-    containerWidth > 0 && totalSec > 0 ? totalSec / containerWidth : 0;
+  const naturalSecPerPx = containerWidth > 0 && totalSec > 0 ? totalSec / containerWidth : 0;
   const effectiveSecPerPx = secPerPx > 0 ? secPerPx : naturalSecPerPx;
-  const innerWidthPx =
-    effectiveSecPerPx > 0 ? totalSec / effectiveSecPerPx : 0;
+  const innerWidthPx = effectiveSecPerPx > 0 ? totalSec / effectiveSecPerPx : 0;
   const panPx = effectiveSecPerPx > 0 ? offsetSec / effectiveSecPerPx : 0;
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -157,8 +139,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
     e.preventDefault();
     if (e.shiftKey || e.deltaX !== 0) {
       // Pan: shift-wheel or trackpad horizontal scroll
-      const deltaSec =
-        (e.deltaX !== 0 ? e.deltaX : e.deltaY) * effectiveSecPerPx;
+      const deltaSec = (e.deltaX !== 0 ? e.deltaX : e.deltaY) * effectiveSecPerPx;
       const next = clampViewport({
         offsetSec: offsetSec + deltaSec,
         secPerPx: effectiveSecPerPx,
@@ -171,12 +152,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
     // Zoom anchored at cursor
     const rect = scrollPortRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const cursorPxInView = Math.max(
-      0,
-      Math.min(containerWidth, e.clientX - rect.left),
-    );
+    const cursorPxInView = Math.max(0, Math.min(containerWidth, e.clientX - rect.left));
     // deltaY < 0 = zoom IN (factor > 1); deltaY > 0 = zoom OUT
-    const zoomFactor = Math.pow(1.1, -e.deltaY / 100);
+    const zoomFactor = 1.1 ** (-e.deltaY / 100);
     const maxSecPerPx = naturalSecPerPx || effectiveSecPerPx; // cap zoom-out at fit-to-view
     const minSecPerPx = (naturalSecPerPx || effectiveSecPerPx) / 100; // cap zoom-in at 100x
     const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
@@ -259,28 +237,30 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
       >
         <span style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
           Waveform{trackName ? ` - ${trackName}` : ""}
-          {naturalSecPerPx > 0 && effectiveSecPerPx > 0 && effectiveSecPerPx < naturalSecPerPx * 0.98 && (
-            <button
-              onClick={() => {
-                setSecPerPx(0);
-                setOffsetSec(0);
-              }}
-              title="Reset waveform zoom to fit"
-              style={{
-                marginLeft: 10,
-                padding: "1px 6px",
-                fontSize: 9,
-                background: "#1a2a3a",
-                border: "1px solid #368",
-                borderRadius: 3,
-                color: "#8cf",
-                cursor: "pointer",
-                textTransform: "none",
-              }}
-            >
-              {(naturalSecPerPx / effectiveSecPerPx).toFixed(1)}× · reset
-            </button>
-          )}
+          {naturalSecPerPx > 0 &&
+            effectiveSecPerPx > 0 &&
+            effectiveSecPerPx < naturalSecPerPx * 0.98 && (
+              <button
+                onClick={() => {
+                  setSecPerPx(0);
+                  setOffsetSec(0);
+                }}
+                title="Reset waveform zoom to fit"
+                style={{
+                  marginLeft: 10,
+                  padding: "1px 6px",
+                  fontSize: 9,
+                  background: "#1a2a3a",
+                  border: "1px solid #368",
+                  borderRadius: 3,
+                  color: "#8cf",
+                  cursor: "pointer",
+                  textTransform: "none",
+                }}
+              >
+                {(naturalSecPerPx / effectiveSecPerPx).toFixed(1)}× · reset
+              </button>
+            )}
         </span>
         <span>
           {(() => {
@@ -310,277 +290,287 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
           overflow: "hidden",
         }}
       >
-      <div
-        style={{
-          position: "relative",
-          width: innerWidthPx > 0 ? `${innerWidthPx}px` : "100%",
-          height,
-          transform: `translateX(${-panPx}px)`,
-          transformOrigin: "0 0",
-          willChange: "transform",
-        }}
-        onClick={(e) => {
-          // Shift-click on waveform adds an event at the click's time.
-          // Plain click falls through to CanvasWaveform's own seek handler.
-          if (!e.shiftKey) {
-            // Plain click -> seek. CanvasWaveform doesn't own clicks (we do),
-            // so map x to time here. currentTarget is the inner timeline div,
-            // so its rect reflects the zoomed/panned width and click math
-            // works at any zoom level.
-            if (totalSec > 0) {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const x = e.clientX - rect.left;
-              const sec = Math.max(0, Math.min(totalSec, (x / rect.width) * totalSec));
-              setCurrentTime(sec);
+        <div
+          style={{
+            position: "relative",
+            width: innerWidthPx > 0 ? `${innerWidthPx}px` : "100%",
+            height,
+            transform: `translateX(${-panPx}px)`,
+            transformOrigin: "0 0",
+            willChange: "transform",
+          }}
+          onClick={(e) => {
+            // Shift-click on waveform adds an event at the click's time.
+            // Plain click falls through to CanvasWaveform's own seek handler.
+            if (!e.shiftKey) {
+              // Plain click -> seek. CanvasWaveform doesn't own clicks (we do),
+              // so map x to time here. currentTarget is the inner timeline div,
+              // so its rect reflects the zoomed/panned width and click math
+              // works at any zoom level.
+              if (totalSec > 0) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const sec = Math.max(0, Math.min(totalSec, (x / rect.width) * totalSec));
+                setCurrentTime(sec);
+              }
+              return;
             }
-            return;
-          }
-          if (!beatData || totalSec <= 0) return;
-          if (!stem) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left;
-          const sec = (x / rect.width) * totalSec;
-          if (!Number.isFinite(sec) || sec < 0 || sec > totalSec) return;
-          const current = (beatData.phase2_events_sec?.length
-            ? beatData.phase2_events_sec
-            : beatData.phase1_events_sec) ?? [];
-          const next = [...current, sec];
-          void fetch("/api/analyze/events/update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ stem, events: next }),
-          }).catch(() => {});
-          e.stopPropagation();
-        }}
-      >
-        <CanvasWaveform audioUrl={audioUrl} height={height} onReady={onWaveformReady} />
+            if (!beatData || totalSec <= 0) return;
+            if (!stem) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const sec = (x / rect.width) * totalSec;
+            if (!Number.isFinite(sec) || sec < 0 || sec > totalSec) return;
+            const current =
+              (beatData.phase2_events_sec?.length
+                ? beatData.phase2_events_sec
+                : beatData.phase1_events_sec) ?? [];
+            const next = [...current, sec];
+            void fetch("/api/analyze/events/update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ stem, events: next }),
+            }).catch(() => {});
+            e.stopPropagation();
+          }}
+        >
+          <CanvasWaveform audioUrl={audioUrl} height={height} onReady={onWaveformReady} />
 
-        {/* Event lines + breakdown regions + drop markers. SVG is
+          {/* Event lines + breakdown regions + drop markers. SVG is
             pointer-events:auto but individual decoration elements are
             set to "none" so only the event-line hit targets intercept
             clicks; plain clicks fall through to wavesurfer. */}
-        {ready && beatData && (
-          <svg
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              pointerEvents: "none",
-            }}
-            preserveAspectRatio="none"
-            viewBox={`0 0 ${totalSec} 100`}
-          >
-            {/* Breakdown regions - purely decorative. */}
-            {beatData.breakdowns.map((b, i) => (
-              <rect
-                key={`bd${i}`}
-                x={b.start}
-                width={Math.max(0.01, b.end - b.start)}
-                y={0}
-                height={100}
-                fill="rgba(255,80,80,0.08)"
-              />
-            ))}
-            {/* Drop markers - decorative. */}
-            {beatData.drops.map((t, i) => (
-              <line
-                key={`d${i}`}
-                x1={t}
-                x2={t}
-                y1={0}
-                y2={100}
-                stroke="#ff4444"
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
-                opacity={0.55}
-              />
-            ))}
-            {/* Phase-1 event markers - shown only when phase-2 is empty. */}
-            {!beatData.phase2_events_sec?.length &&
-              beatData.phase1_events_sec?.map((t, i) => {
+          {ready && beatData && (
+            <svg
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                pointerEvents: "none",
+              }}
+              preserveAspectRatio="none"
+              viewBox={`0 0 ${totalSec} 100`}
+            >
+              {/* Breakdown regions - purely decorative. */}
+              {beatData.breakdowns.map((b, i) => (
+                <rect
+                  key={`bd${i}`}
+                  x={b.start}
+                  width={Math.max(0.01, b.end - b.start)}
+                  y={0}
+                  height={100}
+                  fill="rgba(255,80,80,0.08)"
+                />
+              ))}
+              {/* Drop markers - decorative. */}
+              {beatData.drops.map((t, i) => (
+                <line
+                  key={`d${i}`}
+                  x1={t}
+                  x2={t}
+                  y1={0}
+                  y2={100}
+                  stroke="#ff4444"
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                  opacity={0.55}
+                />
+              ))}
+              {/* Phase-1 event markers - shown only when phase-2 is empty. */}
+              {!beatData.phase2_events_sec?.length &&
+                beatData.phase1_events_sec?.map((t, i) => {
+                  const x = dragState?.idx === i ? dragState.sec : t;
+                  return (
+                    <line
+                      key={`ph1-${i}`}
+                      x1={x}
+                      x2={x}
+                      y1={0}
+                      y2={100}
+                      stroke={dragState?.idx === i ? "#ffb488" : "#ff8844"}
+                      strokeWidth={dragState?.idx === i ? 3.5 : 2.5}
+                      vectorEffect="non-scaling-stroke"
+                      opacity={0.85}
+                    />
+                  );
+                })}
+              {/* Phase-2 event markers - canonical confirmed events. */}
+              {beatData.phase2_events_sec?.map((t, i) => {
                 const x = dragState?.idx === i ? dragState.sec : t;
                 return (
                   <line
-                    key={`ph1-${i}`}
+                    key={`ph2-${i}`}
                     x1={x}
                     x2={x}
                     y1={0}
                     y2={100}
-                    stroke={dragState?.idx === i ? "#ffb488" : "#ff8844"}
-                    strokeWidth={dragState?.idx === i ? 3.5 : 2.5}
+                    stroke={dragState?.idx === i ? "#ffe066" : "#ffcc00"}
+                    strokeWidth={dragState?.idx === i ? 4 : 3}
                     vectorEffect="non-scaling-stroke"
-                    opacity={0.85}
                   />
                 );
               })}
-            {/* Phase-2 event markers - canonical confirmed events. */}
-            {beatData.phase2_events_sec?.map((t, i) => {
-              const x = dragState?.idx === i ? dragState.sec : t;
-              return (
-                <line
-                  key={`ph2-${i}`}
-                  x1={x}
-                  x2={x}
-                  y1={0}
-                  y2={100}
-                  stroke={dragState?.idx === i ? "#ffe066" : "#ffcc00"}
-                  strokeWidth={dragState?.idx === i ? 4 : 3}
-                  vectorEffect="non-scaling-stroke"
-                />
-              );
-            })}
-          </svg>
-        )}
+            </svg>
+          )}
 
-        {/* Interactive event-line hit targets - rendered as absolutely-
+          {/* Interactive event-line hit targets - rendered as absolutely-
             positioned divs so they can be clicked (SVG sibling above is
             pointer-events:none). Clicking a marker selects the
             corresponding pipeline element in the store, which routes
             Backspace/Delete through Timeline's tryDelete path (which
             now persists the deletion to analysis.json). */}
-        {ready && beatData && audioSrc && (() => {
-          const events = (beatData.phase2_events_sec?.length
-            ? beatData.phase2_events_sec
-            : beatData.phase1_events_sec) ?? [];
-          const stem = audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "");
-          return events.map((t, i) => {
-            const left = (t / totalSec) * 100;
-            const pipelineId = `pipeline-${stem}-${t.toFixed(3)}`;
-            const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-              e.stopPropagation();
-              e.preventDefault();
-              // Select + seek on click. Drag commits on up if moved.
-              useEditorStore.getState().selectElement(pipelineId);
-              useEditorStore.getState().setCurrentTime(t);
-              const target = e.currentTarget;
-              const parent = target.parentElement;
-              if (!parent) return;
-              const rect = parent.getBoundingClientRect();
-              const startX = e.clientX;
-              const startSec = t;
-              let dragged = false;
-              let newSec = t;
-              const onMove = (ev: PointerEvent) => {
-                const dx = ev.clientX - startX;
-                if (Math.abs(dx) > 2) dragged = true;
-                if (!dragged) return;
-                newSec = Math.max(
-                  0,
-                  Math.min(totalSec, startSec + (dx / rect.width) * totalSec),
-                );
-                // Live preview for the WAVEFORM LINE — rendered from dragState
-                // instead of the stored event array until release.
-                setDragState({ idx: i, sec: newSec });
-                // Also move the corresponding pipeline element so the timeline
-                // block tracks the drag in sync with the line.
-                const eid = pipelineId;
-                const els = useEditorStore.getState().elements;
-                const el = els.find((x) => x.id === eid);
-                if (el) {
-                  useEditorStore
-                    .getState()
-                    .updateElement(eid, {
-                      startSec: Math.max(0, newSec - el.durationSec / 2),
-                    });
-                }
-              };
-              const onUp = () => {
-                window.removeEventListener("pointermove", onMove);
-                window.removeEventListener("pointerup", onUp);
-                // Abort paths: no-drag or sub-threshold drag -> revert preview.
-                if (!dragged) { setDragState(null); return; }
-                if (Math.abs(newSec - startSec) < 0.05) { setDragState(null); return; }
-                // Commit path: DO NOT clear dragState here. A setDragState(null)
-                // at this point would render the line from beatData's STALE
-                // array for the ~100-500ms until SSE delivers the updated
-                // analysis.json, which is the visible snap-back-then-forward.
-                // Instead we leave dragState pinned at newSec; the useEffect
-                // watching beatData clears it once the array reflects our
-                // target (within 0.1s). POST failure rolls back below.
-                setDragState({ idx: i, sec: newSec });
-                const events = (beatData.phase2_events_sec?.length
+          {ready &&
+            beatData &&
+            audioSrc &&
+            (() => {
+              const events =
+                (beatData.phase2_events_sec?.length
                   ? beatData.phase2_events_sec
                   : beatData.phase1_events_sec) ?? [];
-                const next = events
-                  .filter((x) => Math.abs(x - startSec) > 0.05)
-                  .concat(newSec);
-                void fetch("/api/analyze/events/update", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ stem, events: next }),
-                })
-                  .then((r) => { if (!r.ok) setDragState(null); })
-                  .catch(() => setDragState(null));
-              };
-              window.addEventListener("pointermove", onMove);
-              window.addEventListener("pointerup", onUp);
-            };
-            const isDragging = dragState?.idx === i;
-            const previewLeft = isDragging ? (dragState.sec / totalSec) * 100 : left;
-            return (
-              <div
-                key={`hit-${i}`}
-                onPointerDown={onPointerDown}
-                title={`Event ${i + 1} at ${t.toFixed(2)}s — drag to move (shift disables beat-snap), click to select, Delete key to remove`}
-                style={{
-                  position: "absolute",
-                  left: `calc(${previewLeft}% - 8px)`,
-                  top: 0,
-                  width: 16,
-                  height: "100%",
-                  cursor: "ew-resize",
-                  background: "transparent",
-                  zIndex: 2,
-                  touchAction: "none",
-                }}
-              >
-                {/* Visible grab handle: downward triangle at the top of each
+              const stem = audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "");
+              return events.map((t, i) => {
+                const left = (t / totalSec) * 100;
+                const pipelineId = `pipeline-${stem}-${t.toFixed(3)}`;
+                const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  // Select + seek on click. Drag commits on up if moved.
+                  useEditorStore.getState().selectElement(pipelineId);
+                  useEditorStore.getState().setCurrentTime(t);
+                  const target = e.currentTarget;
+                  const parent = target.parentElement;
+                  if (!parent) return;
+                  const rect = parent.getBoundingClientRect();
+                  const startX = e.clientX;
+                  const startSec = t;
+                  let dragged = false;
+                  let newSec = t;
+                  const onMove = (ev: PointerEvent) => {
+                    const dx = ev.clientX - startX;
+                    if (Math.abs(dx) > 2) dragged = true;
+                    if (!dragged) return;
+                    newSec = Math.max(
+                      0,
+                      Math.min(totalSec, startSec + (dx / rect.width) * totalSec),
+                    );
+                    // Live preview for the WAVEFORM LINE — rendered from dragState
+                    // instead of the stored event array until release.
+                    setDragState({ idx: i, sec: newSec });
+                    // Also move the corresponding pipeline element so the timeline
+                    // block tracks the drag in sync with the line.
+                    const eid = pipelineId;
+                    const els = useEditorStore.getState().elements;
+                    const el = els.find((x) => x.id === eid);
+                    if (el) {
+                      useEditorStore.getState().updateElement(eid, {
+                        startSec: Math.max(0, newSec - el.durationSec / 2),
+                      });
+                    }
+                  };
+                  const onUp = () => {
+                    window.removeEventListener("pointermove", onMove);
+                    window.removeEventListener("pointerup", onUp);
+                    // Abort paths: no-drag or sub-threshold drag -> revert preview.
+                    if (!dragged) {
+                      setDragState(null);
+                      return;
+                    }
+                    if (Math.abs(newSec - startSec) < 0.05) {
+                      setDragState(null);
+                      return;
+                    }
+                    // Commit path: DO NOT clear dragState here. A setDragState(null)
+                    // at this point would render the line from beatData's STALE
+                    // array for the ~100-500ms until SSE delivers the updated
+                    // analysis.json, which is the visible snap-back-then-forward.
+                    // Instead we leave dragState pinned at newSec; the useEffect
+                    // watching beatData clears it once the array reflects our
+                    // target (within 0.1s). POST failure rolls back below.
+                    setDragState({ idx: i, sec: newSec });
+                    const events =
+                      (beatData.phase2_events_sec?.length
+                        ? beatData.phase2_events_sec
+                        : beatData.phase1_events_sec) ?? [];
+                    const next = events.filter((x) => Math.abs(x - startSec) > 0.05).concat(newSec);
+                    void fetch("/api/analyze/events/update", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ stem, events: next }),
+                    })
+                      .then((r) => {
+                        if (!r.ok) setDragState(null);
+                      })
+                      .catch(() => setDragState(null));
+                  };
+                  window.addEventListener("pointermove", onMove);
+                  window.addEventListener("pointerup", onUp);
+                };
+                const isDragging = dragState?.idx === i;
+                const previewLeft = isDragging ? (dragState.sec / totalSec) * 100 : left;
+                return (
+                  <div
+                    key={`hit-${i}`}
+                    onPointerDown={onPointerDown}
+                    title={`Event ${i + 1} at ${t.toFixed(2)}s — drag to move (shift disables beat-snap), click to select, Delete key to remove`}
+                    style={{
+                      position: "absolute",
+                      left: `calc(${previewLeft}% - 8px)`,
+                      top: 0,
+                      width: 16,
+                      height: "100%",
+                      cursor: "ew-resize",
+                      background: "transparent",
+                      zIndex: 2,
+                      touchAction: "none",
+                    }}
+                  >
+                    {/* Visible grab handle: downward triangle at the top of each
                     event line, so drag is discoverable without hovering to
                     test the cursor. Amber when mid-drag. */}
-                <div
-                  style={{
-                    position: "absolute",
-                    left: "50%",
-                    top: -2,
-                    transform: "translateX(-50%)",
-                    width: 0,
-                    height: 0,
-                    borderLeft: "6px solid transparent",
-                    borderRight: "6px solid transparent",
-                    borderTop: `10px solid ${isDragging ? "#ffe066" : "#ffcc00"}`,
-                    pointerEvents: "none",
-                  }}
-                />
-              </div>
-            );
-          });
-        })()}
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: "50%",
+                        top: -2,
+                        transform: "translateX(-50%)",
+                        width: 0,
+                        height: 0,
+                        borderLeft: "6px solid transparent",
+                        borderRight: "6px solid transparent",
+                        borderTop: `10px solid ${isDragging ? "#ffe066" : "#ffcc00"}`,
+                        pointerEvents: "none",
+                      }}
+                    />
+                  </div>
+                );
+              });
+            })()}
 
-        {/* Named time-event pills (§1b). Cyan, overlaid above amber pipeline
+          {/* Named time-event pills (§1b). Cyan, overlaid above amber pipeline
             markers, drag to move / click to seek. Events come from the store
             (fed by useEventsSync from projects/<stem>/events.json). */}
-        {ready && <NamedEventPills totalSec={totalSec} />}
+          {ready && <NamedEventPills totalSec={totalSec} />}
 
-        {/* Playhead — canonical store time. `left` is set imperatively by
+          {/* Playhead — canonical store time. `left` is set imperatively by
             the subscribe hook above so this component does NOT re-render
             on every frame. */}
-        <div
-          ref={playheadRef}
-          style={{
-            position: "absolute",
-            top: 0,
-            bottom: 0,
-            left: "0%",
-            width: 2,
-            background: "#fff",
-            boxShadow: "0 0 4px rgba(255,255,255,0.8)",
-            pointerEvents: "none",
-            transform: "translateX(-1px)",
-            zIndex: 3,
-          }}
-        />
-      </div>
+          <div
+            ref={playheadRef}
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: "0%",
+              width: 2,
+              background: "#fff",
+              boxShadow: "0 0 4px rgba(255,255,255,0.8)",
+              pointerEvents: "none",
+              transform: "translateX(-1px)",
+              zIndex: 3,
+            }}
+          />
+        </div>
       </div>
 
       {/* Fallback overlay while audio is decoding */}
@@ -600,7 +590,6 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
           decoding audio…
         </div>
       )}
-
     </div>
   );
 };

@@ -3,8 +3,7 @@ import type { TimelineElement } from "../types";
 // Deterministic id — same event time always produces the same id so that
 // a re-run of analysis yielding the same timestamps is idempotent and
 // existing user edits to that element's label are preserved.
-const pipelineId = (stem: string, sec: number): string =>
-  `pipeline-${stem}-${sec.toFixed(3)}`;
+const pipelineId = (stem: string, sec: number): string => `pipeline-${stem}-${sec.toFixed(3)}`;
 
 // Snap `sec` to the nearest value in `beats` (sorted ascending). Returns
 // `sec` unchanged if beats is empty. No threshold — pipeline elements are
@@ -17,8 +16,10 @@ const nearestBeat = (sec: number, beats: number[]): number => {
   let minDist = Math.abs(best - sec);
   for (let i = 1; i < beats.length; i++) {
     const d = Math.abs(beats[i] - sec);
-    if (d < minDist) { best = beats[i]; minDist = d; }
-    else if (beats[i] > sec) break; // sorted ascending — strictly further past sec
+    if (d < minDist) {
+      best = beats[i];
+      minDist = d;
+    } else if (beats[i] > sec) break; // sorted ascending — strictly further past sec
   }
   return best;
 };
@@ -89,7 +90,5 @@ export const mergePipelineElements = (
       locked: existing.locked ?? fresh.locked,
     };
   });
-  return [...userElements, ...desiredPipeline].sort(
-    (a, b) => a.startSec - b.startSec,
-  );
+  return [...userElements, ...desiredPipeline].sort((a, b) => a.startSec - b.startSec);
 };

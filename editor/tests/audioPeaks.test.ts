@@ -1,9 +1,5 @@
-import { describe, it, expect } from "vitest";
-import {
-  extractPeaks,
-  normalizePeaks,
-  peakAbsMax,
-} from "../src/utils/audioPeaks";
+import { describe, expect, it } from "vitest";
+import { extractPeaks, normalizePeaks, peakAbsMax } from "../src/utils/audioPeaks";
 
 describe("extractPeaks", () => {
   it("returns an empty array for an empty channel", () => {
@@ -29,9 +25,12 @@ describe("extractPeaks", () => {
 
   it("produces interleaved [min,max,min,max,...] across multiple buckets", () => {
     const channel = new Float32Array([
-      0.25, 0.5, // bucket 0
-      -0.5, 0.75, // bucket 1
-      -0.25, 0.875, // bucket 2
+      0.25,
+      0.5, // bucket 0
+      -0.5,
+      0.75, // bucket 1
+      -0.25,
+      0.875, // bucket 2
     ]);
     const result = extractPeaks(channel, 2);
     expect(Array.from(result)).toEqual([0.25, 0.5, -0.5, 0.75, -0.25, 0.875]);

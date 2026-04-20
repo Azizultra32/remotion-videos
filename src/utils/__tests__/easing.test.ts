@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { EASINGS, EASING_NAMES, resolveEasing } from "../easing";
+import { describe, expect, it } from "vitest";
+import { EASING_NAMES, EASINGS, resolveEasing } from "../easing";
 
 const EPSILON = 1e-9;
 

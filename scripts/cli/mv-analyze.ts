@@ -21,7 +21,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
+import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -67,8 +67,10 @@ const parseArgs = (): Args => {
   for (let i = 2; i < process.argv.length; i++) {
     const tok = process.argv[i];
     const next = process.argv[i + 1];
-    if (tok === "--project" && next) { a.project = next; i++; }
-    else if (tok === "--setup-only") a.setupOnly = true;
+    if (tok === "--project" && next) {
+      a.project = next;
+      i++;
+    } else if (tok === "--setup-only") a.setupOnly = true;
     else if (tok === "--no-copy") a.noCopy = true;
   }
   return a;
@@ -102,11 +104,7 @@ writeStatus(stem, "setup");
 
 const r1 = spawnSync(
   "python3",
-  [
-    resolve(repoRoot, "scripts/energy-bands.py"),
-    "--audio", audioPath,
-    "--out", analysisJson,
-  ],
+  [resolve(repoRoot, "scripts/energy-bands.py"), "--audio", audioPath, "--out", analysisJson],
   { stdio: "inherit", cwd: repoRoot },
 );
 if (r1.status !== 0) {
@@ -118,11 +116,7 @@ const beatsJson = resolve(analysisDir, "beats.json");
 console.log(`  step 2/3: detect-beats.py -> projects/${stem}/analysis/beats.json`);
 const rBeats = spawnSync(
   "python3",
-  [
-    resolve(repoRoot, "scripts/detect-beats.py"),
-    "--audio", audioPath,
-    "--out", beatsJson,
-  ],
+  [resolve(repoRoot, "scripts/detect-beats.py"), "--audio", audioPath, "--out", beatsJson],
   { stdio: "inherit", cwd: repoRoot },
 );
 if (rBeats.status !== 0) {
@@ -135,9 +129,12 @@ const r2 = spawnSync(
   "python3",
   [
     resolve(repoRoot, "scripts/plot-pioneer.py"),
-    "--audio", audioPath,
-    "--beats", analysisJson,
-    "--out", fullPng,
+    "--audio",
+    audioPath,
+    "--beats",
+    analysisJson,
+    "--out",
+    fullPng,
     "--hide-events",
   ],
   { stdio: "inherit", cwd: repoRoot },
@@ -162,7 +159,11 @@ console.log(`  projects/${stem}/analysis/full.png`);
   const beats = JSON.parse(readFileSync(beatsJson, "utf8"));
   let existing: Record<string, unknown> = {};
   if (existsSync(destAnalysis)) {
-    try { existing = JSON.parse(readFileSync(destAnalysis, "utf8")); } catch { /* stale/corrupt — overwrite */ }
+    try {
+      existing = JSON.parse(readFileSync(destAnalysis, "utf8"));
+    } catch {
+      /* stale/corrupt — overwrite */
+    }
   }
   const seeded = {
     ...existing,
@@ -177,7 +178,9 @@ console.log(`  projects/${stem}/analysis/full.png`);
     energy_bands_meta: source.energy_bands_meta,
   };
   writeFileSync(destAnalysis, JSON.stringify(seeded, null, 2) + "\n");
-  console.log(`  seeded projects/${stem}/analysis.json with ${beats.beats.length} beats + energy bands`);
+  console.log(
+    `  seeded projects/${stem}/analysis.json with ${beats.beats.length} beats + energy bands`,
+  );
 })();
 
 if (args.setupOnly) {
@@ -197,7 +200,9 @@ const raw = readFileSync(promptFile, "utf8");
 // Extract the ```text fenced block that contains the prompt
 const match = raw.match(/```text\n([\s\S]+?)```/);
 if (!match) {
-  console.error("could not extract prompt block (no ```text fence) from docs/waveform-analysis-protocol.md");
+  console.error(
+    "could not extract prompt block (no ```text fence) from docs/waveform-analysis-protocol.md",
+  );
   process.exit(1);
 }
 let prompt = match[1];
@@ -209,7 +214,9 @@ let prompt = match[1];
 // with resolved paths + an explicit instruction to proceed autonomously.
 // Without this footer, claude -p reads the protocol as a role definition
 // and politely asks what track to analyze instead of starting.
-prompt = prompt + `
+prompt =
+  prompt +
+  `
 
 ---
 
@@ -253,11 +260,10 @@ writeStatus(stem, "phase1-review");
 // --permission-mode bypassPermissions lets the child execute Read/Bash/Write
 // without per-call approval prompts. Without this, claude -p sits waiting
 // on stdin for approvals the CLI has no way to answer.
-const child = spawn(
-  "claude",
-  ["-p", "--permission-mode", "bypassPermissions", prompt],
-  { stdio: "inherit", cwd: repoRoot },
-);
+const child = spawn("claude", ["-p", "--permission-mode", "bypassPermissions", prompt], {
+  stdio: "inherit",
+  cwd: repoRoot,
+});
 
 child.on("error", (err: NodeJS.ErrnoException) => {
   writeStatus(stem, "failed");
@@ -299,16 +305,26 @@ child.on("close", (code) => {
       const phase2 = JSON.parse(readFileSync(phase2Events, "utf8"));
       let existing: Record<string, unknown> = {};
       if (existsSync(dest)) {
-        try { existing = JSON.parse(readFileSync(dest, "utf8")); } catch { /* will be overwritten */ }
+        try {
+          existing = JSON.parse(readFileSync(dest, "utf8"));
+        } catch {
+          /* will be overwritten */
+        }
       }
       const merged = { ...existing, ...phase2 };
       writeFileSync(dest, JSON.stringify(merged, null, 2) + "\n");
-      console.log(`[mv:analyze] merged phase2-events -> projects/${stem}/analysis.json (preserved beats + bands)`);
+      console.log(
+        `[mv:analyze] merged phase2-events -> projects/${stem}/analysis.json (preserved beats + bands)`,
+      );
     } catch (err) {
-      console.warn(`[mv:analyze] warning: failed to merge phase2-events: ${(err as Error).message}`);
+      console.warn(
+        `[mv:analyze] warning: failed to merge phase2-events: ${(err as Error).message}`,
+      );
     }
   } else {
-    console.warn(`[mv:analyze] warning: ${stem}-phase2-events.json not found; skipping analysis.json copy`);
+    console.warn(
+      `[mv:analyze] warning: ${stem}-phase2-events.json not found; skipping analysis.json copy`,
+    );
     console.warn("  (run may have been test-mode / Phase 1 only)");
   }
 

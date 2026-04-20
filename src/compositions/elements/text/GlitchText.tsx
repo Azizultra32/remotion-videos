@@ -1,8 +1,8 @@
-import React from "react";
-import { z } from "zod";
+import type React from "react";
 import { random } from "remotion";
-import type { ElementModule, ElementRendererProps } from "../types";
+import { z } from "zod";
 import { FONT_STACK } from "../_helpers";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   text: z.string(),
@@ -37,12 +37,23 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { text, textColor, glitchColor1, glitchColor2, fontSize, fontWeight,
-    fontFamily, glitchStrength, glitchSpeed, sporadicChance, x, y } = element.props;
+  const {
+    text,
+    textColor,
+    glitchColor1,
+    glitchColor2,
+    fontSize,
+    fontWeight,
+    fontFamily,
+    glitchStrength,
+    glitchSpeed,
+    sporadicChance,
+    x,
+    y,
+  } = element.props;
   const t = ctx.frame * glitchSpeed;
-  const sporadic = random(`glitch-${element.id}-${ctx.frame}`) < sporadicChance
-    ? glitchStrength * 2
-    : 0;
+  const sporadic =
+    random(`glitch-${element.id}-${ctx.frame}`) < sporadicChance ? glitchStrength * 2 : 0;
   const dx1 = Math.sin(t) * glitchStrength + sporadic;
   const dx2 = Math.cos(t * 1.3) * glitchStrength - sporadic;
   const baseStyle: React.CSSProperties = {
@@ -54,10 +65,37 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     whiteSpace: "pre",
   };
   return (
-    <div style={{ position: "absolute", left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" }}>
+    <div
+      style={{
+        position: "absolute",
+        left: `${x}%`,
+        top: `${y}%`,
+        transform: "translate(-50%, -50%)",
+      }}
+    >
       <div style={{ position: "relative", display: "inline-block" }}>
-        <span style={{ ...baseStyle, color: glitchColor1, opacity: 0.7, transform: `translate(${dx1}px, 0)`, mixBlendMode: "screen" }}>{text}</span>
-        <span style={{ ...baseStyle, color: glitchColor2, opacity: 0.7, transform: `translate(${dx2}px, 0)`, mixBlendMode: "screen" }}>{text}</span>
+        <span
+          style={{
+            ...baseStyle,
+            color: glitchColor1,
+            opacity: 0.7,
+            transform: `translate(${dx1}px, 0)`,
+            mixBlendMode: "screen",
+          }}
+        >
+          {text}
+        </span>
+        <span
+          style={{
+            ...baseStyle,
+            color: glitchColor2,
+            opacity: 0.7,
+            transform: `translate(${dx2}px, 0)`,
+            mixBlendMode: "screen",
+          }}
+        >
+          {text}
+        </span>
         <span style={{ ...baseStyle, color: textColor, position: "relative" }}>{text}</span>
       </div>
     </div>

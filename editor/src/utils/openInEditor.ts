@@ -1,11 +1,7 @@
 // Fire-and-forget helper: POST /__open-in-editor to jump to a repo-relative
 // path in the user's editor. Handled by vite-plugin-sidecar.ts.
 
-export const buildOpenInEditorUrl = (
-  filePath: string,
-  line?: number,
-  column?: number,
-): string => {
+export const buildOpenInEditorUrl = (filePath: string, line?: number, column?: number): string => {
   let locator = filePath;
   if (line !== undefined) locator += `:${line}`;
   if (line !== undefined && column !== undefined) locator += `:${column}`;

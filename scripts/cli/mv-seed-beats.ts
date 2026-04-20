@@ -20,7 +20,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
+import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -30,7 +30,10 @@ const parseArgs = (): Args => {
   for (let i = 2; i < process.argv.length; i++) {
     const tok = process.argv[i];
     const next = process.argv[i + 1];
-    if (tok === "--project" && next) { a.project = next; i++; }
+    if (tok === "--project" && next) {
+      a.project = next;
+      i++;
+    }
   }
   return a;
 };
@@ -55,11 +58,7 @@ const beatsJson = resolve(analysisDir, "beats.json");
 console.log(`[mv:seed-beats] running detect-beats.py for ${stem} (~30-60s)`);
 const r = spawnSync(
   "python3",
-  [
-    resolve(repoRoot, "scripts/detect-beats.py"),
-    "--audio", audioPath,
-    "--out", beatsJson,
-  ],
+  [resolve(repoRoot, "scripts/detect-beats.py"), "--audio", audioPath, "--out", beatsJson],
   { stdio: "inherit", cwd: repoRoot },
 );
 if (r.status !== 0) {
@@ -73,7 +72,11 @@ const destAnalysis = resolve(projectDir, "analysis.json");
 const beats = JSON.parse(readFileSync(beatsJson, "utf8"));
 let existing: Record<string, unknown> = {};
 if (existsSync(destAnalysis)) {
-  try { existing = JSON.parse(readFileSync(destAnalysis, "utf8")); } catch { /* will overwrite */ }
+  try {
+    existing = JSON.parse(readFileSync(destAnalysis, "utf8"));
+  } catch {
+    /* will overwrite */
+  }
 }
 const merged: Record<string, unknown> = {
   ...existing,

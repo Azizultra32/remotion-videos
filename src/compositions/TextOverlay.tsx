@@ -1,11 +1,7 @@
-import React from "react";
-import {
-  AbsoluteFill,
-  useCurrentFrame,
-  interpolate,
-} from "remotion";
-import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
+import type React from "react";
+import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
+import { z } from "zod";
 import { AnimatedTitle } from "../components";
 
 export const textOverlaySchema = z.object({

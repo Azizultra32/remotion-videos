@@ -22,10 +22,7 @@ export interface UseRenderReturn {
 // Works on streaming text, accumulating a buffer across chunks.
 type SseEvent = { event: string; data: string };
 
-function parseSseLine(
-  buffer: string,
-  onEvent: (e: SseEvent) => void,
-): string {
+function parseSseLine(buffer: string, onEvent: (e: SseEvent) => void): string {
   // SSE blocks are separated by blank lines (\n\n).
   const blocks = buffer.split("\n\n");
   // The last element may be an incomplete block — keep it.

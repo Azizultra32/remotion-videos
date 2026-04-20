@@ -30,7 +30,7 @@ export type TimelineElement = {
 // these are safe to .map / .length / .filter.
 export type BeatData = {
   duration: number;
-  bpm_global: number;       // 0 when the pipeline didn't produce one
+  bpm_global: number; // 0 when the pipeline didn't produce one
   beats: number[];
   downbeats: number[];
   drops: number[];
@@ -70,7 +70,7 @@ export type Scene = {
   name: string;
   startSec: number;
   endSec: number;
-  intent: string;           // free-form creative direction ("slow build; text holds back until drop")
+  intent: string; // free-form creative direction ("slow build; text holds back until drop")
   linkedElementIds: string[]; // element ids this scene is anchored to; links survive lock/unlock
   // Named events (events.json entries) this scene is anchored to. Decoupled
   // from linkedElementIds — events survive element deletes/rebuilds and

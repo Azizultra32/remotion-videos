@@ -14,7 +14,7 @@
 
 import { existsSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
+import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -24,7 +24,10 @@ const parseArgs = (): Args => {
   for (let i = 2; i < process.argv.length; i++) {
     const tok = process.argv[i];
     const next = process.argv[i + 1];
-    if (tok === "--project" && next) { a.project = next; i++; }
+    if (tok === "--project" && next) {
+      a.project = next;
+      i++;
+    }
   }
   return a;
 };

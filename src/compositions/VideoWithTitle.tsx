@@ -1,10 +1,10 @@
 import React, { useMemo } from "react";
 import {
   AbsoluteFill,
-  OffthreadVideo,
   continueRender,
   delayRender,
   interpolate,
+  OffthreadVideo,
   staticFile,
   useCurrentFrame,
   useVideoConfig,
@@ -64,7 +64,7 @@ const loadBeats = async (src: string): Promise<BeatsFile> => {
 
 const useBeats = (src: string | undefined): BeatsFile | null => {
   const [data, setData] = React.useState<BeatsFile | null>(
-    src ? beatsCache.get(src) ?? null : null,
+    src ? (beatsCache.get(src) ?? null) : null,
   );
   const [handle] = React.useState(() =>
     src && !beatsCache.get(src) ? delayRender(`beats:${src}`) : null,
@@ -115,14 +115,7 @@ const SonarLogo: React.FC<{
   ring2ScaleMax: number;
   coreSizeBase: number;
   coreSizePulse: number;
-}> = ({
-  beatPulse,
-  downbeatFlash,
-  ring1ScaleMax,
-  ring2ScaleMax,
-  coreSizeBase,
-  coreSizePulse,
-}) => {
+}> = ({ beatPulse, downbeatFlash, ring1ScaleMax, ring2ScaleMax, coreSizeBase, coreSizePulse }) => {
   // Two expanding rings offset in phase — one on beat, one on downbeat.
   const ring1Scale = 1 + beatPulse * ring1ScaleMax;
   const ring1Opacity = Math.max(0, 0.9 - beatPulse * 0.85);
@@ -246,10 +239,15 @@ export const VideoWithTitle: React.FC<z.infer<typeof videoWithTitleSchema>> = ({
     return { beatPulse, downbeatFlash };
   }, [beats, timeSec]);
 
-  const lineGrow = interpolate(frame, [fps * lineGrowStartSec, fps * lineGrowEndSec], [0, lineGrowWidth], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  const lineGrow = interpolate(
+    frame,
+    [fps * lineGrowStartSec, fps * lineGrowEndSec],
+    [0, lineGrowWidth],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    },
+  );
   const lineWidth = lineGrow + downbeatFlash * 140;
   const titleScale = 1 + beatPulse * titleScaleAmount;
   const lineOpacity = 0.85 + downbeatFlash * 0.15;
@@ -335,8 +333,7 @@ export const VideoWithTitle: React.FC<z.infer<typeof videoWithTitleSchema>> = ({
           </div>
           <div
             style={{
-              fontFamily:
-                "'Helvetica Neue', Helvetica, Inter, system-ui, sans-serif",
+              fontFamily: "'Helvetica Neue', Helvetica, Inter, system-ui, sans-serif",
               fontWeight: 300,
               fontSize: 34,
               letterSpacing: `${letterSpacing}em`,
@@ -350,8 +347,7 @@ export const VideoWithTitle: React.FC<z.infer<typeof videoWithTitleSchema>> = ({
           {subtitle ? (
             <div
               style={{
-                fontFamily:
-                  "'Helvetica Neue', Helvetica, Inter, system-ui, sans-serif",
+                fontFamily: "'Helvetica Neue', Helvetica, Inter, system-ui, sans-serif",
                 fontWeight: 300,
                 fontSize: 18,
                 letterSpacing: "0.3em",

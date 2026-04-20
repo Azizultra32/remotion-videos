@@ -1,9 +1,6 @@
-import { describe, it, expect } from "vitest";
 import path from "node:path";
-import {
-  parseFileArg,
-  sanitizeEditorPath,
-} from "../../scripts/cli/editorPath";
+import { describe, expect, it } from "vitest";
+import { parseFileArg, sanitizeEditorPath } from "../../scripts/cli/editorPath";
 
 const REPO = "/repo";
 
@@ -59,9 +56,7 @@ describe("sanitizeEditorPath", () => {
   });
 
   it("accepts absolute paths that resolve inside the repo", () => {
-    expect(sanitizeEditorPath("/repo/src/foo.ts", REPO)).toBe(
-      path.join(REPO, "src/foo.ts"),
-    );
+    expect(sanitizeEditorPath("/repo/src/foo.ts", REPO)).toBe(path.join(REPO, "src/foo.ts"));
   });
 
   it("rejects .. traversal that escapes the repo", () => {

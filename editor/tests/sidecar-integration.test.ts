@@ -13,15 +13,8 @@
 // reconcile-on-boot). Exhaustive coverage is out of scope; add more
 // cases as specific bugs surface.
 
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,27 +69,33 @@ beforeAll(async () => {
   );
   writeFileSync(
     join(projectDir, "timeline.json"),
-    JSON.stringify({ version: 1, stem: STEM, fps: 24, compositionDuration: 60, elements: [] }, null, 2),
+    JSON.stringify(
+      { version: 1, stem: STEM, fps: 24, compositionDuration: 60, elements: [] },
+      null,
+      2,
+    ),
   );
   // Stale orphan status file: should get reconciled at sidecar boot.
   writeFileSync(
     join(projectDir, ".analyze-status.json"),
     JSON.stringify(
-      { startedAt: Date.now() - 600_000, phase: "phase1-review", stage: null, updatedAt: Date.now() - 600_000, endedAt: null },
+      {
+        startedAt: Date.now() - 600_000,
+        phase: "phase1-review",
+        stage: null,
+        updatedAt: Date.now() - 600_000,
+        endedAt: null,
+      },
       null,
       2,
     ),
   );
 
-  viteProc = spawn(
-    "npx",
-    ["vite", "--port", String(PORT)],
-    {
-      cwd: editorRoot,
-      env: { ...process.env, MV_PROJECTS_DIR: tmpProjects },
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  ) as ChildProcessWithoutNullStreams;
+  viteProc = spawn("npx", ["vite", "--port", String(PORT)], {
+    cwd: editorRoot,
+    env: { ...process.env, MV_PROJECTS_DIR: tmpProjects },
+    stdio: ["ignore", "pipe", "pipe"],
+  }) as ChildProcessWithoutNullStreams;
   // Don't let vite's output clog the test runner — drain streams.
   viteProc.stdout.on("data", () => {});
   viteProc.stderr.on("data", () => {});
@@ -125,10 +124,7 @@ describe("sidecar integration", () => {
 
   it("orphan .analyze-status.json is reconciled on boot", async () => {
     // By the time vite is serving, the boot hook has already run.
-    const raw = readFileSync(
-      join(tmpProjects, STEM, ".analyze-status.json"),
-      "utf8",
-    );
+    const raw = readFileSync(join(tmpProjects, STEM, ".analyze-status.json"), "utf8");
     const status = JSON.parse(raw);
     expect(status.phase).toBe("orphaned-at-boot");
     expect(status.endedAt).not.toBeNull();
@@ -192,19 +188,14 @@ describe("sidecar integration", () => {
 
   it("POST /api/analyze/runs/:stem/restore round-trips events", async () => {
     // Get the list again and pick the oldest snapshot (3 events, pre-clear).
-    const list = await (
-      await fetch(`http://localhost:${PORT}/api/analyze/runs/${STEM}`)
-    ).json();
+    const list = await (await fetch(`http://localhost:${PORT}/api/analyze/runs/${STEM}`)).json();
     const oldest = list.runs[list.runs.length - 1];
 
-    const r = await fetch(
-      `http://localhost:${PORT}/api/analyze/runs/${STEM}/restore`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: oldest.id }),
-      },
-    );
+    const r = await fetch(`http://localhost:${PORT}/api/analyze/runs/${STEM}/restore`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: oldest.id }),
+    });
     expect(r.ok).toBe(true);
     const body = (await r.json()) as { restored: string; phase2: number };
     expect(body.restored).toBe(oldest.id);

@@ -1,11 +1,11 @@
-import React from "react";
+import type React from "react";
 import {
   AbsoluteFill,
+  interpolate,
   Sequence,
+  spring,
   useCurrentFrame,
   useVideoConfig,
-  interpolate,
-  spring,
 } from "remotion";
 import { z } from "zod";
 
@@ -71,10 +71,7 @@ export const MMXPipelineReport: React.FC<MMXPipelineReportProps> = ({
   );
 };
 
-const Header: React.FC<{ runId: string; targetRepo: string }> = ({
-  runId,
-  targetRepo,
-}) => {
+const Header: React.FC<{ runId: string; targetRepo: string }> = ({ runId, targetRepo }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -111,12 +108,8 @@ const Header: React.FC<{ runId: string; targetRepo: string }> = ({
           opacity: subOpacity,
         }}
       >
-        <span style={{ color: "#94a3b8", fontSize: 24 }}>
-          Run: {runId}
-        </span>
-        <span style={{ color: "#94a3b8", fontSize: 24 }}>
-          Target: {targetRepo}
-        </span>
+        <span style={{ color: "#94a3b8", fontSize: 24 }}>Run: {runId}</span>
+        <span style={{ color: "#94a3b8", fontSize: 24 }}>Target: {targetRepo}</span>
       </div>
     </AbsoluteFill>
   );
@@ -210,15 +203,11 @@ const StageCard: React.FC<{
 
         {/* Findings count */}
         <span style={{ color: "#94a3b8", fontSize: 22, marginRight: 40 }}>
-          {stage.findings > 0
-            ? `${stage.findings} findings`
-            : "—"}
+          {stage.findings > 0 ? `${stage.findings} findings` : "—"}
         </span>
 
         {/* Duration */}
-        <span style={{ color: "#64748b", fontSize: 20 }}>
-          {stage.duration}
-        </span>
+        <span style={{ color: "#64748b", fontSize: 20 }}>{stage.duration}</span>
       </div>
     </div>
   );
@@ -277,8 +266,6 @@ const Stat: React.FC<{ label: string; value: string; color: string }> = ({
 }) => (
   <div style={{ textAlign: "center" }}>
     <div style={{ color, fontSize: 36, fontWeight: 800 }}>{value}</div>
-    <div style={{ color: "#94a3b8", fontSize: 18, marginTop: 4 }}>
-      {label}
-    </div>
+    <div style={{ color: "#94a3b8", fontSize: 18, marginTop: 4 }}>{label}</div>
   </div>
 );

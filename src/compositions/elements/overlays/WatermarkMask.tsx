@@ -1,4 +1,4 @@
-import React from "react";
+import type React from "react";
 import { z } from "zod";
 import type { ElementModule, ElementRendererProps } from "../types";
 
@@ -27,10 +27,13 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
-  const { position, widthPx, heightPx, offsetPx, background, blurPx, opacity, borderRadius } = element.props;
+  const { position, widthPx, heightPx, offsetPx, background, blurPx, opacity, borderRadius } =
+    element.props;
   const pos: React.CSSProperties = { position: "absolute" };
-  if (position.startsWith("top")) pos.top = offsetPx; else pos.bottom = offsetPx;
-  if (position.endsWith("left")) pos.left = offsetPx; else pos.right = offsetPx;
+  if (position.startsWith("top")) pos.top = offsetPx;
+  else pos.bottom = offsetPx;
+  if (position.endsWith("left")) pos.left = offsetPx;
+  else pos.right = offsetPx;
   return (
     <div
       style={{

@@ -92,9 +92,7 @@ export const useTimelineSync = () => {
           };
           const clean = (xs: unknown): number[] =>
             Array.isArray(xs)
-              ? xs.filter(
-                  (n): n is number => typeof n === "number" && Number.isFinite(n),
-                )
+              ? xs.filter((n): n is number => typeof n === "number" && Number.isFinite(n))
               : [];
           const p1 = clean(parsed.phase1_events_sec);
           const p2 = clean(parsed.phase2_events_sec);
@@ -122,9 +120,7 @@ export const useTimelineSync = () => {
             breakdowns: [],
             energy: [],
           };
-          const nextBeats = Array.isArray(parsed.beats)
-            ? clean(parsed.beats)
-            : current.beats;
+          const nextBeats = Array.isArray(parsed.beats) ? clean(parsed.beats) : current.beats;
           const nextDownbeats = Array.isArray(parsed.downbeats)
             ? clean(parsed.downbeats)
             : current.downbeats;
@@ -136,8 +132,8 @@ export const useTimelineSync = () => {
             typeof parsed.duration_sec === "number" && Number.isFinite(parsed.duration_sec)
               ? parsed.duration_sec
               : typeof parsed.duration === "number" && Number.isFinite(parsed.duration)
-              ? parsed.duration
-              : current.duration;
+                ? parsed.duration
+                : current.duration;
           store.setBeatData({
             ...current,
             beats: nextBeats,
@@ -166,9 +162,7 @@ export const useTimelineSync = () => {
   // ---- (1) Hydrate on stem change + bootstrap on mount ----
   useEffect(() => {
     // Re-run whenever audioSrc changes (project switch).
-    const unsub = useEditorStore.subscribe(
-      (state, prev) => state.audioSrc !== prev.audioSrc,
-    );
+    const unsub = useEditorStore.subscribe((state, prev) => state.audioSrc !== prev.audioSrc);
     unsub(); // no-op; this just asserts API shape at type level. Real subscription below.
 
     let cancelled = false;
@@ -189,26 +183,18 @@ export const useTimelineSync = () => {
         // clobber those placeholders until the next external mutation.
         // The file is authoritative for user-origin elements; SSE is
         // authoritative for pipeline-origin. Merge accordingly.
-        const fileHasPipeline = fromFile.some(
-          (e) => e.origin === "pipeline",
-        );
+        const fileHasPipeline = fromFile.some((e) => e.origin === "pipeline");
         const currentPipeline = fileHasPipeline
           ? []
-          : useEditorStore
-              .getState()
-              .elements.filter((e) => e.origin === "pipeline");
+          : useEditorStore.getState().elements.filter((e) => e.origin === "pipeline");
         const mergedElements = fileHasPipeline
           ? fromFile
-          : [...fromFile, ...currentPipeline].sort(
-              (a, b) => a.startSec - b.startSec,
-            );
+          : [...fromFile, ...currentPipeline].sort((a, b) => a.startSec - b.startSec);
         useEditorStore.setState({
           elements: mergedElements,
           fps: typeof data.fps === "number" ? data.fps : 24,
           compositionDuration:
-            typeof data.compositionDuration === "number"
-              ? data.compositionDuration
-              : 90,
+            typeof data.compositionDuration === "number" ? data.compositionDuration : 90,
         });
         lastSavedJsonRef.current = JSON.stringify(data);
       } catch {
@@ -233,9 +219,7 @@ export const useTimelineSync = () => {
     });
 
     // Bootstrap: hydrate once for the initial audioSrc at mount.
-    const initialStem = stemFromAudioSrc(
-      useEditorStore.getState().audioSrc,
-    );
+    const initialStem = stemFromAudioSrc(useEditorStore.getState().audioSrc);
     if (initialStem) {
       currentStemRef.current = initialStem;
       void hydrate(initialStem);

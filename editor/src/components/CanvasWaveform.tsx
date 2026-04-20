@@ -90,15 +90,14 @@ export const CanvasWaveform = ({
         if (!resp.ok) return;
         const buf = await resp.arrayBuffer();
         if (cancelled) return;
-        acx = new (window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        acx = new (
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+        )();
         const audio = await acx.decodeAudioData(buf);
         if (cancelled) return;
         const channel = audio.getChannelData(0);
-        const bucketSize = Math.max(
-          256,
-          Math.floor(channel.length / TARGET_BUCKETS),
-        );
+        const bucketSize = Math.max(256, Math.floor(channel.length / TARGET_BUCKETS));
         const extracted = extractPeaks(channel, bucketSize);
         const normalized = normalizePeaks(extracted);
         setPeaks(normalized);
@@ -112,7 +111,9 @@ export const CanvasWaveform = ({
         if (acx) {
           try {
             await acx.close();
-          } catch { /* already closed */ }
+          } catch {
+            /* already closed */
+          }
         }
       }
     };

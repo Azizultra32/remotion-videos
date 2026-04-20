@@ -1,8 +1,8 @@
-import React from "react";
-import { z } from "zod";
+import type React from "react";
 import { OffthreadVideo, staticFile } from "remotion";
-import type { ElementModule, ElementRendererProps } from "../types";
+import { z } from "zod";
 import { expDecay } from "../_helpers";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   videoSrc: z.string(),
@@ -29,15 +29,26 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { videoSrc, videoStartSec, opacity, scale, beatBrightnessBoost, beatBrightnessDecay, objectFit, muted } = element.props;
+  const {
+    videoSrc,
+    videoStartSec,
+    opacity,
+    scale,
+    beatBrightnessBoost,
+    beatBrightnessDecay,
+    objectFit,
+    muted,
+  } = element.props;
   if (!videoSrc) return null;
-  const resolved = videoSrc.startsWith("http") || videoSrc.startsWith("/") ? videoSrc : staticFile(videoSrc);
+  const resolved =
+    videoSrc.startsWith("http") || videoSrc.startsWith("/") ? videoSrc : staticFile(videoSrc);
 
   let brightness = 1;
   if (beatBrightnessBoost > 0) {
     const lastBeat = ctx.beats.lastBeatBefore(ctx.absTimeSec);
     if (lastBeat != null && lastBeat >= element.startSec) {
-      brightness = 1 + beatBrightnessBoost * expDecay(ctx.absTimeSec - lastBeat, beatBrightnessDecay);
+      brightness =
+        1 + beatBrightnessBoost * expDecay(ctx.absTimeSec - lastBeat, beatBrightnessDecay);
     }
   }
 

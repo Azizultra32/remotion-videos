@@ -14,9 +14,9 @@
 //   npm run mv:render -- --project love-in-traffic --fps 24
 //   $(npm run --silent mv:current) | xargs -I {} npm run mv:render -- --project {}
 import { spawn } from "node:child_process";
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
-import { resolve, basename } from "node:path";
-import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { basename, resolve } from "node:path";
+import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -27,9 +27,16 @@ const parseArgs = (): Args => {
   for (let i = 2; i < process.argv.length; i++) {
     const tok = process.argv[i];
     const next = process.argv[i + 1];
-    if (tok === "--project" && next) { a.project = next; i++; }
-    else if (tok === "--out" && next) { a.out = next; i++; }
-    else if (tok === "--fps" && next) { a.fps = Number(next); i++; }
+    if (tok === "--project" && next) {
+      a.project = next;
+      i++;
+    } else if (tok === "--out" && next) {
+      a.out = next;
+      i++;
+    } else if (tok === "--fps" && next) {
+      a.fps = Number(next);
+      i++;
+    }
   }
   return a;
 };
@@ -71,9 +78,7 @@ const fps = args.fps ?? timeline.fps ?? 24;
 
 const outDir = resolve(repoRoot, "out");
 mkdirSync(outDir, { recursive: true });
-const outPath = args.out
-  ? resolve(args.out)
-  : resolve(outDir, `${stem}-${Date.now()}.mp4`);
+const outPath = args.out ? resolve(args.out) : resolve(outDir, `${stem}-${Date.now()}.mp4`);
 
 // These paths are the same form the editor passes — Remotion resolves them
 // through staticFile() against public/, and public/projects is symlinked

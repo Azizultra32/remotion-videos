@@ -36,10 +36,7 @@ export const NamedEventPills = ({ totalSec }: Props) => {
       {events.map((ev) => {
         const isDragging = dragState?.name === ev.name;
         const displaySec = isDragging ? dragState.sec : ev.timeSec;
-        const leftPct = Math.max(
-          0,
-          Math.min(100, (displaySec / totalSec) * 100),
-        );
+        const leftPct = Math.max(0, Math.min(100, (displaySec / totalSec) * 100));
 
         const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
           e.preventDefault();
@@ -58,10 +55,7 @@ export const NamedEventPills = ({ totalSec }: Props) => {
             const dx = m.clientX - startX;
             if (!dragged && Math.abs(dx) > DRAG_THRESHOLD_PX) dragged = true;
             if (!dragged) return;
-            newSec = Math.max(
-              0,
-              Math.min(totalSec, startSec + (dx / rect.width) * totalSec),
-            );
+            newSec = Math.max(0, Math.min(totalSec, startSec + (dx / rect.width) * totalSec));
             setDragState({ name: ev.name, sec: newSec });
           };
           const onUp = () => {

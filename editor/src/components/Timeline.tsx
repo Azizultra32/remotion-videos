@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
-import type { TimelineElement as TimelineElementType } from "../types";
 import { useEditorStore } from "../store";
-import { TimelineElement } from "./TimelineElement";
-import { TimelineRuler } from "./TimelineRuler";
-import { TimelinePlayhead } from "./TimelinePlayhead";
+import type { TimelineElement as TimelineElementType } from "../types";
 import { TimelineBeatMarkers } from "./TimelineBeatMarkers";
+import { TimelineElement } from "./TimelineElement";
+import { TimelinePlayhead } from "./TimelinePlayhead";
+import { TimelineRuler } from "./TimelineRuler";
 
 const TRACK_COUNT = 9;
 const TRACK_HEIGHT = 36;
@@ -61,10 +61,16 @@ export const Timeline = () => {
   }, []);
 
   return (
-    <div ref={scrollRef} className="timeline-scroll" style={{ height: "100%", overflow: "auto", background: "#0a0a0a" }}>
+    <div
+      ref={scrollRef}
+      className="timeline-scroll"
+      style={{ height: "100%", overflow: "auto", background: "#0a0a0a" }}
+    >
       <div style={{ position: "relative", width: GUTTER_WIDTH + widthPx, minHeight: "100%" }}>
         {/* Ruler row — sticky left corner + scrolling ticks */}
-        <div style={{ display: "flex", height: RULER_HEIGHT, position: "sticky", top: 0, zIndex: 3 }}>
+        <div
+          style={{ display: "flex", height: RULER_HEIGHT, position: "sticky", top: 0, zIndex: 3 }}
+        >
           <div
             style={{
               position: "sticky",
@@ -183,12 +189,9 @@ const tryDelete = (id: string) => {
       const stem = match[1];
       const removedSec = Number(match[2]);
       const beat = state.beatData;
-      const current = (beat?.phase2_events_sec?.length
-        ? beat.phase2_events_sec
-        : beat?.phase1_events_sec) ?? [];
-      const next = current.filter(
-        (t) => Math.abs(t - removedSec) > 0.05,
-      );
+      const current =
+        (beat?.phase2_events_sec?.length ? beat.phase2_events_sec : beat?.phase1_events_sec) ?? [];
+      const next = current.filter((t) => Math.abs(t - removedSec) > 0.05);
       void fetch("/api/analyze/events/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

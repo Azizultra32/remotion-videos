@@ -35,9 +35,7 @@ export const SpectrumDisplay = () => {
         background: "#0a0a0a",
       }}
     >
-      <div style={{ fontSize: 10, color: "#888", marginBottom: 4 }}>
-        Bass Energy
-      </div>
+      <div style={{ fontSize: 10, color: "#888", marginBottom: 4 }}>Bass Energy</div>
       <div
         style={{
           position: "relative",
@@ -60,11 +58,8 @@ export const SpectrumDisplay = () => {
           const leftPct = (dropTime / totalSec) * 100;
           if (leftPct < 0 || leftPct > 100) return null;
           const timeSinceDrop = currentTimeSec - dropTime;
-          const isActive =
-            timeSinceDrop >= 0 && timeSinceDrop < DROP_FLASH_DURATION_SEC;
-          const opacity = isActive
-            ? 1 - timeSinceDrop / DROP_FLASH_DURATION_SEC
-            : 0.25;
+          const isActive = timeSinceDrop >= 0 && timeSinceDrop < DROP_FLASH_DURATION_SEC;
+          const opacity = isActive ? 1 - timeSinceDrop / DROP_FLASH_DURATION_SEC : 0.25;
           return (
             <div
               key={`drop-${i}`}
@@ -77,9 +72,7 @@ export const SpectrumDisplay = () => {
                 height: "100%",
                 background: "#ff4444",
                 opacity,
-                boxShadow: isActive
-                  ? "0 0 6px rgba(255,68,68,0.9)"
-                  : "none",
+                boxShadow: isActive ? "0 0 6px rgba(255,68,68,0.9)" : "none",
                 pointerEvents: "none",
               }}
             />

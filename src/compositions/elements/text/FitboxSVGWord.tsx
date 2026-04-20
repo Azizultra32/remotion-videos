@@ -1,7 +1,7 @@
-import React from "react";
+import type React from "react";
 import { z } from "zod";
-import type { ElementModule, ElementRendererProps } from "../types";
 import { FONT_STACK } from "../_helpers";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   text: z.string(),
@@ -32,7 +32,18 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { text, textColor, fontWeight, fontFamily, fillPct, heightPct, x, y, fadeInFrames, fadeOutFrames } = element.props;
+  const {
+    text,
+    textColor,
+    fontWeight,
+    fontFamily,
+    fillPct,
+    heightPct,
+    x,
+    y,
+    fadeInFrames,
+    fadeOutFrames,
+  } = element.props;
   const localFrame = ctx.frame - Math.round(element.startSec * ctx.fps);
   const durationFrames = Math.max(1, Math.round(element.durationSec * ctx.fps));
   const fadeIn = Math.min(1, localFrame / Math.max(1, fadeInFrames));

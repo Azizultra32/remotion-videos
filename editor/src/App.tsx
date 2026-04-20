@@ -1,23 +1,23 @@
 import { useEffect } from "react";
-import { Preview } from "./components/Preview";
-import { Timeline } from "./components/Timeline";
+import { ChatPane } from "./components/ChatPane";
 import { ElementDetail } from "./components/ElementDetail";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { Preview } from "./components/Preview";
+import { Scrubber } from "./components/Scrubber";
 import { Sidebar } from "./components/Sidebar";
 import { SongPicker } from "./components/SongPicker";
+import { Timeline } from "./components/Timeline";
 import { TransportControls } from "./components/TransportControls";
-import { Scrubber } from "./components/Scrubber";
-import { ChatPane } from "./components/ChatPane";
-import { ErrorBoundary } from "./components/ErrorBoundary";
-import { useBeatData } from "./hooks/useBeatData";
-import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
-import { useTimelineSync } from "./hooks/useTimelineSync";
-import { useStoryboardSync } from "./hooks/useStoryboardSync";
-import { useEventsSync } from "./hooks/useEventsSync";
+import { ShortcutsProvider } from "./contexts/shortcuts";
 import { useAutoSeedBeats } from "./hooks/useAutoSeedBeats";
+import { useBeatData } from "./hooks/useBeatData";
+import { useEventsSync } from "./hooks/useEventsSync";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useStoryboardSync } from "./hooks/useStoryboardSync";
+import { useTimelineSync } from "./hooks/useTimelineSync";
 import { useUndoHistory } from "./hooks/useUndoHistory";
 import { useEditorStore } from "./store";
 import { toEditorUrl } from "./utils/url";
-import { ShortcutsProvider } from "./contexts/shortcuts";
 
 const DEFAULT_BEATS_URL = "/api/projects/love-in-traffic/analysis.json";
 
@@ -69,73 +69,111 @@ export const App = () => {
   // Reactive beats load: re-fetches whenever the store's beatsSrc changes
   // (i.e. when SongPicker calls setTrack). toEditorUrl routes
   // "projects/<stem>/analysis.json" -> "/api/projects/<stem>/analysis.json".
-  const beatsUrl =
-    toEditorUrl(beatsSrc) ?? getQueryBeatsUrl() ?? DEFAULT_BEATS_URL;
+  const beatsUrl = toEditorUrl(beatsSrc) ?? getQueryBeatsUrl() ?? DEFAULT_BEATS_URL;
   useBeatData(beatsUrl);
 
   const audioUrl = toEditorUrl(audioSrc);
 
   return (
     <ShortcutsProvider>
-    <div style={{ display: "grid", gridTemplateColumns: "240px minmax(0, 1fr) 320px", gridTemplateRows: "auto auto minmax(0, 1fr) 360px", height: "100vh", width: "100vw", overflow: "hidden", background: "#111", color: "#fff" }}>
-      {/* Sidebar column: Header → Element Library → Element Detail */}
-      <div style={{ gridRow: "1/5", borderRight: "1px solid #333", padding: 0, overflowY: "auto" }}>
-        <div style={{ padding: 16, borderBottom: "1px solid #333" }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Music Video Editor</h2>
-          <ErrorBoundary name="Song Picker">
-            <SongPicker />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "240px minmax(0, 1fr) 320px",
+          gridTemplateRows: "auto auto minmax(0, 1fr) 360px",
+          height: "100vh",
+          width: "100vw",
+          overflow: "hidden",
+          background: "#111",
+          color: "#fff",
+        }}
+      >
+        {/* Sidebar column: Header → Element Library → Element Detail */}
+        <div
+          style={{ gridRow: "1/5", borderRight: "1px solid #333", padding: 0, overflowY: "auto" }}
+        >
+          <div style={{ padding: 16, borderBottom: "1px solid #333" }}>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Music Video Editor</h2>
+            <ErrorBoundary name="Song Picker">
+              <SongPicker />
+            </ErrorBoundary>
+          </div>
+          <ErrorBoundary name="Sidebar">
+            <Sidebar />
+          </ErrorBoundary>
+          <ErrorBoundary name="Element Detail">
+            <ElementDetail />
           </ErrorBoundary>
         </div>
-        <ErrorBoundary name="Sidebar">
-          <Sidebar />
-        </ErrorBoundary>
-        <ErrorBoundary name="Element Detail">
-          <ElementDetail />
-        </ErrorBoundary>
-      </div>
 
-      {/* Transport Controls — pinned to row 1 col 2 (above Scrubber). */}
-      <div style={{ gridRow: 1, gridColumn: 2, minWidth: 0 }}>
-        <ErrorBoundary name="Transport Controls">
-          <TransportControls />
-        </ErrorBoundary>
-      </div>
+        {/* Transport Controls — pinned to row 1 col 2 (above Scrubber). */}
+        <div style={{ gridRow: 1, gridColumn: 2, minWidth: 0 }}>
+          <ErrorBoundary name="Transport Controls">
+            <TransportControls />
+          </ErrorBoundary>
+        </div>
 
-      {/* Scrubber — row 2 col 2. Click-to-seek waveform with drop markers
+        {/* Scrubber — row 2 col 2. Click-to-seek waveform with drop markers
           and playhead. */}
-      <div style={{ gridRow: 2, gridColumn: 2, minWidth: 0 }}>
-        <ErrorBoundary name="Scrubber">
-          {audioUrl ? (
-            <Scrubber audioUrl={audioUrl} />
-          ) : (
-            <div style={{ padding: 12, color: "#888", fontSize: 11 }}>
-              No audio source set.
-            </div>
-          )}
-        </ErrorBoundary>
-      </div>
+        <div style={{ gridRow: 2, gridColumn: 2, minWidth: 0 }}>
+          <ErrorBoundary name="Scrubber">
+            {audioUrl ? (
+              <Scrubber audioUrl={audioUrl} />
+            ) : (
+              <div style={{ padding: 12, color: "#888", fontSize: 11 }}>No audio source set.</div>
+            )}
+          </ErrorBoundary>
+        </div>
 
-      {/* Preview — row 3 col 2 (flexible middle section). */}
-      <div style={{ gridRow: 3, gridColumn: 2, display: "flex", justifyContent: "center", alignItems: "center", background: "#000", minWidth: 0, minHeight: 0 }}>
-        <ErrorBoundary name="Preview">
-          <Preview />
-        </ErrorBoundary>
-      </div>
+        {/* Preview — row 3 col 2 (flexible middle section). */}
+        <div
+          style={{
+            gridRow: 3,
+            gridColumn: 2,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            background: "#000",
+            minWidth: 0,
+            minHeight: 0,
+          }}
+        >
+          <ErrorBoundary name="Preview">
+            <Preview />
+          </ErrorBoundary>
+        </div>
 
-      {/* Timeline — row 4 col 2 (fixed-height bottom). */}
-      <div style={{ gridRow: 4, gridColumn: 2, borderTop: "1px solid #333", minWidth: 0, overflow: "hidden" }}>
-        <ErrorBoundary name="Timeline">
-          <Timeline />
-        </ErrorBoundary>
-      </div>
+        {/* Timeline — row 4 col 2 (fixed-height bottom). */}
+        <div
+          style={{
+            gridRow: 4,
+            gridColumn: 2,
+            borderTop: "1px solid #333",
+            minWidth: 0,
+            overflow: "hidden",
+          }}
+        >
+          <ErrorBoundary name="Timeline">
+            <Timeline />
+          </ErrorBoundary>
+        </div>
 
-      {/* Chat pane — natural-language mutations via /api/chat sidecar */}
-      <div style={{ gridRow: "1/5", gridColumn: 3, borderLeft: "1px solid #333", minHeight: 0, display: "flex", flexDirection: "column" }}>
-        <ErrorBoundary name="Chat">
-          <ChatPane />
-        </ErrorBoundary>
+        {/* Chat pane — natural-language mutations via /api/chat sidecar */}
+        <div
+          style={{
+            gridRow: "1/5",
+            gridColumn: 3,
+            borderLeft: "1px solid #333",
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <ErrorBoundary name="Chat">
+            <ChatPane />
+          </ErrorBoundary>
+        </div>
       </div>
-    </div>
     </ShortcutsProvider>
   );
 };

@@ -3,17 +3,11 @@
 // their point-anchored zoom keeps the time under the cursor fixed as
 // zoom changes, which is the "feels right" UX.
 
-export const pixelsToSeconds = (
-  px: number,
-  offsetSec: number,
-  secPerPx: number,
-): number => offsetSec + px * secPerPx;
+export const pixelsToSeconds = (px: number, offsetSec: number, secPerPx: number): number =>
+  offsetSec + px * secPerPx;
 
-export const secondsToPixels = (
-  sec: number,
-  offsetSec: number,
-  secPerPx: number,
-): number => (sec - offsetSec) / secPerPx;
+export const secondsToPixels = (sec: number, offsetSec: number, secPerPx: number): number =>
+  (sec - offsetSec) / secPerPx;
 
 type AnchoredZoomArgs = {
   currentSecPerPx: number;

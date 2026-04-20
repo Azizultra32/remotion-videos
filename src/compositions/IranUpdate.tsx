@@ -1,13 +1,13 @@
-import React from "react";
+import type React from "react";
 import {
   AbsoluteFill,
+  Audio,
+  interpolate,
+  Sequence,
+  spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
-  interpolate,
-  spring,
-  Sequence,
-  Audio,
-  staticFile,
 } from "remotion";
 import { z } from "zod";
 
@@ -60,11 +60,7 @@ const FadeIn: React.FC<{
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  return (
-    <div style={{ opacity, transform: `translateY(${y}px)`, ...style }}>
-      {children}
-    </div>
-  );
+  return <div style={{ opacity, transform: `translateY(${y}px)`, ...style }}>{children}</div>;
 };
 
 const StatCard: React.FC<{
@@ -242,8 +238,8 @@ const Scene1Opening: React.FC = () => {
           fontFamily: FONTS.body,
         }}
       >
-        Joint US-Israeli air campaign enters its second week as Iran retaliates
-        with missile and drone strikes across the Gulf
+        Joint US-Israeli air campaign enters its second week as Iran retaliates with missile and
+        drone strikes across the Gulf
       </div>
       <div
         style={{
@@ -311,7 +307,15 @@ const Scene2Timeline: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ padding: 70 }}>
-      <div style={{ opacity: headerOp, display: "flex", alignItems: "center", gap: 16, marginBottom: 40 }}>
+      <div
+        style={{
+          opacity: headerOp,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          marginBottom: 40,
+        }}
+      >
         <div style={{ width: 8, height: 40, backgroundColor: C.red, borderRadius: 4 }} />
         <div style={{ fontSize: 40, fontWeight: 700, color: C.white, fontFamily: FONTS.heading }}>
           Timeline of Events
@@ -401,7 +405,15 @@ const Scene3Stats: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ padding: 70 }}>
-      <div style={{ opacity: headerOp, display: "flex", alignItems: "center", gap: 16, marginBottom: 50 }}>
+      <div
+        style={{
+          opacity: headerOp,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          marginBottom: 50,
+        }}
+      >
         <div style={{ width: 8, height: 40, backgroundColor: C.orange, borderRadius: 4 }} />
         <div style={{ fontSize: 40, fontWeight: 700, color: C.white, fontFamily: FONTS.heading }}>
           By the Numbers
@@ -456,7 +468,15 @@ const Scene4Military: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ padding: 60 }}>
-      <div style={{ opacity: headerOp, display: "flex", alignItems: "center", gap: 16, marginBottom: 40 }}>
+      <div
+        style={{
+          opacity: headerOp,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          marginBottom: 40,
+        }}
+      >
         <div style={{ width: 8, height: 40, backgroundColor: C.blue, borderRadius: 4 }} />
         <div style={{ fontSize: 40, fontWeight: 700, color: C.white, fontFamily: FONTS.heading }}>
           Military Operations
@@ -467,7 +487,15 @@ const Scene4Military: React.FC = () => {
         {/* US/Israel column */}
         <div style={{ flex: 1 }}>
           <FadeIn delay={15}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: C.blue, fontFamily: FONTS.heading, marginBottom: 16 }}>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: C.blue,
+                fontFamily: FONTS.heading,
+                marginBottom: 16,
+              }}
+            >
               US / Israel
             </div>
           </FadeIn>
@@ -497,7 +525,15 @@ const Scene4Military: React.FC = () => {
         {/* Iran column */}
         <div style={{ flex: 1 }}>
           <FadeIn delay={15}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: C.orange, fontFamily: FONTS.heading, marginBottom: 16 }}>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: C.orange,
+                fontFamily: FONTS.heading,
+                marginBottom: 16,
+              }}
+            >
               Iran
             </div>
           </FadeIn>
@@ -536,10 +572,30 @@ const Scene5Humanitarian: React.FC = () => {
   });
 
   const cities = [
-    { name: "Tehran", detail: "Heavy bombing — residential areas, govt buildings", color: C.red, delay: 25 },
-    { name: "Shiraz", detail: "30+ injured, paramedics killed in strikes", color: C.red, delay: 45 },
-    { name: "Isfahan", detail: "Military and civilian infrastructure hit", color: C.orange, delay: 60 },
-    { name: "Qom", detail: "Forced displacement orders in industrial zone", color: C.orange, delay: 75 },
+    {
+      name: "Tehran",
+      detail: "Heavy bombing — residential areas, govt buildings",
+      color: C.red,
+      delay: 25,
+    },
+    {
+      name: "Shiraz",
+      detail: "30+ injured, paramedics killed in strikes",
+      color: C.red,
+      delay: 45,
+    },
+    {
+      name: "Isfahan",
+      detail: "Military and civilian infrastructure hit",
+      color: C.orange,
+      delay: 60,
+    },
+    {
+      name: "Qom",
+      detail: "Forced displacement orders in industrial zone",
+      color: C.orange,
+      delay: 75,
+    },
     { name: "Minab", detail: "165+ killed in school strike on Day 1", color: C.red, delay: 90 },
     { name: "Kermanshah", detail: "Ongoing airstrikes reported", color: C.amber, delay: 105 },
   ];
@@ -551,7 +607,15 @@ const Scene5Humanitarian: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ padding: 60 }}>
-      <div style={{ opacity: headerOp, display: "flex", alignItems: "center", gap: 16, marginBottom: 35 }}>
+      <div
+        style={{
+          opacity: headerOp,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          marginBottom: 35,
+        }}
+      >
         <div style={{ width: 8, height: 40, backgroundColor: C.red, borderRadius: 4 }} />
         <div style={{ fontSize: 40, fontWeight: 700, color: C.white, fontFamily: FONTS.heading }}>
           Humanitarian Impact
@@ -579,7 +643,15 @@ const Scene5Humanitarian: React.FC = () => {
               <div style={{ fontSize: 22, fontWeight: 700, color, fontFamily: FONTS.heading }}>
                 {name}
               </div>
-              <div style={{ fontSize: 16, color: C.textMuted, fontFamily: FONTS.body, marginTop: 4, lineHeight: 1.5 }}>
+              <div
+                style={{
+                  fontSize: 16,
+                  color: C.textMuted,
+                  fontFamily: FONTS.body,
+                  marginTop: 4,
+                  lineHeight: 1.5,
+                }}
+              >
                 {detail}
               </div>
             </div>
@@ -599,7 +671,8 @@ const Scene5Humanitarian: React.FC = () => {
         }}
       >
         <div style={{ fontSize: 18, color: C.red, fontFamily: FONTS.body, fontWeight: 600 }}>
-          Civilian sites including schools, hospitals, petrol stations, and residential buildings are among targets
+          Civilian sites including schools, hospitals, petrol stations, and residential buildings
+          are among targets
         </div>
       </div>
     </AbsoluteFill>
@@ -651,7 +724,15 @@ const Scene6Diplomatic: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ padding: 60 }}>
-      <div style={{ opacity: headerOp, display: "flex", alignItems: "center", gap: 16, marginBottom: 40 }}>
+      <div
+        style={{
+          opacity: headerOp,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          marginBottom: 40,
+        }}
+      >
         <div style={{ width: 8, height: 40, backgroundColor: C.cyan, borderRadius: 4 }} />
         <div style={{ fontSize: 40, fontWeight: 700, color: C.white, fontFamily: FONTS.heading }}>
           International Response
@@ -812,9 +893,7 @@ export const IranUpdate: React.FC<IranUpdateProps> = ({ useAudio }) => {
           </Sequence>
         );
       })}
-      {useAudio && (
-        <Audio src={staticFile("audio/iran-update-voiceover.mp3")} />
-      )}
+      {useAudio && <Audio src={staticFile("audio/iran-update-voiceover.mp3")} />}
     </AbsoluteFill>
   );
 };

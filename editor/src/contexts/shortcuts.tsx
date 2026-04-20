@@ -10,17 +10,14 @@
 
 import {
   createContext,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
-  type ReactNode,
 } from "react";
-import {
-  dispatchBindings,
-  type ShortcutBinding,
-} from "../utils/shortcuts";
+import { dispatchBindings, type ShortcutBinding } from "../utils/shortcuts";
 
 type ShortcutsApi = {
   register: (binding: ShortcutBinding) => () => void;
@@ -73,11 +70,7 @@ export const ShortcutsProvider = ({
 
   const api = useMemo(() => ({ register, pushContext }), [register, pushContext]);
 
-  return (
-    <ShortcutsContext.Provider value={api}>
-      {children}
-    </ShortcutsContext.Provider>
-  );
+  return <ShortcutsContext.Provider value={api}>{children}</ShortcutsContext.Provider>;
 };
 
 export const useShortcuts = (
@@ -87,9 +80,7 @@ export const useShortcuts = (
   const api = useContext(ShortcutsContext);
   useEffect(() => {
     if (!api) return;
-    const unregisters = bindings.map((b) =>
-      api.register({ ...b, context }),
-    );
+    const unregisters = bindings.map((b) => api.register({ ...b, context }));
     return () => {
       for (const u of unregisters) u();
     };

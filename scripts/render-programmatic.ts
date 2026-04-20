@@ -19,14 +19,10 @@
  *   ]
  */
 
-import path from "path";
-import fs from "fs";
 import { bundle } from "@remotion/bundler";
-import {
-  renderMedia,
-  getCompositions,
-  RenderMediaOnProgress,
-} from "@remotion/renderer";
+import { getCompositions, type RenderMediaOnProgress, renderMedia } from "@remotion/renderer";
+import fs from "fs";
+import path from "path";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -142,7 +138,7 @@ async function main() {
   for (const job of jobs) {
     if (!compositionMap.has(job.compositionId)) {
       console.error(
-        `Composition "${job.compositionId}" not found. Available: ${allCompositions.map((c) => c.id).join(", ")}`
+        `Composition "${job.compositionId}" not found. Available: ${allCompositions.map((c) => c.id).join(", ")}`,
       );
       process.exit(1);
     }
@@ -153,7 +149,7 @@ async function main() {
   fs.mkdirSync(outDir, { recursive: true });
 
   console.log(
-    `\nRendering ${jobs.length} composition(s) with concurrency ${opts.concurrency}...\n`
+    `\nRendering ${jobs.length} composition(s) with concurrency ${opts.concurrency}...\n`,
   );
 
   // 4. Render with concurrency control
@@ -165,13 +161,10 @@ async function main() {
       const current = idx++;
       const job = jobs[current];
       const composition = compositionMap.get(job.compositionId)!;
-      const outputFile = path.join(
-        outDir,
-        job.outputFile ?? `${job.compositionId}.mp4`
-      );
+      const outputFile = path.join(outDir, job.outputFile ?? `${job.compositionId}.mp4`);
 
       console.log(
-        `Starting [${current + 1}/${jobs.length}]: ${job.compositionId} -> ${outputFile}`
+        `Starting [${current + 1}/${jobs.length}]: ${job.compositionId} -> ${outputFile}`,
       );
 
       try {
@@ -207,10 +200,7 @@ async function main() {
   const failed = results.filter((r) => !r.ok);
 
   for (const r of succeeded) {
-    const outFile = path.join(
-      outDir,
-      r.job.outputFile ?? `${r.job.compositionId}.mp4`
-    );
+    const outFile = path.join(outDir, r.job.outputFile ?? `${r.job.compositionId}.mp4`);
     const stat = fs.statSync(outFile);
     const sizeMB = (stat.size / (1024 * 1024)).toFixed(1);
     console.log(`  OK   ${r.job.compositionId} (${sizeMB} MB)`);
@@ -220,7 +210,7 @@ async function main() {
   }
 
   console.log(
-    `\n${succeeded.length} succeeded, ${failed.length} failed out of ${jobs.length} total.`
+    `\n${succeeded.length} succeeded, ${failed.length} failed out of ${jobs.length} total.`,
   );
 
   if (failed.length > 0) {

@@ -2,8 +2,9 @@
 // Export + import of the editor's current state as a self-contained JSON
 // file. Same shape is accepted by `npx remotion render ... --props=<json>`
 // so the file is the render contract, not a separate format.
-import type { TimelineElement } from "../types";
+
 import { useEditorStore } from "../store";
+import type { TimelineElement } from "../types";
 
 export type ProjectFile = {
   version: 1;

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { storageGet, storageSet, storageClear } from "../src/hooks/useStorage";
+import { beforeEach, describe, expect, it } from "vitest";
+import { storageClear, storageGet, storageSet } from "../src/hooks/useStorage";
 
 beforeEach(() => {
   const bag: Record<string, string> = {};

@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  pixelsToSeconds,
-  secondsToPixels,
   anchoredZoom,
   clampViewport,
+  pixelsToSeconds,
+  secondsToPixels,
 } from "../src/utils/timelineScale";
 
 describe("pixelsToSeconds", () => {
@@ -86,7 +86,9 @@ describe("clampViewport", () => {
 
   it("clamps offset so the right edge sits at totalSec", () => {
     // visible range = containerPx * secPerPx = 10s. totalSec = 60. max offset = 50.
-    expect(clampViewport({ offsetSec: 999, secPerPx: 0.1, containerPx: 100, totalSec: 60 })).toBe(50);
+    expect(clampViewport({ offsetSec: 999, secPerPx: 0.1, containerPx: 100, totalSec: 60 })).toBe(
+      50,
+    );
   });
 
   it("when visible range exceeds totalSec, offset is 0", () => {

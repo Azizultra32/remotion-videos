@@ -1,14 +1,14 @@
-import React from "react";
+import { zColor } from "@remotion/zod-types";
+import type React from "react";
 import {
   AbsoluteFill,
-  useCurrentFrame,
-  useVideoConfig,
+  Easing,
   interpolate,
   spring,
-  Easing,
+  useCurrentFrame,
+  useVideoConfig,
 } from "remotion";
 import { z } from "zod";
-import { zColor } from "@remotion/zod-types";
 import { ProgressBar } from "../components/ProgressBar";
 
 const testimonialSchema = z.object({
@@ -50,9 +50,7 @@ const Star: React.FC<{
         transform: `scale(${starSpring}) rotate(${rotation}deg)`,
         display: "inline-block",
         marginRight: 6,
-        filter: filled
-          ? "drop-shadow(0 0 6px rgba(255, 200, 0, 0.5))"
-          : "none",
+        filter: filled ? "drop-shadow(0 0 6px rgba(255, 200, 0, 0.5))" : "none",
       }}
     >
       {filled ? "\u2605" : "\u2606"}
@@ -74,12 +72,11 @@ const TestimonialCard: React.FC<{
     easing: Easing.out(Easing.cubic),
   });
 
-  const fadeOut = interpolate(
-    cardFrame,
-    [cardDuration - 20, cardDuration],
-    [1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.in(Easing.cubic) }
-  );
+  const fadeOut = interpolate(cardFrame, [cardDuration - 20, cardDuration], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.in(Easing.cubic),
+  });
 
   const opacity = fadeIn * fadeOut;
 
@@ -92,16 +89,12 @@ const TestimonialCard: React.FC<{
   // Typewriter effect for quote
   const charsPerFrame = 1.5;
   const typewriterDelay = 15;
-  const visibleChars = Math.floor(
-    Math.max(0, (cardFrame - typewriterDelay) * charsPerFrame)
-  );
+  const visibleChars = Math.floor(Math.max(0, (cardFrame - typewriterDelay) * charsPerFrame));
   const displayedQuote = testimonial.quote.slice(
     0,
-    Math.min(visibleChars, testimonial.quote.length)
+    Math.min(visibleChars, testimonial.quote.length),
   );
-  const showCursor =
-    cardFrame >= typewriterDelay &&
-    visibleChars < testimonial.quote.length;
+  const showCursor = cardFrame >= typewriterDelay && visibleChars < testimonial.quote.length;
 
   // Author appears after quote is mostly done
   const quoteFinishFrame = typewriterDelay + testimonial.quote.length / charsPerFrame;
@@ -109,7 +102,7 @@ const TestimonialCard: React.FC<{
     cardFrame,
     [quoteFinishFrame - 10, quoteFinishFrame + 5],
     [0, 1],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   const authorSlide = interpolate(
     cardFrame,
@@ -119,7 +112,7 @@ const TestimonialCard: React.FC<{
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
       easing: Easing.out(Easing.cubic),
-    }
+    },
   );
 
   return (
@@ -284,10 +277,7 @@ export const SocialProof: React.FC<SocialProofProps> = ({
   }
 
   const cardDuration = durationInFrames / testimonials.length;
-  const currentIndex = Math.min(
-    Math.floor(frame / cardDuration),
-    testimonials.length - 1
-  );
+  const currentIndex = Math.min(Math.floor(frame / cardDuration), testimonials.length - 1);
   const cardFrame = frame - currentIndex * cardDuration;
 
   return (

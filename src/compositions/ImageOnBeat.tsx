@@ -33,12 +33,8 @@ type BeatsFile = {
 const beatsCache = new Map<string, BeatsFile>();
 
 const useBeats = (src: string): BeatsFile | null => {
-  const [data, setData] = React.useState<BeatsFile | null>(
-    beatsCache.get(src) ?? null,
-  );
-  const [handle] = React.useState(() =>
-    beatsCache.get(src) ? null : delayRender(`beats:${src}`),
-  );
+  const [data, setData] = React.useState<BeatsFile | null>(beatsCache.get(src) ?? null);
+  const [handle] = React.useState(() => (beatsCache.get(src) ? null : delayRender(`beats:${src}`)));
 
   React.useEffect(() => {
     if (beatsCache.get(src)) {
@@ -72,11 +68,7 @@ const lowerBound = (arr: number[], t: number): number => {
   return lo;
 };
 
-const countBeatsInRange = (
-  arr: number[],
-  from: number,
-  to: number,
-): number => {
+const countBeatsInRange = (arr: number[], from: number, to: number): number => {
   if (arr.length === 0 || to < from) return 0;
   const lo = lowerBound(arr, from);
   const hi = lowerBound(arr, to + 1e-6);
@@ -115,14 +107,10 @@ export const ImageOnBeat: React.FC<z.infer<typeof imageOnBeatSchema>> = ({
   // Time of the last image change (for transition animation).
   const lastChangeBeatIdx = startIdx + currentStep * changeStep;
   const lastChangeTime =
-    lastChangeBeatIdx < beatsArray.length
-      ? beatsArray[lastChangeBeatIdx]
-      : startSec;
+    lastChangeBeatIdx < beatsArray.length ? beatsArray[lastChangeBeatIdx] : startSec;
   const timeSinceChange = Math.max(0, absTime - lastChangeTime);
   const transitionProgress =
-    transitionDurationMs > 0
-      ? Math.min(1, (timeSinceChange * 1000) / transitionDurationMs)
-      : 1;
+    transitionDurationMs > 0 ? Math.min(1, (timeSinceChange * 1000) / transitionDurationMs) : 1;
 
   const imgStyle: React.CSSProperties = {
     width: "100%",
@@ -139,18 +127,14 @@ export const ImageOnBeat: React.FC<z.infer<typeof imageOnBeatSchema>> = ({
   }
 
   if (transition === "crossfade") {
-    const outgoingOpacity = interpolate(
-      transitionProgress,
-      [0, 1],
-      [1, 0],
-      { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-    );
-    const incomingOpacity = interpolate(
-      transitionProgress,
-      [0, 1],
-      [0, 1],
-      { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-    );
+    const outgoingOpacity = interpolate(transitionProgress, [0, 1], [1, 0], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    });
+    const incomingOpacity = interpolate(transitionProgress, [0, 1], [0, 1], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    });
     // When transition completes we just show the current image so we don't
     // waste a frame blending a fully-opaque next image on top.
     if (transitionProgress >= 1) {
@@ -174,18 +158,14 @@ export const ImageOnBeat: React.FC<z.infer<typeof imageOnBeatSchema>> = ({
   }
 
   // transition === "flash"
-  const flashOpacity = interpolate(
-    transitionProgress,
-    [0, 1],
-    [1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-  );
+  const flashOpacity = interpolate(transitionProgress, [0, 1], [1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
   return (
     <AbsoluteFill style={{ backgroundColor }}>
       <Img src={staticFile(images[imageIdx])} style={imgStyle} />
-      <AbsoluteFill
-        style={{ backgroundColor: "#fff", opacity: flashOpacity }}
-      />
+      <AbsoluteFill style={{ backgroundColor: "#fff", opacity: flashOpacity }} />
     </AbsoluteFill>
   );
 };

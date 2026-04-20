@@ -1,10 +1,5 @@
-import React from "react";
-import {
-  useCurrentFrame,
-  useVideoConfig,
-  spring,
-  interpolate,
-} from "remotion";
+import type React from "react";
+import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 
 type SpringConfig = {
   damping?: number;

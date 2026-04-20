@@ -8,7 +8,7 @@ export const expDecay = (timeSince: number, decay: number) =>
   Math.exp(-decay * Math.max(0, timeSince));
 
 export const gaussian = (t: number, peak: number, sigma: number) =>
-  Math.exp(-Math.pow(t - peak, 2) / (2 * sigma * sigma));
+  Math.exp(-((t - peak) ** 2) / (2 * sigma * sigma));
 
 export const FONT_STACK = "'Helvetica Neue', Helvetica, Inter, system-ui, sans-serif";
 

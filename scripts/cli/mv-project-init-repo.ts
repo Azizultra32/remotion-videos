@@ -47,9 +47,7 @@ if (!args.project) {
 
 const stem = args.project;
 if (!/^[a-z0-9_-]+$/i.test(stem)) {
-  console.error(
-    `[mv:project-init-repo] invalid stem "${stem}" (must match /^[a-z0-9_-]+$/i)`,
-  );
+  console.error(`[mv:project-init-repo] invalid stem "${stem}" (must match /^[a-z0-9_-]+$/i)`);
   process.exit(1);
 }
 

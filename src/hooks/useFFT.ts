@@ -1,6 +1,6 @@
+import { useWindowedAudioData, visualizeAudio } from "@remotion/media-utils";
 import { useMemo } from "react";
 import { staticFile } from "remotion";
-import { useWindowedAudioData, visualizeAudio } from "@remotion/media-utils";
 
 export type FFTBands = {
   bins: number[];
@@ -10,8 +10,7 @@ export type FFTBands = {
   raw: number[];
 };
 
-const avg = (xs: number[]) =>
-  xs.length === 0 ? 0 : xs.reduce((s, v) => s + v, 0) / xs.length;
+const avg = (xs: number[]) => (xs.length === 0 ? 0 : xs.reduce((s, v) => s + v, 0) / xs.length);
 
 const db = (v: number) => {
   if (v <= 0) return 0;

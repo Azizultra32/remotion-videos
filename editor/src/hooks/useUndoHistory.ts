@@ -75,9 +75,7 @@ export const useUndoHistory = () => {
       }
     });
 
-    currentStemRef.current = stemFromAudioSrc(
-      useEditorStore.getState().audioSrc,
-    );
+    currentStemRef.current = stemFromAudioSrc(useEditorStore.getState().audioSrc);
 
     return () => {
       unsubRecord();

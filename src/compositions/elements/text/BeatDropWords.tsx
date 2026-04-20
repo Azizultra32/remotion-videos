@@ -1,7 +1,7 @@
-import React from "react";
+import type React from "react";
 import { z } from "zod";
+import { expDecay, FONT_STACK } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
-import { FONT_STACK, expDecay } from "../_helpers";
 
 const schema = z.object({
   words: z.array(z.string()),
@@ -34,7 +34,19 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { words, mode, textColor, backgroundColor, fontSize, fontWeight, fontFamily, letterSpacing, useDownbeatsOnly, decay, blackBackground } = element.props;
+  const {
+    words,
+    mode,
+    textColor,
+    backgroundColor,
+    fontSize,
+    fontWeight,
+    fontFamily,
+    letterSpacing,
+    useDownbeatsOnly,
+    decay,
+    blackBackground,
+  } = element.props;
   if (words.length === 0) return null;
 
   const beatSource = useDownbeatsOnly ? ctx.beats.downbeats : ctx.beats.beats;
@@ -49,9 +61,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
 
   return (
     <>
-      {blackBackground && (
-        <div style={{ position: "absolute", inset: 0, backgroundColor }} />
-      )}
+      {blackBackground && <div style={{ position: "absolute", inset: 0, backgroundColor }} />}
       <div
         style={{
           position: "absolute",

@@ -1,8 +1,8 @@
-import React from "react";
-import { z } from "zod";
+import type React from "react";
 import { spring } from "remotion";
-import type { ElementModule, ElementRendererProps } from "../types";
+import { z } from "zod";
 import { FONT_STACK } from "../_helpers";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   text: z.string(),
@@ -33,11 +33,23 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { text, colors, fontSize, fontWeight, fontFamily, delayPerChar, damping, stiffness, x, y } = element.props;
+  const { text, colors, fontSize, fontWeight, fontFamily, delayPerChar, damping, stiffness, x, y } =
+    element.props;
   const localFrame = ctx.frame - Math.round(element.startSec * ctx.fps);
   const chars = [...text];
   return (
-    <div style={{ position: "absolute", left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)", display: "flex", fontFamily, fontSize, fontWeight }}>
+    <div
+      style={{
+        position: "absolute",
+        left: `${x}%`,
+        top: `${y}%`,
+        transform: "translate(-50%, -50%)",
+        display: "flex",
+        fontFamily,
+        fontSize,
+        fontWeight,
+      }}
+    >
       {chars.map((ch, i) => {
         const s = spring({
           frame: Math.max(0, localFrame - i * delayPerChar),

@@ -76,8 +76,14 @@ export const StoryboardStrip = () => {
     if (!editing) return;
     const start = Number(editing.startSec);
     const end = Number(editing.endSec);
-    if (!Number.isFinite(start) || start < 0) { setError("start must be a non-negative number"); return; }
-    if (!Number.isFinite(end) || end <= start) { setError("end must be greater than start"); return; }
+    if (!Number.isFinite(start) || start < 0) {
+      setError("start must be a non-negative number");
+      return;
+    }
+    if (!Number.isFinite(end) || end <= start) {
+      setError("end must be greater than start");
+      return;
+    }
     const name = editing.name.trim() || "Untitled scene";
     const intent = editing.intent.trim();
     if (editing.id === null) {
@@ -98,7 +104,12 @@ export const StoryboardStrip = () => {
   };
 
   const del = (sc: Scene) => {
-    if (!window.confirm(`Delete scene "${sc.name || "(unnamed)"}"? This doesn't touch any linked timeline elements.`)) return;
+    if (
+      !window.confirm(
+        `Delete scene "${sc.name || "(unnamed)"}"? This doesn't touch any linked timeline elements.`,
+      )
+    )
+      return;
     removeScene(sc.id);
   };
 
@@ -130,15 +141,19 @@ export const StoryboardStrip = () => {
       }}
     >
       <span
-        style={{ fontSize: 10, color: "#888", letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}
+        style={{
+          fontSize: 10,
+          color: "#888",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          whiteSpace: "nowrap",
+        }}
         title="Scenes plan the video structurally. Each scene is a named chunk of time with creative intent. Click a card to seek. Drag the yellow event markers on the waveform below to refine; link specific elements to scenes via the Element Detail panel."
       >
         Storyboard
       </span>
       {sorted.length === 0 ? (
-        <span style={{ fontSize: 10, color: "#555", fontStyle: "italic" }}>
-          No scenes yet —
-        </span>
+        <span style={{ fontSize: 10, color: "#555", fontStyle: "italic" }}>No scenes yet —</span>
       ) : (
         sorted.map((sc) => {
           const isActive = sc.id === activeId;
@@ -162,9 +177,14 @@ export const StoryboardStrip = () => {
               title={`${sc.name || "(unnamed)"} · ${fmtTime(sc.startSec)} – ${fmtTime(sc.endSec)}${sc.intent ? "\n" + sc.intent : ""}`}
             >
               <span style={{ color: "#fff", fontWeight: 600 }}>{sc.name || "Untitled"}</span>
-              <span style={{ color: "#888" }}>{fmtTime(sc.startSec)}–{fmtTime(sc.endSec)}</span>
+              <span style={{ color: "#888" }}>
+                {fmtTime(sc.startSec)}–{fmtTime(sc.endSec)}
+              </span>
               <button
-                onClick={(e) => { e.stopPropagation(); openEdit(sc); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEdit(sc);
+                }}
                 title="Edit scene"
                 style={{
                   padding: "0 4px",
@@ -179,7 +199,10 @@ export const StoryboardStrip = () => {
                 ✎
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); del(sc); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  del(sc);
+                }}
                 title="Delete scene"
                 style={{
                   padding: "0 4px",
@@ -228,7 +251,9 @@ export const StoryboardStrip = () => {
             justifyContent: "center",
             zIndex: 100,
           }}
-          onClick={(e) => { if (e.target === e.currentTarget) setEditing(null); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditing(null);
+          }}
         >
           <div
             ref={modalRef}
@@ -246,7 +271,14 @@ export const StoryboardStrip = () => {
               fontSize: 12,
             }}
           >
-            <div style={{ fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "#888" }}>
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: "#888",
+              }}
+            >
               {editing.id === null ? "New scene" : "Edit scene"}
             </div>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -257,7 +289,14 @@ export const StoryboardStrip = () => {
                 value={editing.name}
                 onChange={(e) => setEditing({ ...editing, name: e.target.value })}
                 placeholder="e.g. Intro rise, First drop, Outro"
-                style={{ padding: "6px 8px", background: "#1a1a1a", border: "1px solid #333", color: "#fff", borderRadius: 4, fontSize: 12 }}
+                style={{
+                  padding: "6px 8px",
+                  background: "#1a1a1a",
+                  border: "1px solid #333",
+                  color: "#fff",
+                  borderRadius: 4,
+                  fontSize: 12,
+                }}
               />
             </label>
             <div style={{ display: "flex", gap: 8 }}>
@@ -269,7 +308,14 @@ export const StoryboardStrip = () => {
                   min={0}
                   value={editing.startSec}
                   onChange={(e) => setEditing({ ...editing, startSec: e.target.value })}
-                  style={{ padding: "6px 8px", background: "#1a1a1a", border: "1px solid #333", color: "#fff", borderRadius: 4, fontSize: 12 }}
+                  style={{
+                    padding: "6px 8px",
+                    background: "#1a1a1a",
+                    border: "1px solid #333",
+                    color: "#fff",
+                    borderRadius: 4,
+                    fontSize: 12,
+                  }}
                 />
               </label>
               <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -280,7 +326,14 @@ export const StoryboardStrip = () => {
                   min={0}
                   value={editing.endSec}
                   onChange={(e) => setEditing({ ...editing, endSec: e.target.value })}
-                  style={{ padding: "6px 8px", background: "#1a1a1a", border: "1px solid #333", color: "#fff", borderRadius: 4, fontSize: 12 }}
+                  style={{
+                    padding: "6px 8px",
+                    background: "#1a1a1a",
+                    border: "1px solid #333",
+                    color: "#fff",
+                    borderRadius: 4,
+                    fontSize: 12,
+                  }}
                 />
               </label>
             </div>
@@ -291,7 +344,16 @@ export const StoryboardStrip = () => {
                 onChange={(e) => setEditing({ ...editing, intent: e.target.value })}
                 rows={4}
                 placeholder="e.g. slow build; no text; bass ride on the low end until the drop"
-                style={{ padding: "6px 8px", background: "#1a1a1a", border: "1px solid #333", color: "#fff", borderRadius: 4, fontSize: 12, resize: "vertical", fontFamily: "inherit" }}
+                style={{
+                  padding: "6px 8px",
+                  background: "#1a1a1a",
+                  border: "1px solid #333",
+                  color: "#fff",
+                  borderRadius: 4,
+                  fontSize: 12,
+                  resize: "vertical",
+                  fontFamily: "inherit",
+                }}
               />
             </label>
             {error && (
@@ -300,13 +362,29 @@ export const StoryboardStrip = () => {
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
               <button
                 onClick={() => setEditing(null)}
-                style={{ padding: "6px 12px", background: "#222", border: "1px solid #444", color: "#ddd", fontSize: 11, borderRadius: 3, cursor: "pointer" }}
+                style={{
+                  padding: "6px 12px",
+                  background: "#222",
+                  border: "1px solid #444",
+                  color: "#ddd",
+                  fontSize: 11,
+                  borderRadius: 3,
+                  cursor: "pointer",
+                }}
               >
                 Cancel
               </button>
               <button
                 onClick={save}
-                style={{ padding: "6px 12px", background: "#1a3a1a", border: "1px solid #386", color: "#afa", fontSize: 11, borderRadius: 3, cursor: "pointer" }}
+                style={{
+                  padding: "6px 12px",
+                  background: "#1a3a1a",
+                  border: "1px solid #386",
+                  color: "#afa",
+                  fontSize: 11,
+                  borderRadius: 3,
+                  cursor: "pointer",
+                }}
                 title="⌘↩ also saves"
               >
                 Save

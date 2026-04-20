@@ -1,7 +1,7 @@
-import React from "react";
+import type React from "react";
 import { z } from "zod";
-import type { ElementModule, ElementRendererProps } from "../types";
 import { expDecay } from "../_helpers";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   svgPath: z.string(),
@@ -50,9 +50,27 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { svgPath, viewBoxWidth, viewBoxHeight, outerColor, outerBlur, outerWidth,
-    midColor, midBlur, midWidth, innerColor, innerWidth, coreColor, coreWidth,
-    flickerOnBeats, flickerDecay, x, y, widthPct, heightPct } = element.props;
+  const {
+    svgPath,
+    viewBoxWidth,
+    viewBoxHeight,
+    outerColor,
+    outerBlur,
+    outerWidth,
+    midColor,
+    midBlur,
+    midWidth,
+    innerColor,
+    innerWidth,
+    coreColor,
+    coreWidth,
+    flickerOnBeats,
+    flickerDecay,
+    x,
+    y,
+    widthPct,
+    heightPct,
+  } = element.props;
 
   const svgW = ctx.width * (widthPct / 100);
   const svgH = ctx.height * (heightPct / 100);
@@ -60,7 +78,8 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   let intensity = 1;
   if (flickerOnBeats) {
     const lastBeat = ctx.beats.lastBeatBefore(ctx.absTimeSec);
-    intensity = lastBeat == null ? 0.3 : 0.3 + 0.7 * expDecay(ctx.absTimeSec - lastBeat, flickerDecay);
+    intensity =
+      lastBeat == null ? 0.3 : 0.3 + 0.7 * expDecay(ctx.absTimeSec - lastBeat, flickerDecay);
   }
 
   const filterId = `neon-blur-${element.id}`;
@@ -81,13 +100,47 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
-        <filter id={filterId}><feGaussianBlur stdDeviation={outerBlur} /></filter>
-        <filter id={filterId2}><feGaussianBlur stdDeviation={midBlur} /></filter>
+        <filter id={filterId}>
+          <feGaussianBlur stdDeviation={outerBlur} />
+        </filter>
+        <filter id={filterId2}>
+          <feGaussianBlur stdDeviation={midBlur} />
+        </filter>
       </defs>
-      <path d={svgPath} stroke={outerColor} strokeWidth={outerWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" filter={`url(#${filterId})`} />
-      <path d={svgPath} stroke={midColor} strokeWidth={midWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" filter={`url(#${filterId2})`} />
-      <path d={svgPath} stroke={innerColor} strokeWidth={innerWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <path d={svgPath} stroke={coreColor} strokeWidth={coreWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={svgPath}
+        stroke={outerColor}
+        strokeWidth={outerWidth}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        filter={`url(#${filterId})`}
+      />
+      <path
+        d={svgPath}
+        stroke={midColor}
+        strokeWidth={midWidth}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        filter={`url(#${filterId2})`}
+      />
+      <path
+        d={svgPath}
+        stroke={innerColor}
+        strokeWidth={innerWidth}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d={svgPath}
+        stroke={coreColor}
+        strokeWidth={coreWidth}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 };

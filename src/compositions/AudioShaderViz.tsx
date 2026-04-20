@@ -1,12 +1,12 @@
 import React, { useMemo } from "react";
 import {
   AbsoluteFill,
+  Audio,
   continueRender,
   delayRender,
   staticFile,
   useCurrentFrame,
   useVideoConfig,
-  Audio,
 } from "remotion";
 import { z } from "zod";
 
@@ -39,9 +39,7 @@ const loadBeats = async (src: string): Promise<BeatsFile> => {
 };
 
 const useBeats = (src: string): BeatsFile | null => {
-  const [data, setData] = React.useState<BeatsFile | null>(
-    beatsCache.get(src) ?? null,
-  );
+  const [data, setData] = React.useState<BeatsFile | null>(beatsCache.get(src) ?? null);
   const [handle] = React.useState(() =>
     !beatsCache.get(src) ? delayRender(`beats:${src}`) : null,
   );
@@ -130,7 +128,10 @@ const ShaderCanvas: React.FC<{
   const { fps } = useVideoConfig();
 
   // Color palettes
-  const palettes: Record<string, { color1: [number, number, number]; color2: [number, number, number] }> = {
+  const palettes: Record<
+    string,
+    { color1: [number, number, number]; color2: [number, number, number] }
+  > = {
     blue: { color1: [0.1, 0.2, 0.5], color2: [0.3, 0.6, 1.0] },
     purple: { color1: [0.3, 0.1, 0.5], color2: [0.8, 0.3, 1.0] },
     fire: { color1: [0.5, 0.1, 0.0], color2: [1.0, 0.5, 0.0] },
@@ -196,11 +197,7 @@ const ShaderCanvas: React.FC<{
     const buffer = gl.createBuffer();
     bufferRef.current = buffer;
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-      gl.STATIC_DRAW,
-    );
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
     const position = gl.getAttribLocation(program, "position");
     gl.enableVertexAttribArray(position);

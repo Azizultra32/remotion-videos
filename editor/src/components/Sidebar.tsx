@@ -1,7 +1,8 @@
 // src/components/Sidebar.tsx
+
+import { ELEMENT_MODULES, listByCategory } from "@compositions/elements/registry";
 import { useEditorStore } from "../store";
 import type { TimelineElement } from "../types";
-import { ELEMENT_MODULES, listByCategory } from "@compositions/elements/registry";
 
 const newId = () => `el-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -85,8 +86,8 @@ export const Sidebar = () => {
         </div>
       ))}
       <div style={{ fontSize: 10, color: "#666", lineHeight: 1.4, marginTop: 8 }}>
-        Click to add at the current playhead. Drag on the timeline to move.
-        Configure in the right panel.
+        Click to add at the current playhead. Drag on the timeline to move. Configure in the right
+        panel.
       </div>
     </div>
   );

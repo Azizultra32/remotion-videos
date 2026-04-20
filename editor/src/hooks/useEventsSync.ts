@@ -14,8 +14,8 @@
 
 import { useEffect, useRef } from "react";
 import { useEditorStore } from "../store";
-import { stemFromAudioSrc } from "../utils/url";
 import { parseEventsFile } from "../utils/eventsFile";
+import { stemFromAudioSrc } from "../utils/url";
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -55,9 +55,7 @@ export const useEventsSync = () => {
       }
     });
 
-    const initialStem = stemFromAudioSrc(
-      useEditorStore.getState().audioSrc,
-    );
+    const initialStem = stemFromAudioSrc(useEditorStore.getState().audioSrc);
     if (initialStem) {
       currentStemRef.current = initialStem;
       void hydrate(initialStem);

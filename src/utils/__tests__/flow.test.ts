@@ -1,13 +1,5 @@
-import { describe, it, expect } from "vitest";
-import {
-  waitFor,
-  delay,
-  chain,
-  all,
-  sequence,
-  compile,
-  leaf,
-} from "../flow";
+import { describe, expect, it } from "vitest";
+import { all, chain, compile, delay, leaf, sequence, waitFor } from "../flow";
 
 describe("leaf", () => {
   it("creates a node with the given id and duration", () => {
@@ -106,10 +98,7 @@ describe("sequence", () => {
 describe("compile · nested", () => {
   it("chain of alls stacks durations correctly", () => {
     // chain([ all([a=1, b=2]), all([c=3]) ]) → first all takes 2s, second takes 3s; total 5s
-    const tree = chain([
-      all([leaf("a", 1), leaf("b", 2)]),
-      all([leaf("c", 3)]),
-    ]);
+    const tree = chain([all([leaf("a", 1), leaf("b", 2)]), all([leaf("c", 3)])]);
     expect(tree.durationSec).toBe(5);
     expect(compile(tree)).toEqual([
       { id: "a", startSec: 0, endSec: 1 },

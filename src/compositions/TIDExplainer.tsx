@@ -1,16 +1,16 @@
+import { zColor } from "@remotion/zod-types";
 import React from "react";
 import {
   AbsoluteFill,
+  Audio,
+  interpolate,
+  Sequence,
+  spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
-  interpolate,
-  spring,
-  Sequence,
-  Audio,
-  staticFile,
 } from "remotion";
 import { z } from "zod";
-import { zColor } from "@remotion/zod-types";
 
 // ─── Schema ───────────────────────────────────────────────────
 
@@ -31,15 +31,8 @@ export const tidExplainerSchema = z.object({
 
 type TIDExplainerProps = z.infer<typeof tidExplainerSchema>;
 
-export const calculateTIDExplainerMetadata = ({
-  props,
-}: {
-  props: TIDExplainerProps;
-}) => {
-  const totalSeconds = props.scenes.reduce(
-    (sum, s) => sum + s.durationSeconds,
-    0
-  );
+export const calculateTIDExplainerMetadata = ({ props }: { props: TIDExplainerProps }) => {
+  const totalSeconds = props.scenes.reduce((sum, s) => sum + s.durationSeconds, 0);
   return { durationInFrames: totalSeconds * 30 };
 };
 
@@ -123,14 +116,7 @@ const AnimatedBox: React.FC<{
   delay?: number;
   width?: number;
   children?: React.ReactNode;
-}> = ({
-  title,
-  subtitle,
-  accentColor = COLORS.accent,
-  delay = 0,
-  width = 300,
-  children,
-}) => {
+}> = ({ title, subtitle, accentColor = COLORS.accent, delay = 0, width = 300, children }) => {
   const frame = useCurrentFrame();
   const opacity = interpolate(frame - delay, [0, 15], [0, 1], {
     extrapolateLeft: "clamp",
@@ -164,9 +150,7 @@ const AnimatedBox: React.FC<{
         {title}
       </div>
       {subtitle && (
-        <div style={{ fontSize: 16, color: COLORS.textMuted, lineHeight: 1.5 }}>
-          {subtitle}
-        </div>
+        <div style={{ fontSize: 16, color: COLORS.textMuted, lineHeight: 1.5 }}>{subtitle}</div>
       )}
       {children}
     </div>
@@ -294,9 +278,7 @@ const Scene1Title: React.FC = () => {
   ];
 
   return (
-    <AbsoluteFill
-      style={{ justifyContent: "center", alignItems: "center", padding: 80 }}
-    >
+    <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", padding: 80 }}>
       <div style={{ textAlign: "center", transform: `scale(${titleScale})` }}>
         <div
           style={{
@@ -333,8 +315,7 @@ const Scene1Title: React.FC = () => {
           marginTop: 40,
         }}
       >
-        Every terminal gets an identity. Every session gets a lineage. Every fork
-        gets tracked.
+        Every terminal gets an identity. Every session gets a lineage. Every fork gets tracked.
       </div>
 
       <div
@@ -370,9 +351,7 @@ const Scene1Title: React.FC = () => {
                 {stage.name}
               </div>
               {i < stages.length - 1 && (
-                <span
-                  style={{ opacity: so, color: COLORS.textDim, fontSize: 18, marginLeft: 12 }}
-                >
+                <span style={{ opacity: so, color: COLORS.textDim, fontSize: 18, marginLeft: 12 }}>
                   →
                 </span>
               )}
@@ -395,9 +374,21 @@ const Scene2Problem: React.FC = () => {
   });
 
   const problems = [
-    { text: "Sessions are flat UUID files — no terminal association", delay: 25, color: COLORS.red },
-    { text: "Forks lose all lineage — Anthropic tracks zero metadata", delay: 50, color: COLORS.orange },
-    { text: "Crashes/compactions break the link between sessions", delay: 75, color: COLORS.orange },
+    {
+      text: "Sessions are flat UUID files — no terminal association",
+      delay: 25,
+      color: COLORS.red,
+    },
+    {
+      text: "Forks lose all lineage — Anthropic tracks zero metadata",
+      delay: 50,
+      color: COLORS.orange,
+    },
+    {
+      text: "Crashes/compactions break the link between sessions",
+      delay: 75,
+      color: COLORS.orange,
+    },
     { text: "Running 5+ terminals — which one is which?", delay: 100, color: COLORS.red },
   ];
 
@@ -489,7 +480,12 @@ const Scene3Solution: React.FC = () => {
     { internet: "Domain", terminal: "Project (REBUILD)", color: COLORS.green, delay: 60 },
     { internet: "Subdomain", terminal: "Terminal (t-7a3f2b1c)", color: COLORS.accent, delay: 80 },
     { internet: "Path", terminal: "Session / fork lineage", color: COLORS.orange, delay: 100 },
-    { internet: "IP address", terminal: "UUID (real ID under hood)", color: COLORS.textDim, delay: 120 },
+    {
+      internet: "IP address",
+      terminal: "UUID (real ID under hood)",
+      color: COLORS.textDim,
+      delay: 120,
+    },
   ];
 
   const addressScale = spring({
@@ -537,10 +533,14 @@ const Scene3Solution: React.FC = () => {
               }),
             }}
           >
-            <div style={{ width: 200, fontSize: 16, color: COLORS.textDim, fontFamily: FONTS.mono }}>
+            <div
+              style={{ width: 200, fontSize: 16, color: COLORS.textDim, fontFamily: FONTS.mono }}
+            >
               Internet
             </div>
-            <div style={{ width: 400, fontSize: 16, color: COLORS.textDim, fontFamily: FONTS.mono }}>
+            <div
+              style={{ width: 400, fontSize: 16, color: COLORS.textDim, fontFamily: FONTS.mono }}
+            >
               Terminal System
             </div>
           </div>
@@ -565,7 +565,14 @@ const Scene3Solution: React.FC = () => {
                   borderLeft: `3px solid ${color}`,
                 }}
               >
-                <div style={{ width: 200, fontSize: 17, color: COLORS.textMuted, fontFamily: FONTS.mono }}>
+                <div
+                  style={{
+                    width: 200,
+                    fontSize: 17,
+                    color: COLORS.textMuted,
+                    fontFamily: FONTS.mono,
+                  }}
+                >
                   {internet}
                 </div>
                 <div style={{ fontSize: 17, color, fontWeight: 600, fontFamily: FONTS.mono }}>
@@ -657,16 +664,21 @@ const Scene4Registration: React.FC = () => {
           width={260}
         />
         <AnimatedArrow delay={80} width={50} color={COLORS.green} />
-        <AnimatedBox
-          title="Python Registry"
-          accentColor={COLORS.accent}
-          delay={90}
-          width={280}
-        >
+        <AnimatedBox title="Python Registry" accentColor={COLORS.accent} delay={90} width={280}>
           <div style={{ marginTop: 8 }}>
-            <FadeInText text="Hash(host + pid + time)" delay={105} fontSize={14} color={COLORS.textMuted} />
+            <FadeInText
+              text="Hash(host + pid + time)"
+              delay={105}
+              fontSize={14}
+              color={COLORS.textMuted}
+            />
             <FadeInText text="→ t-{8 hex chars}" delay={115} fontSize={14} color={COLORS.accent} />
-            <FadeInText text="Atomic write with flock" delay={125} fontSize={14} color={COLORS.textMuted} />
+            <FadeInText
+              text="Atomic write with flock"
+              delay={125}
+              fontSize={14}
+              color={COLORS.textMuted}
+            />
           </div>
         </AnimatedBox>
         <AnimatedArrow delay={140} width={50} color={COLORS.accent} />
@@ -705,10 +717,30 @@ const Scene4Registration: React.FC = () => {
 
         <div style={{ flex: 1 }}>
           {[
-            { label: "Collision-safe", desc: "4 billion IDs from 8 hex chars", delay: 200, color: COLORS.green },
-            { label: "Atomic writes", desc: "flock + tmp → rename pattern", delay: 220, color: COLORS.blue },
-            { label: "Corruption recovery", desc: "Falls back to .bak file", delay: 240, color: COLORS.orange },
-            { label: "Per-project TID", desc: "~/.claude/tid/PROJECT.json", delay: 260, color: COLORS.accent },
+            {
+              label: "Collision-safe",
+              desc: "4 billion IDs from 8 hex chars",
+              delay: 200,
+              color: COLORS.green,
+            },
+            {
+              label: "Atomic writes",
+              desc: "flock + tmp → rename pattern",
+              delay: 220,
+              color: COLORS.blue,
+            },
+            {
+              label: "Corruption recovery",
+              desc: "Falls back to .bak file",
+              delay: 240,
+              color: COLORS.orange,
+            },
+            {
+              label: "Per-project TID",
+              desc: "~/.claude/tid/PROJECT.json",
+              delay: 260,
+              color: COLORS.accent,
+            },
           ].map(({ label, desc, delay, color }) => (
             <div key={label} style={{ marginBottom: 16 }}>
               <FadeInText text={label} delay={delay} fontSize={20} color={color} fontWeight={700} />
@@ -769,9 +801,7 @@ const Scene5Forks: React.FC = () => {
         {/* Tree visualization */}
         <div style={{ position: "relative", width: 950, height: 500 }}>
           {/* Edges */}
-          <svg
-            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
-          >
+          <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
             {edges.map(({ from, to, delay }, i) => {
               const progress = interpolate(frame - delay, [0, 20], [0, 1], {
                 extrapolateLeft: "clamp",
@@ -848,12 +878,7 @@ const Scene5Forks: React.FC = () => {
 
         {/* Fork features */}
         <div style={{ width: 400 }}>
-          <AnimatedBox
-            title="Fork Anchoring"
-            accentColor={COLORS.orange}
-            delay={50}
-            width={380}
-          >
+          <AnimatedBox title="Fork Anchoring" accentColor={COLORS.orange} delay={50} width={380}>
             <div style={{ marginTop: 8 }}>
               <FadeInText
                 text="Uses message UUID (first 6 chars)"
@@ -877,12 +902,7 @@ const Scene5Forks: React.FC = () => {
           </AnimatedBox>
 
           <div style={{ marginTop: 20 }}>
-            <AnimatedBox
-              title="Session Ordinals"
-              accentColor={COLORS.cyan}
-              delay={120}
-              width={380}
-            >
+            <AnimatedBox title="Session Ordinals" accentColor={COLORS.cyan} delay={120} width={380}>
               <div style={{ marginTop: 8 }}>
                 <FadeInText
                   text="s1, s2, s3... per crash/restart"
@@ -967,9 +987,7 @@ const Scene6Nicknames: React.FC = () => {
           <span style={{ fontFamily: FONTS.mono, fontSize: 24, color: COLORS.textDim }}>
             {"$ "}
           </span>
-          <span style={{ fontFamily: FONTS.mono, fontSize: 24, color: COLORS.accent }}>
-            /name
-          </span>
+          <span style={{ fontFamily: FONTS.mono, fontSize: 24, color: COLORS.accent }}>/name</span>
           <span style={{ fontFamily: FONTS.mono, fontSize: 24, color: COLORS.white }}>
             {" phoenix"}
           </span>
@@ -1024,7 +1042,14 @@ const Scene6Nicknames: React.FC = () => {
               <div style={{ fontSize: 14, color: COLORS.textMuted, fontFamily: FONTS.mono }}>
                 {t.tid}
               </div>
-              <div style={{ fontSize: 14, color: COLORS.textDim, fontFamily: FONTS.mono, marginTop: 4 }}>
+              <div
+                style={{
+                  fontSize: 14,
+                  color: COLORS.textDim,
+                  fontFamily: FONTS.mono,
+                  marginTop: 4,
+                }}
+              >
                 project: {t.project}
               </div>
 
@@ -1106,9 +1131,7 @@ const Scene7Outro: React.FC = () => {
         >
           Every terminal has a name.
           <br />
-          <span style={{ color: COLORS.accent, fontWeight: 700 }}>
-            Every session has a story.
-          </span>
+          <span style={{ color: COLORS.accent, fontWeight: 700 }}>Every session has a story.</span>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { z } from "zod";
 
 export const mediaRefSchema = z.object({
   root: z.string().describe("Absolute or ~-expanded path to media folder. NOT tracked in git."),
@@ -37,16 +37,11 @@ export const projectEventSchema = z.object({
 export const projectManifestSchema = z.object({
   $schema: z.string().optional(),
   projectName: z.string().describe("Human-readable project name"),
-  framework: z
-    .string()
-    .describe("Path to the remotion-videos framework (relative or absolute)"),
+  framework: z.string().describe("Path to the remotion-videos framework (relative or absolute)"),
   media: mediaRefSchema,
   analysis: analysisRefSchema,
   render: renderTargetSchema,
-  editorState: z
-    .string()
-    .optional()
-    .describe("Path to edits.json produced by the editor app"),
+  editorState: z.string().optional().describe("Path to edits.json produced by the editor app"),
   events: z.array(projectEventSchema).default([]),
   segmentsDir: z
     .string()
@@ -76,10 +71,7 @@ const expandHome = (p: string): string => {
  *   - Absolute paths are returned as-is (after ~ expansion).
  *   - Relative paths are resolved against the manifest's directory.
  */
-export const resolveManifestPath = (
-  manifestPath: string,
-  fieldValue: string,
-): string => {
+export const resolveManifestPath = (manifestPath: string, fieldValue: string): string => {
   const expanded = expandHome(fieldValue);
   if (isAbsolute(expanded)) return expanded;
   return resolve(dirname(manifestPath), expanded);

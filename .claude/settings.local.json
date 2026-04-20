@@ -5,11 +5,14 @@
       "Skill(subagent-driven-development)",
       "Skill(using-git-worktrees)",
       "Skill(writing-plans)",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Bash(npx remotion *)",
+      "Bash(tee /tmp/rr.txt)",
+      "Bash(rm -rf projects/as-the-rush-comes/analysis/.claude)",
+      "Bash(git add *)",
+      "Bash(MV_PROJECTS_DIR=/tmp/alt-projects npx tsx scripts/cli/mv-project-init-repo.ts --project testtrack)"
     ]
   },
   "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "remotion-documentation"
-  ]
+  "enabledMcpjsonServers": ["remotion-documentation"]
 }

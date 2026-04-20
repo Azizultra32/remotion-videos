@@ -1,10 +1,5 @@
-import React from "react";
-import {
-  useCurrentFrame,
-  useVideoConfig,
-  spring,
-  interpolate,
-} from "remotion";
+import type React from "react";
+import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 
 export type ProgressBarVariant = "dots" | "bar" | "fraction" | "segmented";
 
@@ -81,9 +76,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   }
 
   if (variant === "bar") {
-    const progress = totalItems > 1
-      ? (currentIndex + 1) / totalItems
-      : 1;
+    const progress = totalItems > 1 ? (currentIndex + 1) / totalItems : 1;
 
     const barSpring = spring({
       frame,
@@ -123,27 +116,33 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
   if (variant === "segmented") {
     return (
-      <div style={{
-        ...containerStyle,
-        ...(showBackground ? {
-          backgroundColor: "rgba(0,0,0,0.55)",
-          backdropFilter: "blur(8px)",
-          padding: "12px 24px",
-          borderRadius: 8,
-          width: barWidth + 48,
-        } : {}),
-        flexDirection: "column",
-        gap: 8,
-      }}>
+      <div
+        style={{
+          ...containerStyle,
+          ...(showBackground
+            ? {
+                backgroundColor: "rgba(0,0,0,0.55)",
+                backdropFilter: "blur(8px)",
+                padding: "12px 24px",
+                borderRadius: 8,
+                width: barWidth + 48,
+              }
+            : {}),
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
         {label && (
-          <span style={{
-            fontFamily: "system-ui, sans-serif",
-            fontSize: 14,
-            fontWeight: 600,
-            color,
-            letterSpacing: 1,
-            textTransform: "uppercase",
-          }}>
+          <span
+            style={{
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 14,
+              fontWeight: 600,
+              color,
+              letterSpacing: 1,
+              textTransform: "uppercase",
+            }}
+          >
             {label}
           </span>
         )}
@@ -164,15 +163,17 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                   position: "relative",
                 }}
               >
-                <div style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  height: "100%",
-                  width: `${fillWidth}%`,
-                  backgroundColor: color,
-                  borderRadius: 2,
-                }} />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    height: "100%",
+                    width: `${fillWidth}%`,
+                    backgroundColor: color,
+                    borderRadius: 2,
+                  }}
+                />
               </div>
             );
           })}
@@ -193,8 +194,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
           letterSpacing: 2,
         }}
       >
-        {currentIndex + 1}{" "}
-        <span style={{ color: backgroundColor, fontWeight: 400 }}>/</span>{" "}
+        {currentIndex + 1} <span style={{ color: backgroundColor, fontWeight: 400 }}>/</span>{" "}
         {totalItems}
       </span>
     </div>

@@ -16,7 +16,7 @@
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
+import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -26,7 +26,10 @@ const parseArgs = (): Args => {
   for (let i = 2; i < process.argv.length; i++) {
     const tok = process.argv[i];
     const next = process.argv[i + 1];
-    if (tok === "--project" && next) { a.project = next; i++; }
+    if (tok === "--project" && next) {
+      a.project = next;
+      i++;
+    }
   }
   return a;
 };
@@ -56,7 +59,9 @@ if (existsSync(statusFile)) {
       console.error(`  wait for it to finish (check .analyze-status.json) or kill it first`);
       process.exit(1);
     }
-  } catch { /* status file corrupt — proceed; the clear is harmless */ }
+  } catch {
+    /* status file corrupt — proceed; the clear is harmless */
+  }
 }
 
 // Merge, don't overwrite. Preserve everything except the event arrays.
@@ -64,7 +69,9 @@ let existing: Record<string, unknown> = {};
 if (existsSync(analysisFile)) {
   try {
     existing = JSON.parse(readFileSync(analysisFile, "utf8")) as Record<string, unknown>;
-  } catch { /* corrupt/missing — emit a minimal file */ }
+  } catch {
+    /* corrupt/missing — emit a minimal file */
+  }
 }
 const merged = {
   ...existing,

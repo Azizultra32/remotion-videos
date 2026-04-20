@@ -1,4 +1,6 @@
-import React from "react";
+import { Audio } from "@remotion/media";
+import { useWindowedAudioData, visualizeAudio } from "@remotion/media-utils";
+import type React from "react";
 import {
   AbsoluteFill,
   Img,
@@ -7,8 +9,6 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { Audio } from "@remotion/media";
-import { useWindowedAudioData, visualizeAudio } from "@remotion/media-utils";
 import { z } from "zod";
 
 export const publicCutSchema = z.object({
@@ -82,10 +82,7 @@ const SpectrumBars: React.FC<{
               marginRight: 1,
               height: v * height,
               background: `linear-gradient(180deg, rgba(255,255,255,${0.6 + v * 0.4}) 0%, rgba(255,255,255,0.03) 100%)`,
-              boxShadow:
-                v > 0.4
-                  ? `0 0 ${v * 8}px rgba(255,255,255,${v * 0.3})`
-                  : "none",
+              boxShadow: v > 0.4 ? `0 0 ${v * 8}px rgba(255,255,255,${v * 0.3})` : "none",
             }}
           />
         );
@@ -123,9 +120,7 @@ export const PublicCut: React.FC<z.infer<typeof publicCutSchema>> = (p) => {
   }
 
   // AHURA: bell curve opacity + zoom + bass glow
-  const ahuraOpacity = Math.exp(
-    -Math.pow(t - p.ahuraPeak, 2) / (2 * p.ahuraSigma ** 2),
-  );
+  const ahuraOpacity = Math.exp(-((t - p.ahuraPeak) ** 2) / (2 * p.ahuraSigma ** 2));
 
   // Zoom: can be relative to AHURA peak or absolute from start
   const zoomStartTime = p.zoomRelativeToAhura ? p.ahuraPeak - p.zoomDuration / 2 : 0;
@@ -139,20 +134,16 @@ export const PublicCut: React.FC<z.infer<typeof publicCutSchema>> = (p) => {
       case "ease-out":
         return 1 - (1 - progress) * (1 - progress);
       case "ease-in-out":
-        return progress < 0.5
-          ? 2 * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        return progress < 0.5 ? 2 * progress * progress : 1 - (-2 * progress + 2) ** 2 / 2;
       default:
         return progress; // linear
     }
   };
 
-  const rawProgress = interpolate(
-    frame,
-    [fps * zoomStartTime, fps * zoomEndTime],
-    [0, 1],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-  );
+  const rawProgress = interpolate(frame, [fps * zoomStartTime, fps * zoomEndTime], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
   const easedProgress = applyEasing(rawProgress, p.zoomEasing);
   const scale = interpolate(easedProgress, [0, 1], [p.zoomStart, p.zoomEnd], {
     extrapolateLeft: "clamp",

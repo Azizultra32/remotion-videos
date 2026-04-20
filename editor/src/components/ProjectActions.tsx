@@ -1,10 +1,7 @@
 // src/components/ProjectActions.tsx
 // Top-bar actions: Render to MP4, Export project.json, Import project.json.
 import { useRef, useState } from "react";
-import {
-  downloadProjectFile,
-  importProjectFromFile,
-} from "../utils/projectJson";
+import { downloadProjectFile, importProjectFromFile } from "../utils/projectJson";
 import { RenderButton } from "./RenderButton";
 
 const btn: React.CSSProperties = {

@@ -1,4 +1,5 @@
-import React, { useMemo } from "react";
+import type React from "react";
+import { useMemo } from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 
 interface WaveformVizProps {
@@ -77,9 +78,7 @@ export const WaveformViz: React.FC<WaveformVizProps> = ({
             bottom: 0,
             width: 2,
             height: bar.height,
-            backgroundColor: bar.isPast
-              ? color
-              : color.replace("0.6", "0.3").replace("0.8", "0.4"),
+            backgroundColor: bar.isPast ? color : color.replace("0.6", "0.3").replace("0.8", "0.4"),
           }}
         />
       ))}

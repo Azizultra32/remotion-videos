@@ -1,7 +1,7 @@
-import React from "react";
+import type React from "react";
 import { z } from "zod";
-import type { ElementModule, ElementRendererProps } from "../types";
 import { FONT_STACK, gaussian } from "../_helpers";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   text: z.string(),
@@ -38,8 +38,20 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { text, textColor, fontSize, fontWeight, fontFamily, letterSpacing,
-    sigmaSec, zoomFrom, zoomTo, bassGlowMax, x, y } = element.props;
+  const {
+    text,
+    textColor,
+    fontSize,
+    fontWeight,
+    fontFamily,
+    letterSpacing,
+    sigmaSec,
+    zoomFrom,
+    zoomTo,
+    bassGlowMax,
+    x,
+    y,
+  } = element.props;
   const peakSec = element.startSec + element.durationSec / 2;
   const opacity = gaussian(ctx.absTimeSec, peakSec, sigmaSec);
   const p = ctx.elementProgress;
@@ -59,9 +71,10 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
         letterSpacing,
         color: textColor,
         textTransform: "uppercase",
-        textShadow: glow > 1
-          ? `0 0 ${glow}px rgba(255,255,255,0.8), 0 0 ${glow * 2.5}px rgba(180,180,255,0.25)`
-          : "none",
+        textShadow:
+          glow > 1
+            ? `0 0 ${glow}px rgba(255,255,255,0.8), 0 0 ${glow * 2.5}px rgba(180,180,255,0.25)`
+            : "none",
         whiteSpace: "pre",
       }}
     >

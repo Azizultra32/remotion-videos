@@ -1,14 +1,8 @@
-import React from "react";
-import {
-  AbsoluteFill,
-  interpolate,
-  spring,
-  useCurrentFrame,
-  useVideoConfig,
-} from "remotion";
-import type { CalculateMetadataFunction } from "remotion";
-import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
+import type React from "react";
+import type { CalculateMetadataFunction } from "remotion";
+import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { z } from "zod";
 
 export const countdownTimerSchema = z.object({
   from: z.number().default(3),
@@ -45,9 +39,9 @@ const getSafeTiming = (from: number, framesPerCount: number) => {
   };
 };
 
-export const calculateCountdownTimerMetadata: CalculateMetadataFunction<
-  CountdownTimerProps
-> = ({ props }) => {
+export const calculateCountdownTimerMetadata: CalculateMetadataFunction<CountdownTimerProps> = ({
+  props,
+}) => {
   const parsed = countdownTimerSchema.parse(props ?? {});
   const { durationInFrames } = getSafeTiming(parsed.from, parsed.framesPerCount);
 
@@ -56,11 +50,7 @@ export const calculateCountdownTimerMetadata: CalculateMetadataFunction<
   };
 };
 
-const interpolateClamp = (
-  input: number,
-  inputRange: number[],
-  outputRange: number[]
-) => {
+const interpolateClamp = (input: number, inputRange: number[], outputRange: number[]) => {
   return interpolate(input, inputRange, outputRange, {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -94,7 +84,7 @@ const GlitchText: React.FC<{
         const displacement = interpolateClamp(
           bandFrame,
           [0, 3, 8, 14],
-          [0, direction * 42, direction * -24, 0]
+          [0, direction * 42, direction * -24, 0],
         );
         const residualKick =
           ((frame + bandIndex * 13) % 9 === 0 ? direction * 8 : 0) *
@@ -126,8 +116,7 @@ const GlitchText: React.FC<{
                 letterSpacing: 4,
                 color: textColor,
                 fontFamily: "system-ui, -apple-system, sans-serif",
-                textShadow:
-                  "-6px 0 rgba(255, 40, 90, 0.85), 6px 0 rgba(20, 210, 255, 0.85)",
+                textShadow: "-6px 0 rgba(255, 40, 90, 0.85), 6px 0 rgba(20, 210, 255, 0.85)",
               }}
             >
               {text}
@@ -159,12 +148,8 @@ const NeonParticles: React.FC<{ frame: number; accentColor: string }> = ({
         const orbitRadius = 280 + Math.sin((frame + index * 5) * 0.08) * 12;
         const x = Math.cos(angleRad) * orbitRadius;
         const y = Math.sin(angleRad) * orbitRadius;
-        const twinkle = ((frame + index * 7) % 12) < 3 ? 0.35 : 1;
-        const scale = interpolateClamp(
-          Math.sin((frame + index * 6) * 0.08),
-          [-1, 1],
-          [0.65, 1.4]
-        );
+        const twinkle = (frame + index * 7) % 12 < 3 ? 0.35 : 1;
+        const scale = interpolateClamp(Math.sin((frame + index * 6) * 0.08), [-1, 1], [0.65, 1.4]);
 
         return (
           <div
@@ -209,7 +194,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = (inputProps) => {
   const segmentProgress = interpolateClamp(
     localFrame,
     [0, Math.max(1, safeFramesPerCount - 1)],
-    [0, 1]
+    [0, 1],
   );
 
   const isFinal = segmentIndex >= safeFrom;
@@ -246,8 +231,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = (inputProps) => {
   const neonFlickerB = (frame + segmentIndex * 5) % 17;
   const neonFlickerMultiplier = neonFlickerA === 0 || neonFlickerB < 2 ? 0.6 : 1;
   const neonOpacity =
-    interpolateClamp(segmentProgress, [0, 0.08, 0.88, 1], [0, 1, 1, 0]) *
-    neonFlickerMultiplier;
+    interpolateClamp(segmentProgress, [0, 0.08, 0.88, 1], [0, 1, 1, 0]) * neonFlickerMultiplier;
 
   const glitchEntry = spring({
     frame: localFrame,
@@ -262,19 +246,19 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = (inputProps) => {
     style === "minimal"
       ? minimalScale
       : style === "cinematic"
-      ? cinematicScale
-      : style === "neon"
-      ? neonScale
-      : glitchScale;
+        ? cinematicScale
+        : style === "neon"
+          ? neonScale
+          : glitchScale;
 
   const activeOpacity =
     style === "minimal"
       ? minimalOpacity
       : style === "cinematic"
-      ? cinematicOpacity
-      : style === "neon"
-      ? neonOpacity
-      : glitchOpacity;
+        ? cinematicOpacity
+        : style === "neon"
+          ? neonOpacity
+          : glitchOpacity;
 
   const textShadow =
     style === "neon"
@@ -285,8 +269,8 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = (inputProps) => {
         0 0 72px ${accentColor}
       `
       : style === "glitch"
-      ? "-6px 0 rgba(255, 40, 90, 0.85), 6px 0 rgba(20, 210, 255, 0.85)"
-      : "none";
+        ? "-6px 0 rgba(255, 40, 90, 0.85), 6px 0 rgba(20, 210, 255, 0.85)"
+        : "none";
 
   const cinematicPulse = spring({
     frame: localFrame,
@@ -303,8 +287,8 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = (inputProps) => {
           style === "neon"
             ? `radial-gradient(circle at center, #0d0d13 0%, ${backgroundColor} 65%)`
             : style === "cinematic"
-            ? `radial-gradient(circle at center, #101018 0%, ${backgroundColor} 70%)`
-            : backgroundColor,
+              ? `radial-gradient(circle at center, #101018 0%, ${backgroundColor} 70%)`
+              : backgroundColor,
         justifyContent: "center",
         alignItems: "center",
         overflow: "hidden",
@@ -351,9 +335,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = (inputProps) => {
             strokeDashoffset={dashOffset}
             strokeLinecap="round"
             style={
-              style === "neon"
-                ? { filter: `drop-shadow(0 0 10px ${accentColor})` }
-                : undefined
+              style === "neon" ? { filter: `drop-shadow(0 0 10px ${accentColor})` } : undefined
             }
           />
         </svg>

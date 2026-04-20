@@ -1,11 +1,5 @@
-import React from "react";
-import {
-  AbsoluteFill,
-  useCurrentFrame,
-  useVideoConfig,
-  spring,
-  interpolate,
-} from "remotion";
+import type React from "react";
+import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 
 export type StageCardProps = {
   badge: React.ReactNode;

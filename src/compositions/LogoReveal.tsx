@@ -1,23 +1,14 @@
-import React from "react";
-import {
-  AbsoluteFill,
-  Img,
-  interpolate,
-  spring,
-  useCurrentFrame,
-  useVideoConfig,
-} from "remotion";
-import type { CalculateMetadataFunction } from "remotion";
-import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
+import type React from "react";
+import type { CalculateMetadataFunction } from "remotion";
+import { AbsoluteFill, Img, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { z } from "zod";
 
 export const logoRevealSchema = z.object({
   logoUrl: z.string().default(""),
   brandName: z.string().default("Brand"),
   tagline: z.string().default("").optional(),
-  style: z
-    .enum(["fade-scale", "particles", "wipe", "morph-in"])
-    .default("fade-scale"),
+  style: z.enum(["fade-scale", "particles", "wipe", "morph-in"]).default("fade-scale"),
   backgroundColor: zColor().default("#000000"),
   accentColor: zColor().default("#ffffff"),
   duration: z.number().default(90),
@@ -35,9 +26,9 @@ export const defaultLogoRevealProps: LogoRevealProps = {
   duration: 90,
 };
 
-export const calculateLogoRevealMetadata: CalculateMetadataFunction<
-  LogoRevealProps
-> = ({ props }) => {
+export const calculateLogoRevealMetadata: CalculateMetadataFunction<LogoRevealProps> = ({
+  props,
+}) => {
   return {
     durationInFrames: props.duration,
   };
@@ -263,10 +254,8 @@ const ParticlesStyle: React.FC<{
         });
 
         const radius = 460 + Math.sin(index * 1.618) * 190;
-        const startX =
-          Math.cos(index * 2.414) * radius + Math.sin(index * 1.618) * 70;
-        const startY =
-          Math.sin(index * 2.414) * radius * 0.58 + Math.cos(index * 1.618) * 80;
+        const startX = Math.cos(index * 2.414) * radius + Math.sin(index * 1.618) * 70;
+        const startY = Math.sin(index * 2.414) * radius * 0.58 + Math.cos(index * 1.618) * 80;
 
         const x = interpolate(settle, [0, 1], [startX, 0], {
           extrapolateLeft: "clamp",
@@ -487,7 +476,7 @@ const MorphInStyle: React.FC<{
     interpolate(frame, [56, 56 + brandName.length * 3], [0, brandName.length], {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
-    })
+    }),
   );
   const typedName = brandName.slice(0, visibleChars);
 

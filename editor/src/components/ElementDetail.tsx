@@ -1,6 +1,7 @@
 // src/components/ElementDetail.tsx
-import { useEditorStore } from "../store";
+
 import { getElementModule } from "@compositions/elements/registry";
+import { useEditorStore } from "../store";
 import { SchemaEditor } from "./SchemaEditor";
 
 const fieldStyle: React.CSSProperties = {
@@ -42,15 +43,8 @@ const buildTimingEditorHash = (damping: number, stiffness: number): string => {
 };
 
 export const ElementDetail = () => {
-  const {
-    selectedElementId,
-    elements,
-    updateElement,
-    removeElement,
-    beatData,
-    snapMode,
-    events,
-  } = useEditorStore();
+  const { selectedElementId, elements, updateElement, removeElement, beatData, snapMode, events } =
+    useEditorStore();
   const setElementLocked = useEditorStore((s) => s.setElementLocked);
   const element = elements.find((e) => e.id === selectedElementId);
   const isLocked = !!element?.locked;
@@ -83,8 +77,7 @@ export const ElementDetail = () => {
   };
 
   const hasSpringProps =
-    typeof element.props.damping === "number" &&
-    typeof element.props.stiffness === "number";
+    typeof element.props.damping === "number" && typeof element.props.stiffness === "number";
   const openTimingEditor = () => {
     const d = Number(element.props.damping);
     const s = Number(element.props.stiffness);
@@ -156,9 +149,17 @@ export const ElementDetail = () => {
       </div>
 
       {!mod && (
-        <div style={{ padding: 8, background: "#3a1a1a", color: "#faa", fontSize: 11, borderRadius: 4 }}>
-          No renderer registered for type <code>{element.type}</code>. This element will not appear in the preview.
-          Delete it or change the type.
+        <div
+          style={{
+            padding: 8,
+            background: "#3a1a1a",
+            color: "#faa",
+            fontSize: 11,
+            borderRadius: 4,
+          }}
+        >
+          No renderer registered for type <code>{element.type}</code>. This element will not appear
+          in the preview. Delete it or change the type.
         </div>
       )}
 
@@ -227,12 +228,9 @@ export const ElementDetail = () => {
               {ev.name} @ {ev.timeSec.toFixed(2)}s
             </option>
           ))}
-          {element.startEvent &&
-            !events.some((ev) => ev.name === element.startEvent) && (
-              <option value={element.startEvent}>
-                ⚠ {element.startEvent} (event missing)
-              </option>
-            )}
+          {element.startEvent && !events.some((ev) => ev.name === element.startEvent) && (
+            <option value={element.startEvent}>⚠ {element.startEvent} (event missing)</option>
+          )}
         </select>
       </Field>
 
@@ -286,9 +284,7 @@ export const ElementDetail = () => {
         <SchemaEditor
           schema={mod.schema}
           value={element.props}
-          onChange={(patch) =>
-            updateElement(element.id, { props: { ...element.props, ...patch } })
-          }
+          onChange={(patch) => updateElement(element.id, { props: { ...element.props, ...patch } })}
         />
       )}
     </div>

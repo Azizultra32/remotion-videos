@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  parseKeyPattern,
-  matchesEvent,
   dispatchBindings,
+  matchesEvent,
+  parseKeyPattern,
   type ShortcutBinding,
 } from "../src/utils/shortcuts";
 
@@ -69,11 +69,14 @@ describe("matchesEvent", () => {
 
   it("requires all modifiers specified to be set", () => {
     expect(
-      matchesEvent(mkEvent({ key: "ArrowLeft", shiftKey: true }), parseKeyPattern("shift+ArrowLeft")),
+      matchesEvent(
+        mkEvent({ key: "ArrowLeft", shiftKey: true }),
+        parseKeyPattern("shift+ArrowLeft"),
+      ),
     ).toBe(true);
-    expect(
-      matchesEvent(mkEvent({ key: "ArrowLeft" }), parseKeyPattern("shift+ArrowLeft")),
-    ).toBe(false);
+    expect(matchesEvent(mkEvent({ key: "ArrowLeft" }), parseKeyPattern("shift+ArrowLeft"))).toBe(
+      false,
+    );
   });
 
   it("requires modifiers not specified to be unset (strict match)", () => {
@@ -91,7 +94,11 @@ describe("matchesEvent", () => {
 });
 
 describe("dispatchBindings", () => {
-  const makeBinding = (pattern: string, context: string, alwaysAllow = false): ShortcutBinding & { fired: number } => {
+  const makeBinding = (
+    pattern: string,
+    context: string,
+    alwaysAllow = false,
+  ): ShortcutBinding & { fired: number } => {
     const b = {
       pattern,
       context,
@@ -146,7 +153,11 @@ describe("dispatchBindings", () => {
 
   it("fires alwaysAllow bindings even when target is editable", () => {
     const always = makeBinding("Escape", "global", true);
-    dispatchBindings(mkEvent({ key: "Escape", target: { tagName: "INPUT" } }), ["global"], [always]);
+    dispatchBindings(
+      mkEvent({ key: "Escape", target: { tagName: "INPUT" } }),
+      ["global"],
+      [always],
+    );
     expect(always.fired).toBe(1);
   });
 

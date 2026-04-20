@@ -137,7 +137,7 @@ function ask(rl: readline.Interface, question: string, defaultVal: string): Prom
 
 async function interactivePrompt(
   brandSlug: string,
-  overrides: Record<string, string>
+  overrides: Record<string, string>,
 ): Promise<typeof DEFAULT_CONFIG> {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -148,30 +148,22 @@ async function interactivePrompt(
 
   const config = structuredClone(DEFAULT_CONFIG);
 
-  config.name = await ask(
-    rl,
-    "Brand display name",
-    overrides.name || slugToDisplayName(brandSlug)
-  );
-  config.tagline = await ask(
-    rl,
-    "Tagline",
-    overrides.tagline || DEFAULT_CONFIG.tagline
-  );
+  config.name = await ask(rl, "Brand display name", overrides.name || slugToDisplayName(brandSlug));
+  config.tagline = await ask(rl, "Tagline", overrides.tagline || DEFAULT_CONFIG.tagline);
   config.colors.primary = await ask(
     rl,
     "Primary color (hex)",
-    overrides.primary || DEFAULT_CONFIG.colors.primary
+    overrides.primary || DEFAULT_CONFIG.colors.primary,
   );
   config.colors.secondary = await ask(
     rl,
     "Secondary color (hex)",
-    overrides.secondary || DEFAULT_CONFIG.colors.secondary
+    overrides.secondary || DEFAULT_CONFIG.colors.secondary,
   );
   config.colors.accent = await ask(
     rl,
     "Accent color (hex)",
-    overrides.accent || DEFAULT_CONFIG.colors.accent
+    overrides.accent || DEFAULT_CONFIG.colors.accent,
   );
   config.social.website = await ask(rl, "Website URL", "");
   config.social.twitter = await ask(rl, "Twitter handle", "");
@@ -197,7 +189,7 @@ async function main() {
   // Validate slug
   if (!/^[a-z0-9][a-z0-9-]*$/.test(brandSlug)) {
     console.error(
-      "Error: Brand name must be lowercase alphanumeric with hyphens (e.g., 'acme-corp')."
+      "Error: Brand name must be lowercase alphanumeric with hyphens (e.g., 'acme-corp').",
     );
     process.exit(1);
   }

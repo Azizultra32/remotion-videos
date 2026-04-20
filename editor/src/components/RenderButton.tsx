@@ -79,14 +79,10 @@ export const RenderButton = () => {
   const { render, status, progress, error: renderError, outPath, outName, cancel } = useRender();
 
   const pct =
-    progress && progress.total > 0
-      ? Math.round((progress.done / progress.total) * 100)
-      : 0;
+    progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
 
   if (status === "rendering") {
-    const label = progress
-      ? `Rendering… ${progress.done}/${progress.total}`
-      : "Rendering…";
+    const label = progress ? `Rendering… ${progress.done}/${progress.total}` : "Rendering…";
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -119,11 +115,7 @@ export const RenderButton = () => {
   if (status === "error") {
     const msg = renderError ?? "unknown error";
     return (
-      <button
-        style={error}
-        onClick={() => render()}
-        title={`Error: ${msg} — click to retry`}
-      >
+      <button style={error} onClick={() => render()} title={`Error: ${msg} — click to retry`}>
         Render failed — retry?
       </button>
     );
@@ -131,7 +123,11 @@ export const RenderButton = () => {
 
   if (status === "cancelled") {
     return (
-      <button style={cancelled} onClick={() => render()} title="Render was cancelled — click to try again">
+      <button
+        style={cancelled}
+        onClick={() => render()}
+        title="Render was cancelled — click to try again"
+      >
         Render cancelled — retry?
       </button>
     );
@@ -139,11 +135,7 @@ export const RenderButton = () => {
 
   // idle
   return (
-    <button
-      style={idle}
-      onClick={() => render()}
-      title="Render timeline to MP4 via sidecar"
-    >
+    <button style={idle} onClick={() => render()} title="Render timeline to MP4 via sidecar">
       Render MP4
     </button>
   );

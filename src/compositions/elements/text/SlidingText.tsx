@@ -1,8 +1,8 @@
-import React from "react";
-import { z } from "zod";
+import type React from "react";
 import { spring } from "remotion";
-import type { ElementModule, ElementRendererProps } from "../types";
+import { z } from "zod";
 import { FONT_STACK } from "../_helpers";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   text: z.string(),
@@ -35,7 +35,19 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { text, textColor, fontSize, fontWeight, fontFamily, slideDirection, initialOffset, damping, stiffness, x, y } = element.props;
+  const {
+    text,
+    textColor,
+    fontSize,
+    fontWeight,
+    fontFamily,
+    slideDirection,
+    initialOffset,
+    damping,
+    stiffness,
+    x,
+    y,
+  } = element.props;
   const localFrame = ctx.frame - Math.round(element.startSec * ctx.fps);
   const s = spring({
     frame: Math.max(0, localFrame),
@@ -44,7 +56,8 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   });
   const progress = Math.max(0, Math.min(1, s));
   const offset = initialOffset * (1 - progress);
-  let tx = 0, ty = 0;
+  let tx = 0,
+    ty = 0;
   if (slideDirection === "left") tx = -offset;
   else if (slideDirection === "right") tx = offset;
   else if (slideDirection === "top") ty = -offset;

@@ -17,8 +17,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../store";
-import { RunsMenu } from "./RunsMenu";
 import { stemFromAudioSrc } from "../utils/url";
+import { RunsMenu } from "./RunsMenu";
 
 type Status = {
   startedAt: number;
@@ -44,19 +44,29 @@ const STAGES = [
 // it transitions to CLOSED permanently - we need explicit recovery.
 const RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000, 30000];
 
-const btnStyle = (variant: "primary" | "danger" | "ghost", disabled: boolean): React.CSSProperties => ({
+const btnStyle = (
+  variant: "primary" | "danger" | "ghost",
+  disabled: boolean,
+): React.CSSProperties => ({
   padding: "3px 10px",
   fontSize: 10,
   fontFamily: "monospace",
-  background:
-    disabled ? "#222" :
-    variant === "primary" ? "#2196F3" :
-    variant === "danger" ? "#8a2a2a" : "#1a1a1a",
-  border: "1px solid " + (
-    disabled ? "#333" :
-    variant === "primary" ? "#2196F3" :
-    variant === "danger" ? "#b44" : "#333"
-  ),
+  background: disabled
+    ? "#222"
+    : variant === "primary"
+      ? "#2196F3"
+      : variant === "danger"
+        ? "#8a2a2a"
+        : "#1a1a1a",
+  border:
+    "1px solid " +
+    (disabled
+      ? "#333"
+      : variant === "primary"
+        ? "#2196F3"
+        : variant === "danger"
+          ? "#b44"
+          : "#333"),
   borderRadius: 3,
   color: disabled ? "#666" : "#fff",
   cursor: disabled ? "not-allowed" : "pointer",
@@ -110,7 +120,10 @@ export const StageStrip = () => {
     retryRef.current = { attempt: 0, timer: null };
 
     const connect = () => {
-      if (esRef.current) { esRef.current.close(); esRef.current = null; }
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
       if (!stem) return;
       // Any reconnect (manual or automatic) resets the force-reconnect
       // debounce window so we don't count the connect we just performed
@@ -127,7 +140,9 @@ export const StageStrip = () => {
             setKicking(false);
             if (parsed && parsed.endedAt) setBusy(null);
             retryRef.current.attempt = 0;
-          } catch { /* ignore malformed */ }
+          } catch {
+            /* ignore malformed */
+          }
         });
         es.addEventListener("error", () => {
           // Browser will attempt its own reconnect. If it transitions to
@@ -141,14 +156,19 @@ export const StageStrip = () => {
           }
         });
         esRef.current = es;
-      } catch { /* EventSource unsupported */ }
+      } catch {
+        /* EventSource unsupported */
+      }
     };
     connectRef.current = connect;
     connect();
 
     return () => {
       connectRef.current = null;
-      if (esRef.current) { esRef.current.close(); esRef.current = null; }
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
       if (retryRef.current.timer !== null) {
         window.clearTimeout(retryRef.current.timer);
         retryRef.current.timer = null;
@@ -181,9 +201,11 @@ export const StageStrip = () => {
   // Which phase band is active right now (for the "active" badge styling).
   const activePhase: "phase1" | "phase2" | null = !isRunning
     ? null
-    : status!.phase.startsWith("phase1") ? "phase1"
-    : status!.phase.startsWith("phase2") || status!.phase === "done" ? "phase2"
-    : null;
+    : status!.phase.startsWith("phase1")
+      ? "phase1"
+      : status!.phase.startsWith("phase2") || status!.phase === "done"
+        ? "phase2"
+        : null;
 
   // Stale-stream force-reconnect watchdog.
   //
@@ -296,9 +318,12 @@ export const StageStrip = () => {
 
   const clearEvents = async () => {
     if (!stem || isRunning) return;
-    if (!window.confirm(
-      `Clear pipeline events for ${stem}?\nUser-origin elements stay. On-disk analysis artifacts (PNGs) are kept. Re-analyze to regenerate events.`,
-    )) return;
+    if (
+      !window.confirm(
+        `Clear pipeline events for ${stem}?\nUser-origin elements stay. On-disk analysis artifacts (PNGs) are kept. Re-analyze to regenerate events.`,
+      )
+    )
+      return;
     setBusy("clear");
     setError(null);
     try {
@@ -332,7 +357,9 @@ export const StageStrip = () => {
         rowGap: 4,
       }}
     >
-      <span style={{ fontSize: 10, color: "#888", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+      <span
+        style={{ fontSize: 10, color: "#888", letterSpacing: "0.08em", textTransform: "uppercase" }}
+      >
         Analysis
       </span>
 
@@ -345,12 +372,9 @@ export const StageStrip = () => {
           is wrong, which is what the checkmark fallback below fixes. */}
       {(() => {
         const phase1Done = phase1Count > 0 || phase2Count > 0;
-        const phase1Label =
-          phase1Count > 0 ? `  ${phase1Count}` : phase1Done ? "  ✓" : "  -";
+        const phase1Label = phase1Count > 0 ? `  ${phase1Count}` : phase1Done ? "  ✓" : "  -";
         return (
-          <span style={phaseBadge(phase1Done, activePhase === "phase1")}>
-            Phase 1{phase1Label}
-          </span>
+          <span style={phaseBadge(phase1Done, activePhase === "phase1")}>Phase 1{phase1Label}</span>
         );
       })()}
       <span style={phaseBadge(phase2Count > 0, activePhase === "phase2")}>
@@ -496,14 +520,17 @@ export const StageStrip = () => {
           style={{ fontSize: 10, color: "#666", fontFamily: "monospace" }}
           title={`Run ${status.phase}. Last status update at ${new Date(status.updatedAt).toLocaleTimeString()}.`}
         >
-          {status.phase === "cancelled" ? "CANCELLED" : status.phase === "failed" ? "FAILED" : "DONE"} {new Date(status.endedAt).toLocaleTimeString()}
+          {status.phase === "cancelled"
+            ? "CANCELLED"
+            : status.phase === "failed"
+              ? "FAILED"
+              : "DONE"}{" "}
+          {new Date(status.endedAt).toLocaleTimeString()}
         </span>
       )}
 
       {error && (
-        <span style={{ fontSize: 10, color: "#f66", fontFamily: "monospace" }}>
-          {error}
-        </span>
+        <span style={{ fontSize: 10, color: "#f66", fontFamily: "monospace" }}>{error}</span>
       )}
 
       <div style={{ flex: 1 }} />
@@ -514,9 +541,10 @@ export const StageStrip = () => {
           const state = useEditorStore.getState();
           const sec = state.currentTimeSec;
           if (!Number.isFinite(sec) || sec < 0) return;
-          const current = (beatData?.phase2_events_sec?.length
-            ? beatData.phase2_events_sec
-            : beatData?.phase1_events_sec) ?? [];
+          const current =
+            (beatData?.phase2_events_sec?.length
+              ? beatData.phase2_events_sec
+              : beatData?.phase1_events_sec) ?? [];
           const next = [...current, sec];
           void fetch("/api/analyze/events/update", {
             method: "POST",
@@ -554,7 +582,10 @@ export const StageStrip = () => {
         onClick={clearEvents}
         disabled={busy === "clear" || isRunning || (phase1Count === 0 && phase2Count === 0)}
         title="Remove all pipeline-origin events (Phase 1 + Phase 2) from the timeline. User elements are kept. Does not delete on-disk PNG artifacts."
-        style={btnStyle("danger", busy === "clear" || isRunning || (phase1Count === 0 && phase2Count === 0))}
+        style={btnStyle(
+          "danger",
+          busy === "clear" || isRunning || (phase1Count === 0 && phase2Count === 0),
+        )}
       >
         {busy === "clear" ? "Clearing…" : "Clear events"}
       </button>

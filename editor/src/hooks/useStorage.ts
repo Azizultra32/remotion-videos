@@ -3,8 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 // Per-project-scoped localStorage persistence for editor UI state.
 // Pattern lifted from Motion Canvas packages/ui/src/hooks/useStorage.ts (MIT).
 
-const scopedKey = (key: string, scope?: string) =>
-  scope ? `${scope}:${key}` : key;
+const scopedKey = (key: string, scope?: string) => (scope ? `${scope}:${key}` : key);
 
 export const storageGet = <T>(key: string, fallback: T, scope?: string): T => {
   try {
@@ -43,14 +42,9 @@ export function useStorage<T>(
     storageSet(key, value, scope);
   }, [key, scope, value]);
 
-  const set = useCallback(
-    (v: T | ((prev: T) => T)) => {
-      setValue((prev) =>
-        typeof v === "function" ? (v as (p: T) => T)(prev) : v,
-      );
-    },
-    [],
-  );
+  const set = useCallback((v: T | ((prev: T) => T)) => {
+    setValue((prev) => (typeof v === "function" ? (v as (p: T) => T)(prev) : v));
+  }, []);
 
   return [value, set];
 }

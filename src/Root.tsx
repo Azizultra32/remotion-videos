@@ -1,98 +1,82 @@
-import React from "react";
+import type React from "react";
 import { Composition } from "remotion";
-import { TextOverlay, textOverlaySchema } from "./compositions/TextOverlay";
-import { ProductDemo, productDemoSchema } from "./compositions/ProductDemo";
-import { MMXPipelineReport, mmxPipelineReportSchema } from "./compositions/MMXPipelineReport";
-import {
-  BrandedDemo,
-  brandedDemoSchema,
-  calculateBrandedDemoMetadata,
-} from "./compositions/BrandedDemo";
-import {
-  VideoStitcher,
-  videoStitcherSchema,
-  calculateVideoStitcherMetadata,
-  defaultVideoStitcherProps,
-} from "./compositions/VideoStitcher";
 import {
   AdCreative,
   adCreativeSchema,
   defaultAdCreativePropsHorizontal,
   defaultAdCreativePropsVertical,
 } from "./compositions/AdCreative";
-import { MapAnimation, mapAnimationSchema } from "./compositions/MapAnimation";
-import { ExplainerVideo, explainerVideoSchema } from "./compositions/ExplainerVideo";
-import { SocialProof, socialProofSchema } from "./compositions/SocialProof";
-import {
-  CountdownTimer,
-  countdownTimerSchema,
-  calculateCountdownTimerMetadata,
-  defaultCountdownTimerProps,
-} from "./compositions/CountdownTimer";
-import {
-  CaptionedVideo,
-  captionedVideoSchema,
-  calculateCaptionedVideoMetadata,
-  defaultCaptionedVideoProps,
-} from "./compositions/CaptionedVideo";
-import {
-  LogoReveal,
-  logoRevealSchema,
-  calculateLogoRevealMetadata,
-  defaultLogoRevealProps,
-} from "./compositions/LogoReveal";
-import {
-  TIDExplainer,
-  tidExplainerSchema,
-  calculateTIDExplainerMetadata,
-  defaultTIDExplainerProps,
-} from "./compositions/TIDExplainer";
-import {
-  IranUpdate,
-  iranUpdateSchema,
-  defaultIranUpdateProps,
-  IRAN_UPDATE_DURATION,
-} from "./compositions/IranUpdate";
-import {
-  VideoWithTitle,
-  videoWithTitleSchema,
-  defaultVideoWithTitleProps,
-} from "./compositions/VideoWithTitle";
-import {
-  BeatDrop,
-  beatDropSchema,
-  defaultBeatDropProps,
-} from "./compositions/BeatDrop";
-import {
-  PublicCut,
-  publicCutSchema,
-  defaultPublicCutProps,
-} from "./compositions/PublicCut";
-import {
-  MusicVideo,
-  musicVideoSchema,
-  defaultMusicVideoProps,
-} from "./compositions/MusicVideo";
 import {
   AudioShaderViz,
   audioShaderVizSchema,
   defaultAudioShaderVizProps,
 } from "./compositions/AudioShaderViz";
+import { BeatDrop, beatDropSchema, defaultBeatDropProps } from "./compositions/BeatDrop";
 import {
+  BrandedDemo,
+  brandedDemoSchema,
+  calculateBrandedDemoMetadata,
+} from "./compositions/BrandedDemo";
+import {
+  CaptionedVideo,
+  calculateCaptionedVideoMetadata,
+  captionedVideoSchema,
+  defaultCaptionedVideoProps,
+} from "./compositions/CaptionedVideo";
+import {
+  CountdownTimer,
+  calculateCountdownTimerMetadata,
+  countdownTimerSchema,
+  defaultCountdownTimerProps,
+} from "./compositions/CountdownTimer";
+import { ExplainerVideo, explainerVideoSchema } from "./compositions/ExplainerVideo";
+import {
+  defaultImageOnBeatProps,
   ImageOnBeat,
   imageOnBeatSchema,
-  defaultImageOnBeatProps,
 } from "./compositions/ImageOnBeat";
 import {
+  defaultIranUpdateProps,
+  IRAN_UPDATE_DURATION,
+  IranUpdate,
+  iranUpdateSchema,
+} from "./compositions/IranUpdate";
+import {
+  calculateLogoRevealMetadata,
+  defaultLogoRevealProps,
+  LogoReveal,
+  logoRevealSchema,
+} from "./compositions/LogoReveal";
+import { MapAnimation, mapAnimationSchema } from "./compositions/MapAnimation";
+import { MMXPipelineReport, mmxPipelineReportSchema } from "./compositions/MMXPipelineReport";
+import { defaultMusicVideoProps, MusicVideo, musicVideoSchema } from "./compositions/MusicVideo";
+import { ProductDemo, productDemoSchema } from "./compositions/ProductDemo";
+import { defaultPublicCutProps, PublicCut, publicCutSchema } from "./compositions/PublicCut";
+import { SocialProof, socialProofSchema } from "./compositions/SocialProof";
+import { defaultSpeedRampProps, SpeedRamp, speedRampSchema } from "./compositions/SpeedRamp";
+import { TextOverlay, textOverlaySchema } from "./compositions/TextOverlay";
+import {
+  calculateTIDExplainerMetadata,
+  defaultTIDExplainerProps,
+  TIDExplainer,
+  tidExplainerSchema,
+} from "./compositions/TIDExplainer";
+import {
+  defaultVideoFolderCycleProps,
   VideoFolderCycle,
   videoFolderCycleSchema,
-  defaultVideoFolderCycleProps,
 } from "./compositions/VideoFolderCycle";
 import {
-  SpeedRamp,
-  speedRampSchema,
-  defaultSpeedRampProps,
-} from "./compositions/SpeedRamp";
+  calculateVideoStitcherMetadata,
+  defaultVideoStitcherProps,
+  VideoStitcher,
+  videoStitcherSchema,
+} from "./compositions/VideoStitcher";
+import {
+  defaultVideoWithTitleProps,
+  VideoWithTitle,
+  videoWithTitleSchema,
+} from "./compositions/VideoWithTitle";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -193,14 +177,12 @@ export const RemotionRoot: React.FC = () => {
             },
             {
               title: "Rock Solid",
-              description:
-                "Enterprise-grade reliability with 99.99% uptime guarantee.",
+              description: "Enterprise-grade reliability with 99.99% uptime guarantee.",
               icon: "\uD83D\uDEE1\uFE0F",
             },
             {
               title: "Beautifully Simple",
-              description:
-                "An intuitive interface that your team will love from day one.",
+              description: "An intuitive interface that your team will love from day one.",
               icon: "\u2728",
             },
           ],
@@ -292,8 +274,7 @@ export const RemotionRoot: React.FC = () => {
             },
             {
               title: "Get Started",
-              description:
-                "Deploy MetaMatrix on your codebase today and ship with confidence.",
+              description: "Deploy MetaMatrix on your codebase today and ship with confidence.",
               iconEmoji: "\uD83D\uDE80",
               backgroundColor: "#1a1a2e",
             },
@@ -311,22 +292,19 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={{
           testimonials: [
             {
-              quote:
-                "MetaMatrix found 3 critical bugs our team missed in code review. Incredible.",
+              quote: "MetaMatrix found 3 critical bugs our team missed in code review. Incredible.",
               author: "Sarah Chen",
               role: "VP Engineering, Acme Corp",
               rating: 5,
             },
             {
-              quote:
-                "We deployed it on our legacy codebase and it paid for itself in a week.",
+              quote: "We deployed it on our legacy codebase and it paid for itself in a week.",
               author: "James Wilson",
               role: "CTO, StartupCo",
               rating: 5,
             },
             {
-              quote:
-                "The Cathedral analysis alone is worth the price of admission.",
+              quote: "The Cathedral analysis alone is worth the price of admission.",
               author: "Maria Garcia",
               role: "Lead Developer, BigTech Inc",
               rating: 4,

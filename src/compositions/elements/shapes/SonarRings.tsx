@@ -1,4 +1,4 @@
-import React from "react";
+import type React from "react";
 import { z } from "zod";
 import type { ElementModule, ElementRendererProps } from "../types";
 
@@ -27,12 +27,18 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { color, strokeWidth, ringLifeSec, maxRadiusPct, triggerOn, x, y, fadeExponent } = element.props;
-  const source = triggerOn === "beats" ? ctx.beats.beats
-    : triggerOn === "downbeats" ? ctx.beats.downbeats
-    : ctx.beats.drops;
+  const { color, strokeWidth, ringLifeSec, maxRadiusPct, triggerOn, x, y, fadeExponent } =
+    element.props;
+  const source =
+    triggerOn === "beats"
+      ? ctx.beats.beats
+      : triggerOn === "downbeats"
+        ? ctx.beats.downbeats
+        : ctx.beats.drops;
   const lookback = ctx.absTimeSec - ringLifeSec;
-  const active = source.filter((t) => t >= Math.max(element.startSec, lookback) && t <= ctx.absTimeSec);
+  const active = source.filter(
+    (t) => t >= Math.max(element.startSec, lookback) && t <= ctx.absTimeSec,
+  );
   if (active.length === 0) return null;
 
   const cx = ctx.width * (x / 100);
@@ -40,13 +46,26 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const maxR = Math.min(ctx.width, ctx.height) * (maxRadiusPct / 100);
 
   return (
-    <svg width={ctx.width} height={ctx.height} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+    <svg
+      width={ctx.width}
+      height={ctx.height}
+      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+    >
       {active.map((ts, i) => {
         const age = (ctx.absTimeSec - ts) / ringLifeSec;
         const r = age * maxR;
-        const opacity = Math.pow(1 - age, fadeExponent);
+        const opacity = (1 - age) ** fadeExponent;
         return (
-          <circle key={`${ts}-${i}`} cx={cx} cy={cy} r={r} stroke={color} strokeWidth={strokeWidth} fill="none" opacity={opacity} />
+          <circle
+            key={`${ts}-${i}`}
+            cx={cx}
+            cy={cy}
+            r={r}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            fill="none"
+            opacity={opacity}
+          />
         );
       })}
     </svg>

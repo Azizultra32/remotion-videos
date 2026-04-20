@@ -1,9 +1,9 @@
 import React, { useMemo } from "react";
 import {
   AbsoluteFill,
-  OffthreadVideo,
   continueRender,
   delayRender,
+  OffthreadVideo,
   staticFile,
   useCurrentFrame,
   useVideoConfig,
@@ -31,12 +31,8 @@ type BeatsFile = {
 const beatsCache = new Map<string, BeatsFile>();
 
 const useBeats = (src: string): BeatsFile | null => {
-  const [data, setData] = React.useState<BeatsFile | null>(
-    beatsCache.get(src) ?? null,
-  );
-  const [handle] = React.useState(() =>
-    beatsCache.get(src) ? null : delayRender(`beats:${src}`),
-  );
+  const [data, setData] = React.useState<BeatsFile | null>(beatsCache.get(src) ?? null);
+  const [handle] = React.useState(() => (beatsCache.get(src) ? null : delayRender(`beats:${src}`)));
 
   React.useEffect(() => {
     if (beatsCache.get(src)) {
@@ -125,15 +121,8 @@ export const BeatDrop: React.FC<z.infer<typeof beatDropSchema>> = ({
     const sinceDown = timeSinceLastBeat(beatsData.downbeats, absTime);
     const beatPulse = sinceBeat >= 0 ? Math.exp(-sinceBeat * 8) : 0;
     const downbeatFlash = sinceDown >= 0 ? Math.exp(-sinceDown * 5) : 0;
-    const beatsSinceDrop = countBeatsInRange(
-      beatsData.beats,
-      dropSec,
-      absTime,
-    );
-    const wordIndex =
-      words.length > 0
-        ? Math.max(0, beatsSinceDrop - 1) % words.length
-        : 0;
+    const beatsSinceDrop = countBeatsInRange(beatsData.beats, dropSec, absTime);
+    const wordIndex = words.length > 0 ? Math.max(0, beatsSinceDrop - 1) % words.length : 0;
 
     // Two phases before the drop, both anchored to real detected beats:
     //   [drop-8 beats] -> [drop-4 beats]: slow linear fade 1 -> 0
@@ -219,10 +208,7 @@ export const BeatDrop: React.FC<z.infer<typeof beatDropSchema>> = ({
           transformOrigin: "center center",
         }}
       >
-        <OffthreadVideo
-          src={staticFile(videoSrc)}
-          startFrom={Math.round(startSec * fps)}
-        />
+        <OffthreadVideo src={staticFile(videoSrc)} startFrom={Math.round(startSec * fps)} />
       </AbsoluteFill>
       {inDrop ? (
         <AbsoluteFill
@@ -284,17 +270,7 @@ export const defaultBeatDropProps: z.infer<typeof beatDropSchema> = {
   startSec: 720,
   dropSec: 732.636,
   endSec: 750,
-  words: [
-    "BASS",
-    "DROPS",
-    "NOW",
-    "PULSE",
-    "LIGHT",
-    "SPACE",
-    "IBIZA",
-    "TWENTY",
-    "THIRTEEN",
-  ],
+  words: ["BASS", "DROPS", "NOW", "PULSE", "LIGHT", "SPACE", "IBIZA", "TWENTY", "THIRTEEN"],
   mode: "flash",
   preDropFadeBeats: 4,
 };

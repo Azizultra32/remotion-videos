@@ -12,7 +12,7 @@
 // Suggests next steps at the end (run mv:analyze, pick the track in editor).
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
-import { resolveProjectDir, resolveProjectsDir, ensureProjectsDir } from "./paths";
+import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -23,8 +23,13 @@ const parseArgs = (): Args => {
   for (let i = 2; i < process.argv.length; i++) {
     const tok = process.argv[i];
     const next = process.argv[i + 1];
-    if (tok === "--audio" && next) { a.audio = next; i++; }
-    else if (tok === "--stem" && next) { a.stem = next; i++; }
+    if (tok === "--audio" && next) {
+      a.audio = next;
+      i++;
+    } else if (tok === "--stem" && next) {
+      a.stem = next;
+      i++;
+    }
   }
   return a;
 };
@@ -32,9 +37,9 @@ const parseArgs = (): Args => {
 const slugify = (s: string): string =>
   s
     .toLowerCase()
-    .replace(/\.[^.]+$/, "")       // drop extension
-    .replace(/[^a-z0-9]+/g, "-")   // non-alphanum -> hyphen
-    .replace(/^-+|-+$/g, "")       // trim leading/trailing hyphens
+    .replace(/\.[^.]+$/, "") // drop extension
+    .replace(/[^a-z0-9]+/g, "-") // non-alphanum -> hyphen
+    .replace(/^-+|-+$/g, "") // trim leading/trailing hyphens
     .slice(0, 60) || "track";
 
 const args = parseArgs();

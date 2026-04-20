@@ -31,9 +31,7 @@ export const speedRampSchema = z.object({
 const energyCache = new Map<string, number[]>();
 
 const useEnergy = (src: string): number[] | null => {
-  const [data, setData] = React.useState<number[] | null>(
-    energyCache.get(src) ?? null,
-  );
+  const [data, setData] = React.useState<number[] | null>(energyCache.get(src) ?? null);
   const [handle] = React.useState(() =>
     energyCache.get(src) ? null : delayRender(`energy:${src}`),
   );
@@ -59,11 +57,7 @@ const useEnergy = (src: string): number[] | null => {
   return data;
 };
 
-const sampleEnergyAt = (
-  energy: number[],
-  energyFps: number,
-  t: number,
-): number => {
+const sampleEnergyAt = (energy: number[], energyFps: number, t: number): number => {
   if (energy.length === 0) return 0;
   const idx = Math.max(0, Math.min(energy.length - 1, Math.round(t * energyFps)));
   return energy[idx];
@@ -118,12 +112,10 @@ export const SpeedRamp: React.FC<z.infer<typeof speedRampSchema>> = ({
     for (let i = 1; i <= totalFrames; i++) {
       const compTimeAtFrame = (i - 0.5) / fps; // midpoint of frame
       const e = sampleEnergyAt(energy, energyFps, startSec + compTimeAtFrame);
-      const speed = interpolate(
-        e,
-        [lo!, hi!],
-        [minSpeed, maxSpeed],
-        { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-      );
+      const speed = interpolate(e, [lo!, hi!], [minSpeed, maxSpeed], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      });
       arr[i] = arr[i - 1] + speed / fps;
     }
     return arr;
@@ -139,11 +131,7 @@ export const SpeedRamp: React.FC<z.infer<typeof speedRampSchema>> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor }}>
-      <OffthreadVideo
-        src={staticFile(videoSrc)}
-        startFrom={startFromFrames}
-        muted={muteVideo}
-      />
+      <OffthreadVideo src={staticFile(videoSrc)} startFrom={startFromFrames} muted={muteVideo} />
     </AbsoluteFill>
   );
 };

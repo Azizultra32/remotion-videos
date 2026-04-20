@@ -14,8 +14,7 @@ export type EventsFile = {
   events: EventMark[];
 };
 
-const isObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null;
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
 const validateEvent = (raw: unknown): EventMark | null => {
   if (!isObject(raw)) return null;
@@ -52,11 +51,7 @@ export const serializeEventsFile = (events: EventMark[]): string => {
 export const findEvent = (events: EventMark[], name: string): EventMark | null =>
   events.find((e) => e.name === name) ?? null;
 
-export const upsertEvent = (
-  events: EventMark[],
-  name: string,
-  timeSec: number,
-): EventMark[] => {
+export const upsertEvent = (events: EventMark[], name: string, timeSec: number): EventMark[] => {
   const existing = events.findIndex((e) => e.name === name);
   if (existing === -1) return [...events, { name, timeSec }];
   const next = [...events];
@@ -64,10 +59,8 @@ export const upsertEvent = (
   return next;
 };
 
-export const removeEventByName = (
-  events: EventMark[],
-  name: string,
-): EventMark[] => events.filter((e) => e.name !== name);
+export const removeEventByName = (events: EventMark[], name: string): EventMark[] =>
+  events.filter((e) => e.name !== name);
 
 // Resolve a named event to its time in seconds; returns defaultSec if not
 // present. This is the pure core of the MC-style `waitUntil('name')` pattern —
@@ -91,11 +84,7 @@ export const resolveEventFrame = (
   fps: number,
 ): number => Math.round(resolveEvent(events, name, defaultSec) * fps);
 
-export const renameEvent = (
-  events: EventMark[],
-  oldName: string,
-  newName: string,
-): EventMark[] => {
+export const renameEvent = (events: EventMark[], oldName: string, newName: string): EventMark[] => {
   if (oldName === newName) return events;
   if (events.some((e) => e.name === newName)) return events; // collision
   const idx = events.findIndex((e) => e.name === oldName);

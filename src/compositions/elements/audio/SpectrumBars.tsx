@@ -1,7 +1,7 @@
-import React from "react";
+import type React from "react";
 import { z } from "zod";
-import type { ElementModule, ElementRendererProps } from "../types";
 import { useFFT } from "../../../hooks/useFFT";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   position: z.enum(["top", "bottom", "middle"]),
@@ -33,7 +33,7 @@ const remapLog = (bins: number[], n: number): number[] => {
   const out: number[] = [];
   for (let i = 0; i < n; i++) {
     const frac = i / Math.max(1, n - 1);
-    const src = Math.pow(frac, 2.2) * (bins.length - 1);
+    const src = frac ** 2.2 * (bins.length - 1);
     const lo = Math.floor(src);
     const hi = Math.min(bins.length - 1, lo + 1);
     const t = src - lo;
@@ -43,7 +43,8 @@ const remapLog = (bins: number[], n: number): number[] => {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { position, numberOfBars, height, color, opacity, mirror, gap, amplitude, logScale } = element.props;
+  const { position, numberOfBars, height, color, opacity, mirror, gap, amplitude, logScale } =
+    element.props;
   const fft = useFFT({
     src: ctx.audioSrc ?? "",
     frame: ctx.frame,
@@ -53,11 +54,14 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   if (!ctx.audioSrc || !fft) return null;
 
   const remapped = logScale ? remapLog(fft.bins, numberOfBars) : fft.bins.slice(0, numberOfBars);
-  const data = mirror
-    ? [...remapped.slice(1).reverse(), ...remapped]
-    : remapped;
-  const barW = (ctx.width / data.length) - gap;
-  const bottom = position === "bottom" ? 0 : position === "top" ? ctx.height - height : (ctx.height - height) / 2;
+  const data = mirror ? [...remapped.slice(1).reverse(), ...remapped] : remapped;
+  const barW = ctx.width / data.length - gap;
+  const bottom =
+    position === "bottom"
+      ? 0
+      : position === "top"
+        ? ctx.height - height
+        : (ctx.height - height) / 2;
 
   return (
     <div

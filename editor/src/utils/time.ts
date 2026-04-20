@@ -7,11 +7,7 @@ export const frameToSec = (frame: number, fps: number) => frame / fps;
 // Snap `sec` to the nearest value in `candidates` within `threshold` seconds.
 // Returns `sec` unchanged if nothing is close enough. `candidates` is assumed
 // sorted ascending (short-circuit once we're past the window).
-const snapToNearest = (
-  sec: number,
-  candidates: number[],
-  threshold = 0.1,
-): number => {
+const snapToNearest = (sec: number, candidates: number[], threshold = 0.1): number => {
   let nearest = sec;
   let minDist = threshold;
   for (const c of candidates) {
@@ -26,11 +22,8 @@ const snapToNearest = (
 };
 
 // Back-compat wrapper kept for any legacy import sites.
-export const snapToBeat = (
-  sec: number,
-  beats: number[],
-  threshold = 0.1,
-): number => snapToNearest(sec, beats, threshold);
+export const snapToBeat = (sec: number, beats: number[], threshold = 0.1): number =>
+  snapToNearest(sec, beats, threshold);
 
 // Derive half-beat targets as the midpoint between each adjacent pair of beats.
 // Cheap; recomputed per drag-frame but `beats` is typically ~hundreds of entries.
@@ -65,11 +58,7 @@ export const snapTime = (
   shiftInvert = false,
   threshold = 0.1,
 ): number => {
-  const effectiveMode: SnapMode = shiftInvert
-    ? mode === "off"
-      ? "beat"
-      : "off"
-    : mode;
+  const effectiveMode: SnapMode = shiftInvert ? (mode === "off" ? "beat" : "off") : mode;
 
   if (effectiveMode === "off") return sec;
   const beats = beatData?.beats ?? [];

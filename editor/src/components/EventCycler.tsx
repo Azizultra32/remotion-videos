@@ -14,8 +14,10 @@ const nearestBeat = (sec: number, beats: number[]): number => {
   let minDist = Math.abs(best - sec);
   for (let i = 1; i < beats.length; i++) {
     const d = Math.abs(beats[i] - sec);
-    if (d < minDist) { best = beats[i]; minDist = d; }
-    else if (beats[i] > sec) break;
+    if (d < minDist) {
+      best = beats[i];
+      minDist = d;
+    } else if (beats[i] > sec) break;
   }
   return best;
 };
@@ -34,24 +36,31 @@ const chipStyle = (active: boolean, selected: boolean): React.CSSProperties => (
   letterSpacing: "0.04em",
 });
 
-const actionBtn = (variant: "primary" | "danger" | "ghost", disabled = false): React.CSSProperties => ({
+const actionBtn = (
+  variant: "primary" | "danger" | "ghost",
+  disabled = false,
+): React.CSSProperties => ({
   padding: "3px 10px",
   fontSize: 10,
   fontFamily: "monospace",
-  background:
-    disabled ? "#222" :
-    variant === "primary" ? "#1a3a1a" :
-    variant === "danger" ? "#3a1a1a" : "#1a1a1a",
-  border: "1px solid " + (
-    disabled ? "#333" :
-    variant === "primary" ? "#386" :
-    variant === "danger" ? "#833" : "#444"
-  ),
+  background: disabled
+    ? "#222"
+    : variant === "primary"
+      ? "#1a3a1a"
+      : variant === "danger"
+        ? "#3a1a1a"
+        : "#1a1a1a",
+  border:
+    "1px solid " +
+    (disabled ? "#333" : variant === "primary" ? "#386" : variant === "danger" ? "#833" : "#444"),
   borderRadius: 3,
-  color:
-    disabled ? "#666" :
-    variant === "primary" ? "#afa" :
-    variant === "danger" ? "#f88" : "#ddd",
+  color: disabled
+    ? "#666"
+    : variant === "primary"
+      ? "#afa"
+      : variant === "danger"
+        ? "#f88"
+        : "#ddd",
   cursor: disabled ? "not-allowed" : "pointer",
   letterSpacing: "0.06em",
   textTransform: "uppercase" as const,
@@ -113,9 +122,7 @@ export const EventCycler = () => {
     const t = events[idx];
     setCurrentTime(t);
     const el = elements.find(
-      (e) =>
-        e.origin === "pipeline" &&
-        Math.abs(e.startSec + e.durationSec / 2 - t) < 0.1,
+      (e) => e.origin === "pipeline" && Math.abs(e.startSec + e.durationSec / 2 - t) < 0.1,
     );
     if (el) selectElement(el.id);
     setSelectedIdx(idx);
@@ -124,7 +131,10 @@ export const EventCycler = () => {
   };
 
   const postEvents = async (next: number[]): Promise<boolean> => {
-    if (!stem) { setError("no stem"); return false; }
+    if (!stem) {
+      setError("no stem");
+      return false;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -260,7 +270,9 @@ export const EventCycler = () => {
       </div>
       {selectedIdx !== null && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", rowGap: 4 }}>
-          <span style={{ fontSize: 10, color: "#888", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+          <span
+            style={{ fontSize: 10, color: "#888", letterSpacing: "0.05em", whiteSpace: "nowrap" }}
+          >
             EVT {selectedIdx + 1} —
           </span>
           <input
@@ -269,7 +281,9 @@ export const EventCycler = () => {
             min={0}
             value={draftSec}
             onChange={(e) => setDraftSec(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") void saveTyped(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void saveTyped();
+            }}
             disabled={busy}
             title="Type an exact time (seconds) and press Enter / SET to jump the event to it."
             style={{

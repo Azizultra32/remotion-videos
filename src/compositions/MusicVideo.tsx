@@ -1,16 +1,10 @@
-import React from "react";
-import {
-  AbsoluteFill,
-  Audio,
-  staticFile,
-  useCurrentFrame,
-  useVideoConfig,
-} from "remotion";
+import type React from "react";
+import { AbsoluteFill, Audio, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
 import { useBeats } from "../hooks/useBeats";
+import { type EventMark, resolveStartSec } from "../utils/events";
 import { ELEMENT_REGISTRY } from "./elements/registry";
 import type { RenderCtx, TimelineElement } from "./elements/types";
-import { resolveStartSec, type EventMark } from "../utils/events";
 
 export const musicVideoSchema = z.object({
   audioSrc: z.string().nullable(),
@@ -42,11 +36,7 @@ export type MusicVideoProps = {
   analysisAudioSrc?: string | null;
 };
 
-const isActive = (
-  el: TimelineElement,
-  t: number,
-  events: EventMark[],
-): boolean => {
+const isActive = (el: TimelineElement, t: number, events: EventMark[]): boolean => {
   const start = resolveStartSec(el, events);
   return t >= start && t < start + el.durationSec;
 };
@@ -66,9 +56,7 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
 
   const beats = useBeats(beatsSrc);
 
-  const sorted = [...elements].sort(
-    (a, b) => (a.trackIndex ?? 0) - (b.trackIndex ?? 0),
-  );
+  const sorted = [...elements].sort((a, b) => (a.trackIndex ?? 0) - (b.trackIndex ?? 0));
 
   // audioSrc that audio-reactive elements see via RenderCtx. Prefer an
   // explicit override (editor preview passes the real URL here while
@@ -77,7 +65,15 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
 
   return (
     <AbsoluteFill style={{ backgroundColor }}>
-      {audioSrc && !muteAudioTag && <Audio src={audioSrc.startsWith("http") || audioSrc.startsWith("/") ? audioSrc : staticFile(audioSrc)} />}
+      {audioSrc && !muteAudioTag && (
+        <Audio
+          src={
+            audioSrc.startsWith("http") || audioSrc.startsWith("/")
+              ? audioSrc
+              : staticFile(audioSrc)
+          }
+        />
+      )}
 
       {sorted.map((el) => {
         if (!isActive(el, absTimeSec, events)) return null;
@@ -112,7 +108,13 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
         // lookup erases the discriminant, so each Renderer narrows its own
         // prop at call time. Casting to `any` is the cleanest way to pass
         // through without re-narrowing at every dispatch.
-        return <Renderer key={el.id} element={el as unknown as Parameters<typeof Renderer>[0]["element"]} ctx={ctx} />;
+        return (
+          <Renderer
+            key={el.id}
+            element={el as unknown as Parameters<typeof Renderer>[0]["element"]}
+            ctx={ctx}
+          />
+        );
       })}
     </AbsoluteFill>
   );

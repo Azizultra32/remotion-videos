@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { useEditorStore } from "../src/store";
 import type { TimelineElement } from "../src/types";
 
@@ -91,16 +91,12 @@ describe("editor store", () => {
   describe("named time events", () => {
     it("setEvents replaces the list", () => {
       useEditorStore.getState().setEvents([{ name: "drop", timeSec: 30 }]);
-      expect(useEditorStore.getState().events).toEqual([
-        { name: "drop", timeSec: 30 },
-      ]);
+      expect(useEditorStore.getState().events).toEqual([{ name: "drop", timeSec: 30 }]);
     });
 
     it("upsertEventMark adds a new entry", () => {
       useEditorStore.getState().upsertEventMark("drop", 12);
-      expect(useEditorStore.getState().events).toEqual([
-        { name: "drop", timeSec: 12 },
-      ]);
+      expect(useEditorStore.getState().events).toEqual([{ name: "drop", timeSec: 12 }]);
     });
 
     it("upsertEventMark updates an existing entry by name", () => {
@@ -117,9 +113,7 @@ describe("editor store", () => {
         { name: "b", timeSec: 2 },
       ]);
       useEditorStore.getState().removeEventMark("a");
-      expect(useEditorStore.getState().events.map((e) => e.name)).toEqual([
-        "b",
-      ]);
+      expect(useEditorStore.getState().events.map((e) => e.name)).toEqual(["b"]);
     });
 
     it("renameEventMark renames an event", () => {

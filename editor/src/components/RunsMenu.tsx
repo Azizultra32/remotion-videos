@@ -44,7 +44,9 @@ export const RunsMenu = () => {
       if (!r.ok) return;
       const data = (await r.json()) as { runs: RunEntry[] };
       setRuns(data.runs ?? []);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   // Refetch when opening or when stem changes.
@@ -72,9 +74,12 @@ export const RunsMenu = () => {
 
   const restore = async (id: string) => {
     if (!stem) return;
-    if (!window.confirm(
-      `Restore analysis.json to snapshot ${fmtRunId(id)}?\nThe current state will be snapshotted first (reversible).`,
-    )) return;
+    if (
+      !window.confirm(
+        `Restore analysis.json to snapshot ${fmtRunId(id)}?\nThe current state will be snapshotted first (reversible).`,
+      )
+    )
+      return;
     setBusy(id);
     setError(null);
     try {
@@ -168,10 +173,12 @@ export const RunsMenu = () => {
                 textAlign: "left",
               }}
               onMouseEnter={(e) => {
-                if (busy === null) (e.currentTarget as HTMLButtonElement).style.background = "#1a1a1a";
+                if (busy === null)
+                  (e.currentTarget as HTMLButtonElement).style.background = "#1a1a1a";
               }}
               onMouseLeave={(e) => {
-                if (busy !== run.id) (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                if (busy !== run.id)
+                  (e.currentTarget as HTMLButtonElement).style.background = "transparent";
               }}
             >
               <span>{fmtRunId(run.id)}</span>
@@ -180,9 +187,7 @@ export const RunsMenu = () => {
               </span>
             </button>
           ))}
-          {error && (
-            <div style={{ padding: "6px 10px", fontSize: 10, color: "#f66" }}>{error}</div>
-          )}
+          {error && <div style={{ padding: "6px 10px", fontSize: 10, color: "#f66" }}>{error}</div>}
         </div>
       )}
     </div>

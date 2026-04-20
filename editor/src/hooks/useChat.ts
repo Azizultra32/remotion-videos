@@ -3,8 +3,8 @@ import { useEditorStore } from "../store";
 import {
   applyMutations,
   hasUndo,
-  revertMutations,
   type MutationResult,
+  revertMutations,
   type UndoSnapshot,
 } from "../utils/applyMutations";
 
@@ -131,10 +131,7 @@ export const useChat = () => {
   useEffect(() => {
     if (!cooldown) return;
     const tick = () => {
-      const remaining = Math.max(
-        0,
-        Math.ceil((cooldown.until - Date.now()) / 1000),
-      );
+      const remaining = Math.max(0, Math.ceil((cooldown.until - Date.now()) / 1000));
       if (remaining <= 0) {
         setCooldown(null);
       } else if (remaining !== cooldown.remainingSec) {
@@ -200,7 +197,11 @@ export const useChat = () => {
           const retrySec = parseRetryAfter(resp.headers.get("Retry-After"), body);
           const until = Date.now() + retrySec * 1000;
           setCooldown({ until, remainingSec: retrySec });
-          patchAsst((m) => ({ ...m, content: `Rate-limited — retry in ${retrySec}s`, streaming: false }));
+          patchAsst((m) => ({
+            ...m,
+            content: `Rate-limited — retry in ${retrySec}s`,
+            streaming: false,
+          }));
           return;
         }
 
@@ -258,17 +259,29 @@ export const useChat = () => {
             const line = buf.slice(0, idx);
             buf = buf.slice(idx + 1);
             if (!line.trim()) continue;
-            try { handleEvent(JSON.parse(line)); } catch { /* malformed line, skip */ }
+            try {
+              handleEvent(JSON.parse(line));
+            } catch {
+              /* malformed line, skip */
+            }
           }
         }
         // Flush trailing partial (rare).
         if (buf.trim()) {
-          try { handleEvent(JSON.parse(buf)); } catch { /* ignore */ }
+          try {
+            handleEvent(JSON.parse(buf));
+          } catch {
+            /* ignore */
+          }
         }
 
         if (rateLimited) {
           setCooldown({ until: Date.now() + 60_000, remainingSec: 60 });
-          patchAsst((m) => ({ ...m, content: m.content || "Rate-limited — retry in 60s", streaming: false }));
+          patchAsst((m) => ({
+            ...m,
+            content: m.content || "Rate-limited — retry in 60s",
+            streaming: false,
+          }));
           return;
         }
 
@@ -308,7 +321,11 @@ export const useChat = () => {
   const clear = useCallback(() => {
     setMessages([]);
     setError(null);
-    try { localStorage.removeItem(STORAGE_KEY); } catch { /* quota/private-mode */ }
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* quota/private-mode */
+    }
   }, []);
 
   // Gap B — revert the last assistant turn's mutations in one click.
@@ -333,9 +350,7 @@ export const useChat = () => {
     if (!target.mutationResult) return;
 
     revertMutations(target.mutationResult.undo);
-    setMessages((ms) =>
-      ms.map((m, i) => (i === targetIdx ? { ...m, undone: true } : m)),
-    );
+    setMessages((ms) => ms.map((m, i) => (i === targetIdx ? { ...m, undone: true } : m)));
   }, [messages]);
 
   // Index of the assistant message that would be undone next — used by the
@@ -343,12 +358,7 @@ export const useChat = () => {
   let undoableIndex = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (
-      m.role === "assistant" &&
-      !m.undone &&
-      m.mutationResult &&
-      hasUndo(m.mutationResult.undo)
-    ) {
+    if (m.role === "assistant" && !m.undone && m.mutationResult && hasUndo(m.mutationResult.undo)) {
       undoableIndex = i;
       break;
     }

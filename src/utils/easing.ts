@@ -49,17 +49,13 @@ export const EASINGS: Record<string, EasingFn> = {
   easeInOutExpo: (t) => {
     if (t === 0) return 0;
     if (t === 1) return 1;
-    return t < 0.5
-      ? pow(2, 20 * t - 10) / 2
-      : (2 - pow(2, -20 * t + 10)) / 2;
+    return t < 0.5 ? pow(2, 20 * t - 10) / 2 : (2 - pow(2, -20 * t + 10)) / 2;
   },
 
   easeInCirc: (t) => 1 - sqrt(1 - pow(t, 2)),
   easeOutCirc: (t) => sqrt(1 - pow(t - 1, 2)),
   easeInOutCirc: (t) =>
-    t < 0.5
-      ? (1 - sqrt(1 - pow(2 * t, 2))) / 2
-      : (sqrt(1 - pow(-2 * t + 2, 2)) + 1) / 2,
+    t < 0.5 ? (1 - sqrt(1 - pow(2 * t, 2))) / 2 : (sqrt(1 - pow(-2 * t + 2, 2)) + 1) / 2,
 
   easeInBack: (t) => C3 * t * t * t - C1 * t * t,
   easeOutBack: (t) => 1 + C3 * pow(t - 1, 3) + C1 * pow(t - 1, 2),

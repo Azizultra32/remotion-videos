@@ -67,17 +67,27 @@ const parseArgs = (argv: string[]): Args => {
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     const next = argv[i + 1];
-    if (a === "--beats") { opts.beats = next; i++; }
-    else if (a === "--video") { opts.video = next; i++; }
-    else if (a === "--out") { opts.out = next; i++; }
-    else if (a === "--fps") { opts.fps = parseFloat(next); i++; }
-    else if (a === "--include-beats") opts.includeBeats = true;
+    if (a === "--beats") {
+      opts.beats = next;
+      i++;
+    } else if (a === "--video") {
+      opts.video = next;
+      i++;
+    } else if (a === "--out") {
+      opts.out = next;
+      i++;
+    } else if (a === "--fps") {
+      opts.fps = parseFloat(next);
+      i++;
+    } else if (a === "--include-beats") opts.includeBeats = true;
     else if (a === "--no-downbeats") opts.includeDownbeats = false;
     else if (a === "--no-drops") opts.includeDrops = false;
     else if (a === "--no-breakdowns") opts.includeBreakdowns = false;
   }
   if (!opts.beats || !opts.out) {
-    console.error("Usage: emit-davinci-markers.ts --beats <file> --out <file> [--video <file>] [--fps 24]");
+    console.error(
+      "Usage: emit-davinci-markers.ts --beats <file> --out <file> [--video <file>] [--fps 24]",
+    );
     process.exit(1);
   }
   return opts;
@@ -152,7 +162,9 @@ const main = () => {
   writeFileSync(args.out, edl);
   console.log(`Wrote ${args.out}`);
   console.log(`  clip: ${clipName}  duration: ${beats.duration.toFixed(2)}s  fps: ${args.fps}`);
-  console.log(`  markers: ${markers.length} (downbeats=${args.includeDownbeats ? (beats.downbeats?.length ?? 0) : 0}, drops=${args.includeDrops ? (beats.drops?.length ?? 0) : 0}, breakdowns=${args.includeBreakdowns ? (beats.breakdowns?.length ?? 0) * 2 : 0})`);
+  console.log(
+    `  markers: ${markers.length} (downbeats=${args.includeDownbeats ? (beats.downbeats?.length ?? 0) : 0}, drops=${args.includeDrops ? (beats.drops?.length ?? 0) : 0}, breakdowns=${args.includeBreakdowns ? (beats.breakdowns?.length ?? 0) * 2 : 0})`,
+  );
 };
 
 main();

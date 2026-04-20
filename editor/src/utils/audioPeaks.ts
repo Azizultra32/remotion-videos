@@ -5,10 +5,7 @@
 // bucket of bucketSize samples from the source channel. Trailing partial
 // buckets are discarded so every pair corresponds to bucketSize real samples.
 
-export const extractPeaks = (
-  channel: Float32Array,
-  bucketSize: number,
-): Float32Array => {
+export const extractPeaks = (channel: Float32Array, bucketSize: number): Float32Array => {
   if (bucketSize <= 0) {
     throw new Error(`extractPeaks: bucketSize must be > 0, got ${bucketSize}`);
   }

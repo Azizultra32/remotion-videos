@@ -1,14 +1,8 @@
-import React from "react";
-import {
-  AbsoluteFill,
-  interpolate,
-  spring,
-  useCurrentFrame,
-  useVideoConfig,
-} from "remotion";
-import type { CalculateMetadataFunction } from "remotion";
-import { z } from "zod";
 import { zColor } from "@remotion/zod-types";
+import React from "react";
+import type { CalculateMetadataFunction } from "remotion";
+import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { z } from "zod";
 
 const captionWordSchema = z.object({
   word: z.string(),
@@ -49,12 +43,12 @@ const baseWordStyle: React.CSSProperties = {
   whiteSpace: "pre",
 };
 
-export const calculateCaptionedVideoMetadata: CalculateMetadataFunction<
-  CaptionedVideoProps
-> = ({ props }) => {
+export const calculateCaptionedVideoMetadata: CalculateMetadataFunction<CaptionedVideoProps> = ({
+  props,
+}) => {
   const durationInFrames = props.captions.reduce(
     (maxDuration, caption) => Math.max(maxDuration, caption.endFrame),
-    1
+    1,
   );
 
   return {
@@ -76,7 +70,7 @@ export const CaptionedVideo: React.FC<CaptionedVideoProps> = ({
   const { fps } = useVideoConfig();
 
   const visibleCaptions = captions.filter(
-    (caption) => frame >= caption.startFrame && frame <= caption.endFrame
+    (caption) => frame >= caption.startFrame && frame <= caption.endFrame,
   );
 
   const lineTextStyle: React.CSSProperties = {
@@ -156,7 +150,7 @@ export const CaptionedVideo: React.FC<CaptionedVideoProps> = ({
         interpolate(frame, [word.startFrame, safeEndFrame], [0, word.word.length], {
           extrapolateLeft: "clamp",
           extrapolateRight: "clamp",
-        })
+        }),
       );
       const revealedWord = word.word.slice(0, Math.max(0, visibleCharCount));
       const wordOpacity = interpolate(frame, [word.startFrame - 1, word.startFrame], [0, 1], {
@@ -218,9 +212,7 @@ export const CaptionedVideo: React.FC<CaptionedVideoProps> = ({
         extrapolateRight: "clamp",
       });
       return (
-        <p style={{ ...lineTextStyle, color: highlightColor, opacity: emphasis }}>
-          {line.text}
-        </p>
+        <p style={{ ...lineTextStyle, color: highlightColor, opacity: emphasis }}>{line.text}</p>
       );
     }
 
@@ -258,7 +250,7 @@ export const CaptionedVideo: React.FC<CaptionedVideoProps> = ({
         interpolate(frame, [line.startFrame, safeEndFrame], [0, line.text.length], {
           extrapolateLeft: "clamp",
           extrapolateRight: "clamp",
-        })
+        }),
       );
       const typedText = line.text.slice(0, Math.max(0, visibleChars));
 
@@ -325,7 +317,9 @@ export const CaptionedVideo: React.FC<CaptionedVideoProps> = ({
           >
             {visibleCaptions.map((line, lineIndex) => {
               if (!line.words || line.words.length === 0) {
-                return <React.Fragment key={`line-${lineIndex}`}>{renderFullLine(line)}</React.Fragment>;
+                return (
+                  <React.Fragment key={`line-${lineIndex}`}>{renderFullLine(line)}</React.Fragment>
+                );
               }
 
               return (

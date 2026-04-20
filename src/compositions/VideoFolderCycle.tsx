@@ -14,9 +14,7 @@ export const videoFolderCycleSchema = z.object({
   videos: z.array(z.string()).min(1),
   beatsSrc: z.string(),
   startSec: z.number().default(0),
-  cutOn: z
-    .enum(["every-beat", "downbeat", "drop", "breakdown-end"])
-    .default("downbeat"),
+  cutOn: z.enum(["every-beat", "downbeat", "drop", "breakdown-end"]).default("downbeat"),
   loopClips: z.boolean().default(true),
   muteVideos: z.boolean().default(true),
   backgroundColor: z.string().default("#000"),
@@ -36,12 +34,8 @@ type BeatsFile = {
 const beatsCache = new Map<string, BeatsFile>();
 
 const useBeats = (src: string): BeatsFile | null => {
-  const [data, setData] = React.useState<BeatsFile | null>(
-    beatsCache.get(src) ?? null,
-  );
-  const [handle] = React.useState(() =>
-    beatsCache.get(src) ? null : delayRender(`beats:${src}`),
-  );
+  const [data, setData] = React.useState<BeatsFile | null>(beatsCache.get(src) ?? null);
+  const [handle] = React.useState(() => (beatsCache.get(src) ? null : delayRender(`beats:${src}`)));
 
   React.useEffect(() => {
     if (beatsCache.get(src)) {
@@ -84,15 +78,12 @@ const resolveCutPoints = (
   if (cutOn === "every-beat") source = beats.beats;
   else if (cutOn === "downbeat") source = beats.downbeats;
   else if (cutOn === "drop") source = beats.drops ?? [];
-  else if (cutOn === "breakdown-end")
-    source = (beats.breakdowns ?? []).map((b) => b.end);
+  else if (cutOn === "breakdown-end") source = (beats.breakdowns ?? []).map((b) => b.end);
   // Return only cut points at or after afterSec, sorted ascending.
   return source.filter((t) => t >= afterSec).sort((a, b) => a - b);
 };
 
-export const VideoFolderCycle: React.FC<
-  z.infer<typeof videoFolderCycleSchema>
-> = ({
+export const VideoFolderCycle: React.FC<z.infer<typeof videoFolderCycleSchema>> = ({
   videos,
   beatsSrc,
   startSec,
@@ -120,9 +111,7 @@ export const VideoFolderCycle: React.FC<
 
   // Which clip are we on?
   const rawIdx = eventsElapsed; // clip 0 before first event, clip 1 after, etc.
-  const clipIdx = loopClips
-    ? rawIdx % videos.length
-    : Math.min(rawIdx, videos.length - 1);
+  const clipIdx = loopClips ? rawIdx % videos.length : Math.min(rawIdx, videos.length - 1);
 
   // When did this particular clip start playing?
   const clipStartTime = rawIdx === 0 ? startSec : eventPoints[rawIdx - 1];
@@ -144,9 +133,7 @@ export const VideoFolderCycle: React.FC<
   );
 };
 
-export const defaultVideoFolderCycleProps: z.infer<
-  typeof videoFolderCycleSchema
-> = {
+export const defaultVideoFolderCycleProps: z.infer<typeof videoFolderCycleSchema> = {
   videos: ["dubfire-sake.mp4"],
   beatsSrc: "dubfire-beats.json",
   startSec: 720,

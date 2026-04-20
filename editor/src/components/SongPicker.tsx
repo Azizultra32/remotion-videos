@@ -19,8 +19,8 @@ import { stemFromAudioSrc } from "../utils/url";
 
 type SongEntry = {
   stem: string;
-  audioSrc: string;   // "projects/<stem>/audio.mp3"
-  beatsSrc: string;   // "projects/<stem>/analysis.json"
+  audioSrc: string; // "projects/<stem>/audio.mp3"
+  beatsSrc: string; // "projects/<stem>/analysis.json"
   hasBeats: boolean;
   hasTimeline?: boolean;
   sizeBytes: number;
@@ -112,7 +112,10 @@ export const SongPicker = () => {
       } else {
         // /api/songs refresh raced with disk creation — build the URLs
         // ourselves; next refresh will pick it up.
-        setTrack(`projects/${newStem}/audio${file.name.toLowerCase().endsWith(".wav") ? ".wav" : ".mp3"}`, `projects/${newStem}/analysis.json`);
+        setTrack(
+          `projects/${newStem}/audio${file.name.toLowerCase().endsWith(".wav") ? ".wav" : ".mp3"}`,
+          `projects/${newStem}/analysis.json`,
+        );
       }
     } catch (err) {
       setError(String((err as Error).message ?? err));
@@ -213,9 +216,7 @@ export const SongPicker = () => {
           Scaffolding {uploading.filename}… analysis will start automatically.
         </div>
       )}
-      {error && (
-        <div style={{ fontSize: 10, color: "#f66" }}>Tracks: {error}</div>
-      )}
+      {error && <div style={{ fontSize: 10, color: "#f66" }}>Tracks: {error}</div>}
     </div>
   );
 };

@@ -1,6 +1,6 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 
 const API_BASE = "https://api.wavespeed.ai/api/v2";
 const POLL_INTERVAL_MS = 3000;
@@ -25,10 +25,7 @@ interface WaveSpeedResponse {
  * @param audioPath - Absolute path to the audio file on disk
  * @returns Path relative to public/ for use with staticFile() (e.g. "video/lipsync-abc123.mp4")
  */
-export async function generateLipSync(
-  imageUrl: string,
-  audioPath: string
-): Promise<string> {
+export async function generateLipSync(imageUrl: string, audioPath: string): Promise<string> {
   const apiKey = process.env.WAVESPEED_API_KEY;
   if (!apiKey) throw new Error("WAVESPEED_API_KEY not set");
 
@@ -78,18 +75,14 @@ export async function generateLipSync(
 
   if (!submitResponse.ok) {
     const errorText = await submitResponse.text();
-    throw new Error(
-      `WaveSpeed API submit error ${submitResponse.status}: ${errorText}`
-    );
+    throw new Error(`WaveSpeed API submit error ${submitResponse.status}: ${errorText}`);
   }
 
   const submitData = (await submitResponse.json()) as WaveSpeedResponse;
   const jobId = submitData.id;
 
   if (!jobId) {
-    throw new Error(
-      `WaveSpeed API did not return a job ID: ${JSON.stringify(submitData)}`
-    );
+    throw new Error(`WaveSpeed API did not return a job ID: ${JSON.stringify(submitData)}`);
   }
 
   console.log(`[wavespeed] Job submitted: ${jobId}`);
@@ -105,9 +98,7 @@ export async function generateLipSync(
     });
 
     if (!pollResponse.ok) {
-      console.warn(
-        `[wavespeed] Poll attempt ${attempt + 1} failed: ${pollResponse.status}`
-      );
+      console.warn(`[wavespeed] Poll attempt ${attempt + 1} failed: ${pollResponse.status}`);
       continue;
     }
 
@@ -117,7 +108,7 @@ export async function generateLipSync(
       const videoUrl = pollData.output?.video_url;
       if (!videoUrl) {
         throw new Error(
-          `WaveSpeed job completed but no video URL in response: ${JSON.stringify(pollData)}`
+          `WaveSpeed job completed but no video URL in response: ${JSON.stringify(pollData)}`,
         );
       }
 
@@ -125,36 +116,28 @@ export async function generateLipSync(
       console.log(`[wavespeed] Downloading result video...`);
       const videoResponse = await fetch(videoUrl);
       if (!videoResponse.ok) {
-        throw new Error(
-          `Failed to download lip-sync video: ${videoResponse.status}`
-        );
+        throw new Error(`Failed to download lip-sync video: ${videoResponse.status}`);
       }
 
       const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
       fs.writeFileSync(filepath, videoBuffer);
-      console.log(
-        `[wavespeed] Saved lip-sync video: ${filename} (${videoBuffer.length} bytes)`
-      );
+      console.log(`[wavespeed] Saved lip-sync video: ${filename} (${videoBuffer.length} bytes)`);
 
       return `video/${filename}`;
     }
 
     if (pollData.status === "failed") {
-      throw new Error(
-        `WaveSpeed job failed: ${pollData.error || "unknown error"}`
-      );
+      throw new Error(`WaveSpeed job failed: ${pollData.error || "unknown error"}`);
     }
 
     // Still processing
     if ((attempt + 1) % 10 === 0) {
-      console.log(
-        `[wavespeed] Still processing... (attempt ${attempt + 1}/${MAX_POLL_ATTEMPTS})`
-      );
+      console.log(`[wavespeed] Still processing... (attempt ${attempt + 1}/${MAX_POLL_ATTEMPTS})`);
     }
   }
 
   throw new Error(
-    `WaveSpeed job timed out after ${MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS / 1000}s`
+    `WaveSpeed job timed out after ${(MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / 1000}s`,
   );
 }
 

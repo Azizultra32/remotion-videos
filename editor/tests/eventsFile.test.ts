@@ -1,16 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  parseEventsFile,
-  serializeEventsFile,
-  upsertEvent,
-  removeEventByName,
-  renameEvent,
-  findEvent,
-  resolveEvent,
-  resolveEventFrame,
   EVENTS_FILE_VERSION,
   type EventMark,
   type EventsFile,
+  findEvent,
+  parseEventsFile,
+  removeEventByName,
+  renameEvent,
+  resolveEvent,
+  resolveEventFrame,
+  serializeEventsFile,
+  upsertEvent,
 } from "../src/utils/eventsFile";
 
 describe("parseEventsFile", () => {
@@ -50,9 +50,7 @@ describe("parseEventsFile", () => {
   it("coerces unknown version to EVENTS_FILE_VERSION and keeps valid events", () => {
     const input = { version: 99, events: [{ name: "x", timeSec: 1 }] };
     expect(parseEventsFile(input).version).toBe(EVENTS_FILE_VERSION);
-    expect(parseEventsFile(input).events).toEqual([
-      { name: "x", timeSec: 1 },
-    ]);
+    expect(parseEventsFile(input).events).toEqual([{ name: "x", timeSec: 1 }]);
   });
 
   it("returns empty when events is not an array", () => {
@@ -63,9 +61,9 @@ describe("parseEventsFile", () => {
   });
 
   it("rejects negative times", () => {
-    expect(
-      parseEventsFile({ version: 1, events: [{ name: "x", timeSec: -1 }] }).events,
-    ).toEqual([]);
+    expect(parseEventsFile({ version: 1, events: [{ name: "x", timeSec: -1 }] }).events).toEqual(
+      [],
+    );
   });
 });
 
@@ -114,9 +112,7 @@ describe("upsertEvent", () => {
 
 describe("removeEventByName", () => {
   it("drops a matching event", () => {
-    expect(
-      removeEventByName([{ name: "x", timeSec: 1 }], "x"),
-    ).toEqual([]);
+    expect(removeEventByName([{ name: "x", timeSec: 1 }], "x")).toEqual([]);
   });
 
   it("returns input untouched when name is absent", () => {
@@ -127,11 +123,7 @@ describe("removeEventByName", () => {
 
 describe("renameEvent", () => {
   it("renames an existing event", () => {
-    const result = renameEvent(
-      [{ name: "old", timeSec: 1 }],
-      "old",
-      "new",
-    );
+    const result = renameEvent([{ name: "old", timeSec: 1 }], "old", "new");
     expect(result).toEqual([{ name: "new", timeSec: 1 }]);
   });
 
@@ -151,9 +143,7 @@ describe("renameEvent", () => {
 
 describe("findEvent", () => {
   it("returns the event when present", () => {
-    expect(
-      findEvent([{ name: "x", timeSec: 5 }], "x"),
-    ).toEqual({ name: "x", timeSec: 5 });
+    expect(findEvent([{ name: "x", timeSec: 5 }], "x")).toEqual({ name: "x", timeSec: 5 });
   });
 
   it("returns null when absent", () => {
@@ -163,9 +153,7 @@ describe("findEvent", () => {
 
 describe("resolveEvent", () => {
   it("returns the event time when named event exists", () => {
-    expect(
-      resolveEvent([{ name: "drop", timeSec: 30 }], "drop", 0),
-    ).toBe(30);
+    expect(resolveEvent([{ name: "drop", timeSec: 30 }], "drop", 0)).toBe(30);
   });
 
   it("falls back to defaultSec when name is absent", () => {
@@ -179,9 +167,7 @@ describe("resolveEvent", () => {
 
 describe("resolveEventFrame", () => {
   it("converts resolved seconds to frames at the given fps", () => {
-    expect(
-      resolveEventFrame([{ name: "drop", timeSec: 2 }], "drop", 0, 30),
-    ).toBe(60);
+    expect(resolveEventFrame([{ name: "drop", timeSec: 2 }], "drop", 0, 30)).toBe(60);
   });
 
   it("uses defaultSec * fps when name is absent", () => {
@@ -190,8 +176,6 @@ describe("resolveEventFrame", () => {
 
   it("rounds non-integer frame results", () => {
     // 2.033s * 30fps = 60.99 → 61
-    expect(
-      resolveEventFrame([{ name: "x", timeSec: 2.033 }], "x", 0, 30),
-    ).toBe(61);
+    expect(resolveEventFrame([{ name: "x", timeSec: 2.033 }], "x", 0, 30)).toBe(61);
   });
 });

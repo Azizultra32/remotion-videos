@@ -1,14 +1,15 @@
-import React, { useMemo } from "react";
+import { zColor } from "@remotion/zod-types";
+import type React from "react";
+import { useMemo } from "react";
 import {
   AbsoluteFill,
-  useCurrentFrame,
-  useVideoConfig,
+  Easing,
   interpolate,
   spring,
-  Easing,
+  useCurrentFrame,
+  useVideoConfig,
 } from "remotion";
 import { z } from "zod";
-import { zColor } from "@remotion/zod-types";
 
 const locationSchema = z.object({
   name: z.string(),
@@ -206,7 +207,7 @@ const ConnectionLine: React.FC<{
     frame - lineDelay,
     [0, Math.max(10, Math.round(30 / connectionSpeed))],
     [0, 1],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) }
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) },
   );
 
   if (progress <= 0) return null;
@@ -244,9 +245,7 @@ const ConnectionLine: React.FC<{
         strokeWidth={2}
         strokeLinecap="round"
       />
-      {progress >= 1 && (
-        <circle cx={pX} cy={pY} r={3} fill="white" opacity={0.7} />
-      )}
+      {progress >= 1 && <circle cx={pX} cy={pY} r={3} fill="white" opacity={0.7} />}
     </g>
   );
 };
@@ -386,11 +385,7 @@ export const MapAnimation: React.FC<MapAnimationProps> = ({
           height: MAP_HEIGHT,
         }}
       >
-        <svg
-          viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
-          width={MAP_WIDTH}
-          height={MAP_HEIGHT}
-        >
+        <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} width={MAP_WIDTH} height={MAP_HEIGHT}>
           {/* Background region dots */}
           {REGION_DOTS.map((dot, i) => (
             <circle
@@ -437,9 +432,10 @@ export const MapAnimation: React.FC<MapAnimationProps> = ({
           left: 0,
           right: 0,
           height: 3,
-          background: locations.length > 0
-            ? `linear-gradient(90deg, ${locations.map((l, i) => `${l.color} ${(i / (locations.length - 1 || 1)) * 100}%`).join(", ")})`
-            : "rgba(255,255,255,0.2)",
+          background:
+            locations.length > 0
+              ? `linear-gradient(90deg, ${locations.map((l, i) => `${l.color} ${(i / (locations.length - 1 || 1)) * 100}%`).join(", ")})`
+              : "rgba(255,255,255,0.2)",
           opacity: interpolate(frame, [0, 30], [0, 1], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",

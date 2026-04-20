@@ -1,7 +1,7 @@
-import React from "react";
+import type React from "react";
 import { z } from "zod";
-import type { ElementModule, ElementRendererProps } from "../types";
 import { expDecay } from "../_helpers";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   fadeInBeats: z.number(),
@@ -48,18 +48,42 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   if (phase === "fade") {
     const p = (ctx.absTimeSec - fadeStartT) / Math.max(0.001, holdStartT - fadeStartT);
     return (
-      <div style={{ position: "absolute", inset: 0, background: holdColor, opacity: Math.max(0, Math.min(1, p)) * finalOpacity, pointerEvents: "none" }} />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: holdColor,
+          opacity: Math.max(0, Math.min(1, p)) * finalOpacity,
+          pointerEvents: "none",
+        }}
+      />
     );
   }
   if (phase === "hold") {
     return (
-      <div style={{ position: "absolute", inset: 0, background: holdColor, opacity: finalOpacity, pointerEvents: "none" }} />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: holdColor,
+          opacity: finalOpacity,
+          pointerEvents: "none",
+        }}
+      />
     );
   }
   // flash: flash color with decay envelope after the drop
   const op = expDecay(ctx.absTimeSec - dropTime, flashDecay);
   return (
-    <div style={{ position: "absolute", inset: 0, background: flashColor, opacity: op, pointerEvents: "none" }} />
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        background: flashColor,
+        opacity: op,
+        pointerEvents: "none",
+      }}
+    />
   );
 };
 

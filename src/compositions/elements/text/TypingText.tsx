@@ -1,8 +1,8 @@
-import React from "react";
-import { z } from "zod";
+import type React from "react";
 import { interpolate } from "remotion";
-import type { ElementModule, ElementRendererProps } from "../types";
+import { z } from "zod";
 import { FONT_STACK } from "../_helpers";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   text: z.string(),
@@ -35,8 +35,19 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { text, textColor, cursorColor, fontSize, fontWeight, fontFamily,
-    durationInFramesToType, cursorBlinkSpeed, textAlign, x, y } = element.props;
+  const {
+    text,
+    textColor,
+    cursorColor,
+    fontSize,
+    fontWeight,
+    fontFamily,
+    durationInFramesToType,
+    cursorBlinkSpeed,
+    textAlign,
+    x,
+    y,
+  } = element.props;
   const localFrame = ctx.frame - Math.round(element.startSec * ctx.fps);
   const visibleCount = Math.floor(
     interpolate(localFrame, [0, durationInFramesToType], [0, text.length], {

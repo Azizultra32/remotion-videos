@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+
 /**
  * Render a complete branded video
  * Usage: npx tsx scripts/render-brand-video.ts <brand-name> [options]
@@ -13,9 +14,9 @@
  *   --help              Show this help message
  */
 
+import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
-import { execFileSync } from "child_process";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -269,8 +270,7 @@ async function main() {
   const isStill = opts.stillFrame !== null;
   const ext = isStill ? ".png" : ".mp4";
   const outputPath =
-    opts.outputPath ||
-    path.join(projectRoot, "out", `${opts.brandSlug}-${opts.composition}${ext}`);
+    opts.outputPath || path.join(projectRoot, "out", `${opts.brandSlug}-${opts.composition}${ext}`);
 
   // Ensure output directory exists
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });

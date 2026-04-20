@@ -1,17 +1,17 @@
-import React from "react";
+import { zColor } from "@remotion/zod-types";
+import type React from "react";
+import type { CalculateMetadataFunction } from "remotion";
 import {
   AbsoluteFill,
+  Img,
+  interpolate,
   Sequence,
+  spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
-  spring,
-  interpolate,
-  Img,
-  staticFile,
 } from "remotion";
 import { z } from "zod";
-import { zColor } from "@remotion/zod-types";
-import type { CalculateMetadataFunction } from "remotion";
 import { AnimatedTitle } from "../components/AnimatedTitle";
 
 // ── Timing constants ────────────────────────────────────────────────────────────
@@ -69,11 +69,10 @@ export type BrandedDemoProps = z.infer<typeof brandedDemoSchema>;
 
 // ── calculateMetadata ───────────────────────────────────────────────────────────
 
-export const calculateBrandedDemoMetadata: CalculateMetadataFunction<
-  BrandedDemoProps
-> = ({ props }) => {
-  const duration =
-    INTRO_DURATION + props.features.length * FEATURE_DURATION + CTA_DURATION;
+export const calculateBrandedDemoMetadata: CalculateMetadataFunction<BrandedDemoProps> = ({
+  props,
+}) => {
+  const duration = INTRO_DURATION + props.features.length * FEATURE_DURATION + CTA_DURATION;
   return {
     durationInFrames: duration,
   };
@@ -319,12 +318,9 @@ const CTASection: React.FC<{
     config: { damping: 10, mass: 0.8 },
   });
 
-  const pulseOpacity = interpolate(
-    frame % 40,
-    [0, 20, 39],
-    [0.4, 0.8, 0.4],
-    { extrapolateRight: "clamp" }
-  );
+  const pulseOpacity = interpolate(frame % 40, [0, 20, 39], [0.4, 0.8, 0.4], {
+    extrapolateRight: "clamp",
+  });
 
   return (
     <AbsoluteFill
@@ -433,11 +429,7 @@ export const BrandedDemo: React.FC<BrandedDemoProps> = ({
     <AbsoluteFill>
       {/* Intro */}
       <Sequence from={0} durationInFrames={INTRO_DURATION}>
-        <IntroSection
-          config={brandConfig}
-          showLogo={showLogo}
-          brandName={brandName}
-        />
+        <IntroSection config={brandConfig} showLogo={showLogo} brandName={brandName} />
       </Sequence>
 
       {/* Feature slides */}

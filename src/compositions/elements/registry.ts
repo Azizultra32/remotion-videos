@@ -1,20 +1,20 @@
-import type { ElementModule } from "./types";
-import { TypingTextModule } from "./text/TypingText";
+import { BassGlowOverlayModule } from "./audio/BassGlowOverlay";
+import { SpectrumBarsModule } from "./audio/SpectrumBars";
+import { WaveformPathModule } from "./audio/WaveformPath";
+import { PreDropFadeHoldModule } from "./overlays/PreDropFadeHold";
+import { VideoClipModule } from "./overlays/VideoClip";
+import { WatermarkMaskModule } from "./overlays/WatermarkMask";
+import { NeonStrokeStackModule } from "./shapes/NeonStrokeStack";
+import { PathRevealModule } from "./shapes/PathReveal";
+import { SonarRingsModule } from "./shapes/SonarRings";
+import { BeatDropWordsModule } from "./text/BeatDropWords";
+import { BellCurveRevealModule } from "./text/BellCurveReveal";
+import { FitboxSVGWordModule } from "./text/FitboxSVGWord";
 import { GlitchTextModule } from "./text/GlitchText";
 import { PoppingTextModule } from "./text/PoppingText";
 import { SlidingTextModule } from "./text/SlidingText";
-import { BellCurveRevealModule } from "./text/BellCurveReveal";
-import { BeatDropWordsModule } from "./text/BeatDropWords";
-import { FitboxSVGWordModule } from "./text/FitboxSVGWord";
-import { SpectrumBarsModule } from "./audio/SpectrumBars";
-import { WaveformPathModule } from "./audio/WaveformPath";
-import { BassGlowOverlayModule } from "./audio/BassGlowOverlay";
-import { PathRevealModule } from "./shapes/PathReveal";
-import { NeonStrokeStackModule } from "./shapes/NeonStrokeStack";
-import { SonarRingsModule } from "./shapes/SonarRings";
-import { PreDropFadeHoldModule } from "./overlays/PreDropFadeHold";
-import { WatermarkMaskModule } from "./overlays/WatermarkMask";
-import { VideoClipModule } from "./overlays/VideoClip";
+import { TypingTextModule } from "./text/TypingText";
+import type { ElementModule } from "./types";
 
 export const ELEMENT_MODULES: ElementModule<any>[] = [
   TypingTextModule,
@@ -35,8 +35,9 @@ export const ELEMENT_MODULES: ElementModule<any>[] = [
   VideoClipModule,
 ];
 
-export const ELEMENT_REGISTRY: Record<string, ElementModule<any>> =
-  Object.fromEntries(ELEMENT_MODULES.map((m) => [m.id, m]));
+export const ELEMENT_REGISTRY: Record<string, ElementModule<any>> = Object.fromEntries(
+  ELEMENT_MODULES.map((m) => [m.id, m]),
+);
 
 export const getElementModule = (type: string): ElementModule<any> | null =>
   ELEMENT_REGISTRY[type] ?? null;

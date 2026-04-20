@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { z } from "zod";
 import { renderTargetSchema } from "./projectManifest";
 
 export const SEGMENT_MANIFEST_FILENAME = "segment.json";
@@ -17,12 +17,8 @@ export const SEGMENT_MANIFEST_FILENAME = "segment.json";
  */
 export const segmentManifestSchema = z.object({
   $schema: z.string().optional(),
-  segmentName: z
-    .string()
-    .describe("Stable slug name from segment-audio.py (e.g. '03-drop')"),
-  parentProject: z
-    .string()
-    .describe("Relative or absolute path to the parent project.json"),
+  segmentName: z.string().describe("Stable slug name from segment-audio.py (e.g. '03-drop')"),
+  parentProject: z.string().describe("Relative or absolute path to the parent project.json"),
 
   timeRangeInParent: z.object({
     startSec: z.number().describe("Segment start in parent audio (seconds)"),
@@ -31,13 +27,8 @@ export const segmentManifestSchema = z.object({
 
   localMedia: z.object({
     audio: z.string().describe("Segment-local audio file (relative to segment.json)"),
-    video: z
-      .string()
-      .optional()
-      .describe("Segment-local video file (relative to segment.json)"),
-    beats: z
-      .string()
-      .describe("Segment-local beats.json (rebased to 0, relative to segment.json)"),
+    video: z.string().optional().describe("Segment-local video file (relative to segment.json)"),
+    beats: z.string().describe("Segment-local beats.json (rebased to 0, relative to segment.json)"),
     energy: z.string().optional(),
     spectrum: z.string().optional(),
   }),
@@ -75,10 +66,7 @@ const expandHome = (p: string): string => {
   return p;
 };
 
-export const resolveSegmentPath = (
-  segmentManifestPath: string,
-  fieldValue: string,
-): string => {
+export const resolveSegmentPath = (segmentManifestPath: string, fieldValue: string): string => {
   const expanded = expandHome(fieldValue);
   if (isAbsolute(expanded)) return expanded;
   return resolve(dirname(segmentManifestPath), expanded);

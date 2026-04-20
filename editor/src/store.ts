@@ -1,13 +1,13 @@
 // src/store.ts
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { EditorState } from "./types";
-import { mergePipelineElements } from "./utils/pipelineElements";
 import {
-  upsertEvent as upsertEventMarkPure,
   removeEventByName as removeEventMarkPure,
   renameEvent as renameEventMarkPure,
+  upsertEvent as upsertEventMarkPure,
 } from "./utils/eventsFile";
+import { mergePipelineElements } from "./utils/pipelineElements";
 
 export const useEditorStore = create<EditorState>()(
   persist(
@@ -36,9 +36,7 @@ export const useEditorStore = create<EditorState>()(
         })),
       setElementLocked: (id, locked) =>
         set((s) => ({
-          elements: s.elements.map((e) =>
-            e.id === id ? { ...e, locked } : e,
-          ),
+          elements: s.elements.map((e) => (e.id === id ? { ...e, locked } : e)),
         })),
       replacePipelineElements: (stem, events) =>
         set((s) => ({
@@ -75,8 +73,7 @@ export const useEditorStore = create<EditorState>()(
       setEvents: (events) => set({ events }),
       upsertEventMark: (name, timeSec) =>
         set((s) => ({ events: upsertEventMarkPure(s.events, name, timeSec) })),
-      removeEventMark: (name) =>
-        set((s) => ({ events: removeEventMarkPure(s.events, name) })),
+      removeEventMark: (name) => set((s) => ({ events: removeEventMarkPure(s.events, name) })),
       renameEventMark: (oldName, newName) =>
         set((s) => ({
           events: renameEventMarkPure(s.events, oldName, newName),
@@ -87,8 +84,7 @@ export const useEditorStore = create<EditorState>()(
         set((s) => ({
           scenes: s.scenes.map((sc) => (sc.id === id ? { ...sc, ...patch } : sc)),
         })),
-      removeScene: (id) =>
-        set((s) => ({ scenes: s.scenes.filter((sc) => sc.id !== id) })),
+      removeScene: (id) => set((s) => ({ scenes: s.scenes.filter((sc) => sc.id !== id) })),
       linkSceneElement: (sceneId, elementId) =>
         set((s) => ({
           scenes: s.scenes.map((sc) =>

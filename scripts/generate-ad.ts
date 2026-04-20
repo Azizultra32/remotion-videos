@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+
 /**
  * AI-Generated Ad Pipeline
  *
@@ -18,9 +19,9 @@
  *   --dry-run            Show what would happen without doing it
  */
 
+import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
-import { execFileSync } from "child_process";
 import { generateVoiceover } from "../src/lib/elevenlabs";
 import { generateProductImage } from "../src/lib/nanobananapro";
 import { generateLipSync } from "../src/lib/wavespeed";
@@ -79,12 +80,7 @@ async function main() {
 
   if (brandName) {
     log("BRAND", `Loading brand config for "${brandName}"...`);
-    const configPath = path.join(
-      process.cwd(),
-      "brands",
-      brandName,
-      "brand-config.json"
-    );
+    const configPath = path.join(process.cwd(), "brands", brandName, "brand-config.json");
 
     if (!fs.existsSync(configPath)) {
       console.error(`Brand config not found: ${configPath}`);
@@ -128,7 +124,9 @@ async function main() {
 
   if (productPrompt) {
     log("PRODUCT IMAGE", `Generating product image...`);
-    console.log(`  Prompt: "${productPrompt.slice(0, 80)}${productPrompt.length > 80 ? "..." : ""}"`);
+    console.log(
+      `  Prompt: "${productPrompt.slice(0, 80)}${productPrompt.length > 80 ? "..." : ""}"`,
+    );
 
     if (!process.env.NANOBANANAPRO_API_KEY) {
       warn("NANOBANANAPRO_API_KEY not set, skipping product image generation");
@@ -151,9 +149,7 @@ async function main() {
     log("LIP-SYNC", `Generating lip-sync video...`);
 
     if (!voiceoverUrl) {
-      warn(
-        "No voiceover generated (need --text + ELEVENLABS_API_KEY), skipping lip-sync"
-      );
+      warn("No voiceover generated (need --text + ELEVENLABS_API_KEY), skipping lip-sync");
     } else if (!process.env.WAVESPEED_API_KEY) {
       warn("WAVESPEED_API_KEY not set, skipping lip-sync generation");
     } else if (dryRun) {

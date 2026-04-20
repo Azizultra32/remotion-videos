@@ -1,17 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { useChat, type ChatMessage } from "../hooks/useChat";
+import { type ChatMessage, useChat } from "../hooks/useChat";
 
 export const ChatPane = () => {
-  const {
-    messages,
-    pending,
-    cooldown,
-    undoableIndex,
-    send,
-    cancel,
-    clear,
-    undoLastTurn,
-  } = useChat();
+  const { messages, pending, cooldown, undoableIndex, send, cancel, clear, undoLastTurn } =
+    useChat();
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -61,7 +53,14 @@ export const ChatPane = () => {
           background: "#151515",
         }}
       >
-        <span style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: 11 }}>
+        <span
+          style={{
+            fontWeight: 600,
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            fontSize: 11,
+          }}
+        >
           Chat
         </span>
         <button
@@ -95,9 +94,7 @@ export const ChatPane = () => {
           }}
         >
           <span style={{ fontSize: 13 }}>&#9888;</span>
-          <span>
-            Claude CLI rate-limited — retry in {cooldown!.remainingSec}s
-          </span>
+          <span>Claude CLI rate-limited — retry in {cooldown!.remainingSec}s</span>
         </div>
       )}
 
@@ -114,8 +111,19 @@ export const ChatPane = () => {
       >
         {messages.length === 0 && !pending && (
           <div style={{ color: "#888", fontSize: 11, lineHeight: 1.55 }}>
-            <div style={{ color: "#aaa", marginBottom: 6 }}>Tell me what to build or what to do.</div>
-            <div style={{ color: "#666", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 10, marginBottom: 4 }}>
+            <div style={{ color: "#aaa", marginBottom: 6 }}>
+              Tell me what to build or what to do.
+            </div>
+            <div
+              style={{
+                color: "#666",
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginTop: 10,
+                marginBottom: 4,
+              }}
+            >
               Timeline edits
             </div>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -123,7 +131,16 @@ export const ChatPane = () => {
               <li>Put spectrum bars at the bottom, purple.</li>
               <li>Seek to 30 and play.</li>
             </ul>
-            <div style={{ color: "#666", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 10, marginBottom: 4 }}>
+            <div
+              style={{
+                color: "#666",
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginTop: 10,
+                marginBottom: 4,
+              }}
+            >
               Project lifecycle (no CLI)
             </div>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -134,20 +151,37 @@ export const ChatPane = () => {
               <li>Clear the pipeline events.</li>
             </ul>
             <details style={{ marginTop: 14 }}>
-              <summary style={{ cursor: "pointer", color: "#8cf", fontSize: 11, userSelect: "none" }}>
+              <summary
+                style={{ cursor: "pointer", color: "#8cf", fontSize: 11, userSelect: "none" }}
+              >
                 What can I say?
               </summary>
               <div style={{ marginTop: 8, color: "#888", fontSize: 10.5, lineHeight: 1.5 }}>
                 The chat maps natural language to store mutations + HTTP calls.
                 <ul style={{ margin: "6px 0 0 0", paddingLeft: 16 }}>
-                  <li><code>addElement</code> — any of the 16 element types (text.bellCurve, text.beatDrop, audio.spectrumBars, shape.sonarRings, overlay.videoClip, …).</li>
-                  <li><code>updateElement</code> / <code>removeElement</code> — tweak or delete by id.</li>
-                  <li><code>seekTo</code> / <code>setPlaying</code> — jump the playhead, play/pause.</li>
-                  <li><code>scaffold</code> — absolute audio path → new project + auto-analyze.</li>
-                  <li><code>analyze</code> / <code>seedBeats</code> / <code>clearEvents</code> — per-project pipeline control.</li>
-                  <li><code>switchTrack</code> — load a different existing project.</li>
+                  <li>
+                    <code>addElement</code> — any of the 16 element types (text.bellCurve,
+                    text.beatDrop, audio.spectrumBars, shape.sonarRings, overlay.videoClip, …).
+                  </li>
+                  <li>
+                    <code>updateElement</code> / <code>removeElement</code> — tweak or delete by id.
+                  </li>
+                  <li>
+                    <code>seekTo</code> / <code>setPlaying</code> — jump the playhead, play/pause.
+                  </li>
+                  <li>
+                    <code>scaffold</code> — absolute audio path → new project + auto-analyze.
+                  </li>
+                  <li>
+                    <code>analyze</code> / <code>seedBeats</code> / <code>clearEvents</code> —
+                    per-project pipeline control.
+                  </li>
+                  <li>
+                    <code>switchTrack</code> — load a different existing project.
+                  </li>
                 </ul>
-                One-shot per turn — no memory across messages yet. Undo is per-turn via the Undo chip on each reply.
+                One-shot per turn — no memory across messages yet. Undo is per-turn via the Undo
+                chip on each reply.
               </div>
             </details>
           </div>
@@ -161,9 +195,7 @@ export const ChatPane = () => {
           />
         ))}
         {pending && (
-          <div style={{ color: "#888", fontStyle: "italic", fontSize: 11 }}>
-            Thinking&#8230;
-          </div>
+          <div style={{ color: "#888", fontStyle: "italic", fontSize: 11 }}>Thinking&#8230;</div>
         )}
       </div>
 
@@ -220,8 +252,7 @@ export const ChatPane = () => {
                 color: input.trim() && !inputDisabled ? "#8f8" : "#555",
                 padding: "4px 12px",
                 fontSize: 11,
-                cursor:
-                  input.trim() && !inputDisabled ? "pointer" : "not-allowed",
+                cursor: input.trim() && !inputDisabled ? "pointer" : "not-allowed",
                 borderRadius: 3,
               }}
             >
@@ -258,7 +289,8 @@ const MessageBubble = ({
   const toggle = (id: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -298,7 +330,9 @@ const MessageBubble = ({
               try {
                 const s = JSON.stringify(tc.input);
                 return s.length > 60 ? s.slice(0, 60) + "…" : s;
-              } catch { return ""; }
+              } catch {
+                return "";
+              }
             })();
             const chipColor = tc.isError ? "#7f1d1d" : running ? "#1e3a5f" : "#1e3a2a";
             const chipBorder = tc.isError ? "#b91c1c" : running ? "#3b82f6" : "#22c55e";
@@ -322,13 +356,22 @@ const MessageBubble = ({
                 title={isExpanded ? "Click to collapse" : "Click to expand input + result"}
               >
                 <div>
-                  <span style={{ fontWeight: 600 }}>{tc.name}</span>
-                  {" "}
-                  <span style={{ opacity: 0.7 }}>{running ? "running…" : tc.isError ? "error" : "done"}</span>
-                  {!isExpanded && inputSummary ? <span style={{ marginLeft: 6, opacity: 0.6 }}>{inputSummary}</span> : null}
+                  <span style={{ fontWeight: 600 }}>{tc.name}</span>{" "}
+                  <span style={{ opacity: 0.7 }}>
+                    {running ? "running…" : tc.isError ? "error" : "done"}
+                  </span>
+                  {!isExpanded && inputSummary ? (
+                    <span style={{ marginLeft: 6, opacity: 0.6 }}>{inputSummary}</span>
+                  ) : null}
                 </div>
                 {isExpanded && (
-                  <div style={{ marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      paddingTop: 4,
+                      borderTop: "1px solid rgba(255,255,255,0.1)",
+                    }}
+                  >
                     <div style={{ opacity: 0.7 }}>input:</div>
                     <div>{inputSummary.replace(/…$/, "") || "(empty)"}</div>
                     {(() => {
@@ -364,7 +407,10 @@ const MessageBubble = ({
                     {tc.result !== undefined && (
                       <>
                         <div style={{ opacity: 0.7, marginTop: 4 }}>result:</div>
-                        <div>{tc.result.slice(0, 1200) || "(empty)"}{tc.result.length > 1200 ? "… (truncated)" : ""}</div>
+                        <div>
+                          {tc.result.slice(0, 1200) || "(empty)"}
+                          {tc.result.length > 1200 ? "… (truncated)" : ""}
+                        </div>
                       </>
                     )}
                   </div>

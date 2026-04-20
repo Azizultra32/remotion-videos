@@ -1,6 +1,6 @@
-import type { TimelineElement } from "../types";
-import { useEditorStore } from "../store";
 import { ELEMENT_REGISTRY } from "@compositions/elements/registry";
+import { useEditorStore } from "../store";
+import type { TimelineElement } from "../types";
 import { stemFromAudioSrc } from "./url";
 
 // Mutations the chat layer emits. These mirror the 5 store actions the sidecar
@@ -56,20 +56,14 @@ export type MutationResult = {
   undo: UndoSnapshot;
 };
 
-const isObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null;
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
 const validateElement = (raw: unknown): TimelineElement | null => {
   if (!isObject(raw)) return null;
-  const {
-    id,
-    type,
-    trackIndex,
-    startSec,
-    durationSec,
-    label,
-    props,
-  } = raw as Record<string, unknown>;
+  const { id, type, trackIndex, startSec, durationSec, label, props } = raw as Record<
+    string,
+    unknown
+  >;
   if (typeof id !== "string" || !id) return null;
   if (typeof type !== "string" || !type) return null;
   if (typeof trackIndex !== "number") return null;
@@ -182,8 +176,7 @@ export const applyMutations = (mutations: unknown): MutationResult => {
             merged.durationSec = patch.durationSec;
           if (typeof patch.trackIndex === "number") merged.trackIndex = patch.trackIndex;
           if (typeof patch.label === "string") merged.label = patch.label;
-          if (isObject(patch.props))
-            merged.props = { ...current.props, ...patch.props };
+          if (isObject(patch.props)) merged.props = { ...current.props, ...patch.props };
           // startEvent can be cleared by passing null; any other non-string
           // value is ignored. Empty string clears too (common LLM shape).
           if (patch.startEvent === null || patch.startEvent === "") {
@@ -240,20 +233,25 @@ export const applyMutations = (mutations: unknown): MutationResult => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ audioPath }),
-          }).then(async (r) => {
-            if (!r.ok) return; // error surfaces via /api/analyze/status if it fires
-            try {
-              const { stem } = (await r.json()) as { stem?: string };
-              // Auto-switch so the user immediately sees the new project in
-              // the editor and StageStrip tracks its analysis live.
-              if (stem) {
-                useEditorStore.getState().setTrack(
-                  `projects/${stem}/audio.mp3`,
-                  `projects/${stem}/analysis.json`,
-                );
+          })
+            .then(async (r) => {
+              if (!r.ok) return; // error surfaces via /api/analyze/status if it fires
+              try {
+                const { stem } = (await r.json()) as { stem?: string };
+                // Auto-switch so the user immediately sees the new project in
+                // the editor and StageStrip tracks its analysis live.
+                if (stem) {
+                  useEditorStore
+                    .getState()
+                    .setTrack(`projects/${stem}/audio.mp3`, `projects/${stem}/analysis.json`);
+                }
+              } catch {
+                /* ignore */
               }
-            } catch { /* ignore */ }
-          }).catch(() => { /* silent */ });
+            })
+            .catch(() => {
+              /* silent */
+            });
           result.applied++;
           break;
         }
@@ -264,14 +262,18 @@ export const applyMutations = (mutations: unknown): MutationResult => {
               : stemFromAudioSrc(useEditorStore.getState().audioSrc);
           if (!stem) {
             result.skipped++;
-            result.errors.push(`[${i}] analyze: no stem resolved (pass stem or switch track first)`);
+            result.errors.push(
+              `[${i}] analyze: no stem resolved (pass stem or switch track first)`,
+            );
             break;
           }
           void fetch("/api/analyze/run", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ stem }),
-          }).catch(() => { /* silent; StageStrip surfaces errors via status SSE */ });
+          }).catch(() => {
+            /* silent; StageStrip surfaces errors via status SSE */
+          });
           result.applied++;
           break;
         }
@@ -405,7 +407,7 @@ export const applyMutations = (mutations: unknown): MutationResult => {
           result.applied++;
           break;
         }
-                default: {
+        default: {
           result.skipped++;
           result.errors.push(`[${i}] unknown op: ${String(m.op)}`);
         }

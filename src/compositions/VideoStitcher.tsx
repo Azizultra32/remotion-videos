@@ -1,18 +1,17 @@
-import React from "react";
+import { zColor } from "@remotion/zod-types";
+import type React from "react";
+import type { CalculateMetadataFunction } from "remotion";
 import {
   AbsoluteFill,
+  Easing,
+  interpolate,
   Series,
+  spring,
   useCurrentFrame,
   useVideoConfig,
-  interpolate,
-  spring,
-  Easing,
 } from "remotion";
 import { z } from "zod";
-import { zColor } from "@remotion/zod-types";
-import type { CalculateMetadataFunction } from "remotion";
-import { AnimatedTitle } from "../components";
-import { ProgressBar } from "../components";
+import { AnimatedTitle, ProgressBar } from "../components";
 
 // ---------------------------------------------------------------------------
 // Zod Schemas
@@ -43,13 +42,10 @@ export type VideoStitcherProps = z.infer<typeof videoStitcherSchema>;
 // calculateMetadata
 // ---------------------------------------------------------------------------
 
-export const calculateVideoStitcherMetadata: CalculateMetadataFunction<
-  VideoStitcherProps
-> = ({ props }) => {
-  const duration = props.scenes.reduce(
-    (sum, scene) => sum + scene.durationInFrames,
-    0
-  );
+export const calculateVideoStitcherMetadata: CalculateMetadataFunction<VideoStitcherProps> = ({
+  props,
+}) => {
+  const duration = props.scenes.reduce((sum, scene) => sum + scene.durationInFrames, 0);
   return {
     durationInFrames: duration,
   };
@@ -258,11 +254,7 @@ const CtaScene: React.FC<{
   const pulsePhase = Math.max(0, frame - 20);
   const pulse = 1 + Math.sin(pulsePhase * 0.15) * 0.04;
 
-  const glowOpacity = interpolate(
-    Math.sin(pulsePhase * 0.12),
-    [-1, 1],
-    [0.3, 0.7]
-  );
+  const glowOpacity = interpolate(Math.sin(pulsePhase * 0.12), [-1, 1], [0.3, 0.7]);
 
   return (
     <AbsoluteFill
@@ -347,12 +339,10 @@ const TransitionScene: React.FC<{
 
   // Fade in then fade out through black
   const mid = durationInFrames / 2;
-  const opacity = interpolate(
-    frame,
-    [0, mid, durationInFrames],
-    [0, 1, 0],
-    { extrapolateRight: "clamp", extrapolateLeft: "clamp" }
-  );
+  const opacity = interpolate(frame, [0, mid, durationInFrames], [0, 1, 0], {
+    extrapolateRight: "clamp",
+    extrapolateLeft: "clamp",
+  });
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
@@ -396,45 +386,15 @@ const SceneRenderer: React.FC<{
 }> = ({ scene, sceneIndex, totalScenes }) => {
   switch (scene.type) {
     case "title":
-      return (
-        <TitleScene
-          scene={scene}
-          sceneIndex={sceneIndex}
-          totalScenes={totalScenes}
-        />
-      );
+      return <TitleScene scene={scene} sceneIndex={sceneIndex} totalScenes={totalScenes} />;
     case "feature":
-      return (
-        <FeatureScene
-          scene={scene}
-          sceneIndex={sceneIndex}
-          totalScenes={totalScenes}
-        />
-      );
+      return <FeatureScene scene={scene} sceneIndex={sceneIndex} totalScenes={totalScenes} />;
     case "cta":
-      return (
-        <CtaScene
-          scene={scene}
-          sceneIndex={sceneIndex}
-          totalScenes={totalScenes}
-        />
-      );
+      return <CtaScene scene={scene} sceneIndex={sceneIndex} totalScenes={totalScenes} />;
     case "transition":
-      return (
-        <TransitionScene
-          scene={scene}
-          sceneIndex={sceneIndex}
-          totalScenes={totalScenes}
-        />
-      );
+      return <TransitionScene scene={scene} sceneIndex={sceneIndex} totalScenes={totalScenes} />;
     default:
-      return (
-        <TitleScene
-          scene={scene}
-          sceneIndex={sceneIndex}
-          totalScenes={totalScenes}
-        />
-      );
+      return <TitleScene scene={scene} sceneIndex={sceneIndex} totalScenes={totalScenes} />;
   }
 };
 
@@ -447,15 +407,8 @@ export const VideoStitcher: React.FC<VideoStitcherProps> = ({ scenes }) => {
     <AbsoluteFill>
       <Series>
         {scenes.map((scene, index) => (
-          <Series.Sequence
-            key={`scene-${index}`}
-            durationInFrames={scene.durationInFrames}
-          >
-            <SceneRenderer
-              scene={scene}
-              sceneIndex={index}
-              totalScenes={scenes.length}
-            />
+          <Series.Sequence key={`scene-${index}`} durationInFrames={scene.durationInFrames}>
+            <SceneRenderer scene={scene} sceneIndex={index} totalScenes={scenes.length} />
           </Series.Sequence>
         ))}
       </Series>

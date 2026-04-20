@@ -7,26 +7,31 @@
 //
 // Both live in the dev server so we don't need a separate process.
 // Lives inside editor/ but shells out from the repo root.
-import type { Plugin, ViteDevServer, Connect } from "vite";
+
 import { spawn, spawnSync } from "node:child_process";
-import { createWriteStream, statSync, unlinkSync } from "node:fs";
+import {
+  createWriteStream,
+  type FSWatcher,
+  promises as fs,
+  watch as fsWatch,
+  statSync,
+  unlinkSync,
+} from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
-import { promises as fs, watch as fsWatch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Connect, Plugin, ViteDevServer } from "vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+import { parseFileArg, sanitizeEditorPath } from "../scripts/cli/editorPath";
 import {
   ensureProjectsDir,
   resolveProjectsDir,
   syncStaticProjectsSymlink,
 } from "../scripts/cli/paths";
-import { parseFileArg, sanitizeEditorPath } from "../scripts/cli/editorPath";
-import {
-  parseEventsFile,
-  serializeEventsFile,
-} from "./src/utils/eventsFile";
+import { parseEventsFile, serializeEventsFile } from "./src/utils/eventsFile";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(REPO_ROOT, "out");
@@ -39,7 +44,9 @@ ensureProjectsDir(REPO_ROOT);
 // Keep public/projects -> PROJECTS_DIR so Remotion renders that go through
 // staticFile("projects/<stem>/audio.mp3") resolve correctly even when
 // the user has relocated projects via MV_PROJECTS_DIR.
-try { syncStaticProjectsSymlink(REPO_ROOT); } catch (err) {
+try {
+  syncStaticProjectsSymlink(REPO_ROOT);
+} catch (err) {
   // eslint-disable-next-line no-console
   console.warn("[sidecar] could not sync public/projects symlink:", err);
 }
@@ -67,7 +74,9 @@ const openAnalyzeLogStream = (
     if (st.size > ANALYZE_LOG_MAX_BYTES) {
       unlinkSync(logPath);
     }
-  } catch { /* file missing or stat failed — fine, appending creates it */ }
+  } catch {
+    /* file missing or stat failed — fine, appending creates it */
+  }
   const stream = createWriteStream(logPath, { flags: "a" });
   const header = `\n=== ${new Date().toISOString()} ${scriptLabel} ${args.join(" ")} ===\n`;
   stream.write(header);
@@ -96,13 +105,23 @@ const reconcileOrphanStatusFiles = async (projectsDir: string): Promise<void> =>
     try {
       const st = await fs.stat(projectDir);
       isDir = st.isDirectory();
-    } catch { continue; }
+    } catch {
+      continue;
+    }
     if (!isDir) continue;
     const statusFile = path.join(projectDir, ".analyze-status.json");
     let raw: string;
-    try { raw = await fs.readFile(statusFile, "utf8"); } catch { continue; }
+    try {
+      raw = await fs.readFile(statusFile, "utf8");
+    } catch {
+      continue;
+    }
     let parsed: any;
-    try { parsed = JSON.parse(raw); } catch { continue; }
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      continue;
+    }
     if (!parsed || typeof parsed !== "object") continue;
     if (!parsed.startedAt || parsed.endedAt) continue;
     const lastTouch = typeof parsed.updatedAt === "number" ? parsed.updatedAt : parsed.startedAt;
@@ -118,7 +137,9 @@ const reconcileOrphanStatusFiles = async (projectsDir: string): Promise<void> =>
       await fs.writeFile(tmp, JSON.stringify(reconciled, null, 2));
       await fs.rename(tmp, statusFile);
       // eslint-disable-next-line no-console
-      console.log(`[sidecar] reconciled orphan analyze run for ${name} (stale ${now - lastTouch}ms)`);
+      console.log(
+        `[sidecar] reconciled orphan analyze run for ${name} (stale ${now - lastTouch}ms)`,
+      );
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(`[sidecar] failed to reconcile orphan status for ${name}:`, err);
@@ -156,8 +177,7 @@ const readJsonBody = (req: IncomingMessage): Promise<any> =>
   });
 
 const sanitizeName = (n: string): string =>
-  (n || "musicvideo").replace(/[^a-zA-Z0-9_\-]/g, "-").slice(0, 60) ||
-  "musicvideo";
+  (n || "musicvideo").replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 60) || "musicvideo";
 
 const sendSseEvent = (res: ServerResponse, event: string, data: unknown) => {
   res.write(`event: ${event}\n`);
@@ -175,17 +195,14 @@ const sendSseEvent = (res: ServerResponse, event: string, data: unknown) => {
 
 type SongEntry = {
   stem: string;
-  audioSrc: string;   // path under projects/, e.g. "projects/love-in-traffic/audio.mp3"
-  beatsSrc: string;   // path under projects/, e.g. "projects/love-in-traffic/analysis.json"
-  hasBeats: boolean;  // true iff analysis.json exists
+  audioSrc: string; // path under projects/, e.g. "projects/love-in-traffic/audio.mp3"
+  beatsSrc: string; // path under projects/, e.g. "projects/love-in-traffic/analysis.json"
+  hasBeats: boolean; // true iff analysis.json exists
   hasTimeline: boolean;
   sizeBytes: number;
 };
 
-const handleSongs = async (
-  _req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleSongs = async (_req: IncomingMessage, res: ServerResponse): Promise<void> => {
   let projectEntries: Array<{ name: string; isDir: boolean }>;
   try {
     const ds = await fs.readdir(PROJECTS_DIR, { withFileTypes: true });
@@ -193,9 +210,7 @@ const handleSongs = async (
   } catch (err) {
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({ error: "failed-to-read-projects", detail: String(err) }),
-    );
+    res.end(JSON.stringify({ error: "failed-to-read-projects", detail: String(err) }));
     return;
   }
 
@@ -251,10 +266,7 @@ const handleSongs = async (
 // Honors HTTP Range for audio scrubbing — browsers require this for seekable
 // audio elements to work smoothly.
 
-const handleProjectFile = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleProjectFile = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   // Connect strips the "/api/projects/" mount; req.url here is
   // "/love-in-traffic/audio.mp3" or "/love-in-traffic/analysis/foo.json".
   const raw = (req.url ?? "").split("?")[0];
@@ -290,15 +302,23 @@ const handleProjectFile = async (
   }
   const ext = path.extname(relPath).toLowerCase();
   const mime =
-    ext === ".mp3" ? "audio/mpeg" :
-    ext === ".wav" ? "audio/wav" :
-    ext === ".m4a" ? "audio/mp4" :
-    ext === ".json" ? "application/json" :
-    ext === ".png" ? "image/png" :
-    ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
-    ext === ".md" ? "text/markdown; charset=utf-8" :
-    ext === ".txt" ? "text/plain; charset=utf-8" :
-    "application/octet-stream";
+    ext === ".mp3"
+      ? "audio/mpeg"
+      : ext === ".wav"
+        ? "audio/wav"
+        : ext === ".m4a"
+          ? "audio/mp4"
+          : ext === ".json"
+            ? "application/json"
+            : ext === ".png"
+              ? "image/png"
+              : ext === ".jpg" || ext === ".jpeg"
+                ? "image/jpeg"
+                : ext === ".md"
+                  ? "text/markdown; charset=utf-8"
+                  : ext === ".txt"
+                    ? "text/plain; charset=utf-8"
+                    : "application/octet-stream";
   res.setHeader("Content-Type", mime);
   res.setHeader("Accept-Ranges", "bytes");
 
@@ -334,10 +354,7 @@ const handleProjectFile = async (
 // the sidecar can serialize concurrent writers (GUI autosave + external
 // Claude edits). Atomic write via tmp + rename.
 
-const handleTimelineGet = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleTimelineGet = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   // req.url is "/love-in-traffic" (the Connect mount strips "/api/timeline/")
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
@@ -375,10 +392,7 @@ const handleTimelineGet = async (
 
 const STORYBOARD_LOCK = new Map<string, Promise<void>>();
 
-const handleStoryboardGet = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleStoryboardGet = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
   if (!STEM_RE.test(stem)) {
@@ -402,10 +416,7 @@ const handleStoryboardGet = async (
   res.end(content);
 };
 
-const handleStoryboardSave = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleStoryboardSave = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const stem = String(body?.stem ?? "");
   const storyboard = body?.storyboard;
@@ -440,7 +451,9 @@ const handleStoryboardSave = async (
   });
   STORYBOARD_LOCK.set(
     stem,
-    next.catch(() => { /* surfaced below */ }),
+    next.catch(() => {
+      /* surfaced below */
+    }),
   );
   try {
     await next;
@@ -465,10 +478,7 @@ const handleStoryboardSave = async (
 
 const CURRENT_PROJECT_FILE = path.join(REPO_ROOT, ".current-project");
 
-const handleCurrentGet = async (
-  _req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleCurrentGet = async (_req: IncomingMessage, res: ServerResponse): Promise<void> => {
   let content: string;
   try {
     content = (await fs.readFile(CURRENT_PROJECT_FILE, "utf8")).trim();
@@ -483,10 +493,7 @@ const handleCurrentGet = async (
   res.end(JSON.stringify({ stem: content }));
 };
 
-const handleCurrentSave = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleCurrentSave = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const stem = String(body?.stem ?? "");
   if (!STEM_RE.test(stem)) {
@@ -500,10 +507,7 @@ const handleCurrentSave = async (
   res.end(JSON.stringify({ ok: true, stem }));
 };
 
-const handleTimelineSave = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleTimelineSave = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const stem = String(body?.stem ?? "");
   const timeline = body?.timeline;
@@ -564,10 +568,7 @@ const handleTimelineSave = async (
 // validated via parseEventsFile so malformed entries (e.g. hand-edited JSON)
 // don't poison the editor state.
 
-const handleEventsGet = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleEventsGet = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
   if (!STEM_RE.test(stem)) {
@@ -590,10 +591,7 @@ const handleEventsGet = async (
   res.end(JSON.stringify(parsed));
 };
 
-const handleEventsSave = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleEventsSave = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
   if (!STEM_RE.test(stem)) {
@@ -624,7 +622,10 @@ const handleEventsSave = async (
     await fs.writeFile(tmp, serializeEventsFile(toPersist.events));
     await fs.rename(tmp, destFile);
   });
-  EVENTS_LOCK.set(stem, next.catch(() => {}));
+  EVENTS_LOCK.set(
+    stem,
+    next.catch(() => {}),
+  );
   try {
     await next;
   } catch (err) {
@@ -647,10 +648,7 @@ const handleEventsSave = async (
 // keeps the link inside the normal http origin. Path traversal is
 // defended by rejecting anything that escapes OUT_DIR after resolve.
 
-const handleOut = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleOut = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   // Connect strips the mount prefix, so req.url here is like
   // "/musicvideo-123.mp4?x=y" (not "/api/out/..."). Strip leading slashes
   // so path.resolve treats the name as relative to OUT_DIR.
@@ -677,10 +675,13 @@ const handleOut = async (
   }
   const ext = path.extname(name).toLowerCase();
   const mime =
-    ext === ".mp4" ? "video/mp4" :
-    ext === ".webm" ? "video/webm" :
-    ext === ".mov" ? "video/quicktime" :
-    "application/octet-stream";
+    ext === ".mp4"
+      ? "video/mp4"
+      : ext === ".webm"
+        ? "video/webm"
+        : ext === ".mov"
+          ? "video/quicktime"
+          : "application/octet-stream";
   res.setHeader("Content-Type", mime);
   res.setHeader("Content-Length", String(stat.size));
   res.setHeader("Accept-Ranges", "bytes");
@@ -692,10 +693,7 @@ const handleOut = async (
 // /api/render
 // ---------------------------------------------------------------------------
 
-const handleRender = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleRender = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const props = body?.props;
   const name = sanitizeName(body?.name ?? "musicvideo");
@@ -816,7 +814,7 @@ You are running as a Claude Code subagent with the same toolset as the interacti
 - Grep / Glob the codebase to answer "why is X doing Y" questions.
 - Edit or Write files only when the user explicitly asks for a code change (and respect engine-lock rules — engine paths under src/, editor/, scripts/ need ENGINE_UNLOCK in the shell env, which you do not have here; report that the user needs to do it themselves if they ask for such an edit).
 
-When a question can be answered by reading/inspecting, do the work — don\'t just emit mutations from the prompt state alone. The "Current editor state" section below is a snapshot, not the full picture. If the user asks "do the events sit on real beats?", actually read analysis.json + the confirmed-full PNG and report.
+When a question can be answered by reading/inspecting, do the work — don't just emit mutations from the prompt state alone. The "Current editor state" section below is a snapshot, not the full picture. If the user asks "do the events sit on real beats?", actually read analysis.json + the confirmed-full PNG and report.
 
 Output format:
 End your turn with a single final-output block that the client parses:
@@ -850,10 +848,7 @@ Mutation rules:
 // file itself loses the inode during that rename. Dir-watch + filter is
 // race-free.
 
-const handleTimelineWatch = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleTimelineWatch = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   // Connect strips "/api/timeline/watch/"; req.url is "/love-in-traffic".
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
@@ -886,13 +881,22 @@ const handleTimelineWatch = async (
   let watcher: FSWatcher | null = null;
   let keepalive: ReturnType<typeof setInterval> | null = null;
   const cleanup = () => {
-    if (keepalive) { clearInterval(keepalive); keepalive = null; }
-    if (watcher) { watcher.close(); watcher = null; }
+    if (keepalive) {
+      clearInterval(keepalive);
+      keepalive = null;
+    }
+    if (watcher) {
+      watcher.close();
+      watcher = null;
+    }
   };
   req.on("close", cleanup);
 
   // If the client already closed during the 404/stat path, bail now.
-  if (req.destroyed) { cleanup(); return; }
+  if (req.destroyed) {
+    cleanup();
+    return;
+  }
 
   res.write(`event: hello\ndata: ${JSON.stringify({ stem })}\n\n`);
 
@@ -901,9 +905,7 @@ const handleTimelineWatch = async (
       if (filename !== "timeline.json") return;
       if (eventType !== "change" && eventType !== "rename") return;
       try {
-        res.write(
-          `event: change\ndata: ${JSON.stringify({ stem, ts: Date.now() })}\n\n`,
-        );
+        res.write(`event: change\ndata: ${JSON.stringify({ stem, ts: Date.now() })}\n\n`);
       } catch {
         // connection closed; ignore
       }
@@ -911,14 +913,16 @@ const handleTimelineWatch = async (
   } catch (err) {
     // Directory watch failed (unlikely). Surface as a one-off SSE error
     // and hold the connection so the client doesn't reconnect-storm.
-    res.write(
-      `event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`,
-    );
+    res.write(`event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`);
   }
 
   // SSE keep-alive — some intermediaries close idle connections at 30s.
   keepalive = setInterval(() => {
-    try { res.write(":keepalive\n\n"); } catch { /* closed */ }
+    try {
+      res.write(":keepalive\n\n");
+    } catch {
+      /* closed */
+    }
   }, 20000);
 };
 
@@ -932,10 +936,7 @@ const handleTimelineWatch = async (
 // this to auto-populate locked pipeline placeholders (text.bellCurve per
 // confirmed event) on re-runs of the analysis pipeline.
 
-const handleAnalyzeEvents = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleAnalyzeEvents = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
   if (!STEM_RE.test(stem)) {
@@ -989,11 +990,20 @@ const handleAnalyzeEvents = async (
   let watcher: FSWatcher | null = null;
   let keepalive: ReturnType<typeof setInterval> | null = null;
   const cleanup = () => {
-    if (keepalive) { clearInterval(keepalive); keepalive = null; }
-    if (watcher) { watcher.close(); watcher = null; }
+    if (keepalive) {
+      clearInterval(keepalive);
+      keepalive = null;
+    }
+    if (watcher) {
+      watcher.close();
+      watcher = null;
+    }
   };
   req.on("close", cleanup);
-  if (req.destroyed) { cleanup(); return; }
+  if (req.destroyed) {
+    cleanup();
+    return;
+  }
 
   await emit(); // initial snapshot
 
@@ -1006,13 +1016,15 @@ const handleAnalyzeEvents = async (
       void emit();
     });
   } catch (err) {
-    res.write(
-      `event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`,
-    );
+    res.write(`event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`);
   }
 
   keepalive = setInterval(() => {
-    try { res.write(":keepalive\n\n"); } catch { /* closed */ }
+    try {
+      res.write(":keepalive\n\n");
+    } catch {
+      /* closed */
+    }
   }, 20000);
 };
 
@@ -1025,10 +1037,7 @@ const handleAnalyzeEvents = async (
 // on connect + on every fs.watch change. The editor's StageStrip component
 // subscribes to this and renders the current pipeline phase.
 
-const handleAnalyzeStatus = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleAnalyzeStatus = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
   if (!STEM_RE.test(stem)) {
@@ -1078,11 +1087,20 @@ const handleAnalyzeStatus = async (
   let watcher: FSWatcher | null = null;
   let keepalive: ReturnType<typeof setInterval> | null = null;
   const cleanup = () => {
-    if (keepalive) { clearInterval(keepalive); keepalive = null; }
-    if (watcher) { watcher.close(); watcher = null; }
+    if (keepalive) {
+      clearInterval(keepalive);
+      keepalive = null;
+    }
+    if (watcher) {
+      watcher.close();
+      watcher = null;
+    }
   };
   req.on("close", cleanup);
-  if (req.destroyed) { cleanup(); return; }
+  if (req.destroyed) {
+    cleanup();
+    return;
+  }
 
   await emit();
 
@@ -1095,13 +1113,15 @@ const handleAnalyzeStatus = async (
       void emit();
     });
   } catch (err) {
-    res.write(
-      `event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`,
-    );
+    res.write(`event: error\ndata: ${JSON.stringify({ stem, detail: String(err) })}\n\n`);
   }
 
   keepalive = setInterval(() => {
-    try { res.write(":keepalive\n\n"); } catch { /* closed */ }
+    try {
+      res.write(":keepalive\n\n");
+    } catch {
+      /* closed */
+    }
   }, 20000);
 };
 
@@ -1158,7 +1178,9 @@ const clearAnalysisEvents = async (projectDir: string): Promise<void> => {
     const raw = await fs.readFile(analysisFile, "utf8");
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") existing = parsed as Record<string, unknown>;
-  } catch { /* missing file is fine */ }
+  } catch {
+    /* missing file is fine */
+  }
   const merged = {
     ...existing,
     phase1_events_sec: [],
@@ -1173,10 +1195,7 @@ const clearAnalysisEvents = async (projectDir: string): Promise<void> => {
 // surfaced through the same .analyze-status.json → SSE channel the
 // StageStrip already reads from. Returns 202 immediately if kickoff
 // succeeded, 409 if another run is already in flight for this stem.
-const handleAnalyzeRun = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleAnalyzeRun = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const stem: string = String(body?.stem ?? "").trim();
   if (!STEM_RE.test(stem)) {
@@ -1199,7 +1218,9 @@ const handleAnalyzeRun = async (
   try {
     const existing = await fs.readFile(statusFile, "utf8");
     let parsed: any = null;
-    try { parsed = JSON.parse(existing); } catch {
+    try {
+      parsed = JSON.parse(existing);
+    } catch {
       // Mid-write corrupt JSON means something IS running (mv-analyze is
       // writing). Conservatively 409 to avoid a double-spawn.
       res.statusCode = 409;
@@ -1213,7 +1234,9 @@ const handleAnalyzeRun = async (
       res.end(JSON.stringify({ error: "analysis already in flight", state: parsed }));
       return;
     }
-  } catch { /* no status file — no prior run */ }
+  } catch {
+    /* no status file — no prior run */
+  }
 
   // Drop old pipeline events from analysis.json BEFORE spawning mv:analyze.
   // The editor's SSE watcher picks up the emptied event arrays and calls
@@ -1234,7 +1257,13 @@ const handleAnalyzeRun = async (
   });
   child.stdout?.pipe(logStream, { end: false });
   child.stderr?.pipe(logStream, { end: false });
-  child.on("close", () => { try { logStream.end(); } catch { /* ignore */ } });
+  child.on("close", () => {
+    try {
+      logStream.end();
+    } catch {
+      /* ignore */
+    }
+  });
   child.unref();
   res.statusCode = 202;
   res.setHeader("Content-Type", "application/json");
@@ -1247,10 +1276,7 @@ const handleAnalyzeRun = async (
 // projects/<stem>/analysis.json. Safe to call anytime — doesn't touch phase
 // events or energy bands. Used to backfill beats on projects that predate
 // the beat-tracking integration (ead3c3a).
-const handleAnalyzeSeedBeats = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleAnalyzeSeedBeats = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const stem: string = String(body?.stem ?? "").trim();
   if (!STEM_RE.test(stem)) {
@@ -1281,7 +1307,13 @@ const handleAnalyzeSeedBeats = async (
   });
   child.stdout?.pipe(logStream, { end: false });
   child.stderr?.pipe(logStream, { end: false });
-  child.on("close", () => { try { logStream.end(); } catch { /* ignore */ } });
+  child.on("close", () => {
+    try {
+      logStream.end();
+    } catch {
+      /* ignore */
+    }
+  });
   child.unref();
   res.statusCode = 202;
   res.setHeader("Content-Type", "application/json");
@@ -1303,34 +1335,43 @@ const runScaffoldAndAnalyze = async (
   if (stemHint) scaffoldArgs.push("--stem", stemHint);
   const scaffold = spawnSync("npm", scaffoldArgs, { cwd: REPO_ROOT, encoding: "utf8" });
   if (cleanupTmp) {
-    try { await fs.unlink(audioPath); } catch { /* best effort */ }
+    try {
+      await fs.unlink(audioPath);
+    } catch {
+      /* best effort */
+    }
   }
   if (scaffold.status !== 0) {
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({
-      error: "scaffold-failed",
-      stdout: scaffold.stdout,
-      stderr: scaffold.stderr,
-    }));
+    res.end(
+      JSON.stringify({
+        error: "scaffold-failed",
+        stdout: scaffold.stdout,
+        stderr: scaffold.stderr,
+      }),
+    );
     return;
   }
   const stemMatch = (scaffold.stdout || "").match(/scaffolded projects\/([a-z0-9_-]+)\//);
   if (!stemMatch) {
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({
-      error: "scaffold-succeeded-but-stem-not-parsed",
-      stdout: scaffold.stdout,
-    }));
+    res.end(
+      JSON.stringify({
+        error: "scaffold-succeeded-but-stem-not-parsed",
+        stdout: scaffold.stdout,
+      }),
+    );
     return;
   }
   const stem = stemMatch[1];
-  const child = spawn(
-    "npm",
-    ["run", "mv:analyze", "--", "--project", stem],
-    { cwd: REPO_ROOT, detached: true, stdio: "ignore", env: { ...process.env } },
-  );
+  const child = spawn("npm", ["run", "mv:analyze", "--", "--project", stem], {
+    cwd: REPO_ROOT,
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env },
+  });
   child.unref();
   res.statusCode = 202;
   res.setHeader("Content-Type", "application/json");
@@ -1369,9 +1410,11 @@ const handleProjectCreateFromPath = async (
   if (![".mp3", ".wav", ".m4a"].includes(ext)) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({
-      error: `unsupported audio format: ${ext} (expected .mp3/.wav/.m4a)`,
-    }));
+    res.end(
+      JSON.stringify({
+        error: `unsupported audio format: ${ext} (expected .mp3/.wav/.m4a)`,
+      }),
+    );
     return;
   }
   await runScaffoldAndAnalyze(resolved, path.basename(resolved, ext), false, res);
@@ -1390,10 +1433,7 @@ const handleProjectCreateFromPath = async (
 // Returns 202 with {stem, analysisPid} as soon as scaffold completes; the
 // client can immediately switch to the new stem and StageStrip picks up
 // the running analysis.
-const handleProjectCreate = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleProjectCreate = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const origFilename = String(req.headers["x-audio-filename"] ?? "").slice(0, 200);
   if (!origFilename) {
     res.statusCode = 400;
@@ -1423,7 +1463,11 @@ const handleProjectCreate = async (
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ error: "upload-write-failed", detail: String(err) }));
-    try { await fs.unlink(tmpFile); } catch { /* best effort */ }
+    try {
+      await fs.unlink(tmpFile);
+    } catch {
+      /* best effort */
+    }
     return;
   }
 
@@ -1437,10 +1481,7 @@ const handleProjectCreate = async (
 // pipeline-origin elements. User-origin elements and on-disk artifacts
 // (analysis/**/*.png, phase*-events.json) are NOT touched; use Re-analyze
 // to regenerate.
-const handleAnalyzeClear = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleAnalyzeClear = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const stem: string = String(body?.stem ?? "").trim();
   if (!STEM_RE.test(stem)) {
@@ -1463,7 +1504,9 @@ const handleAnalyzeClear = async (
       res.end(JSON.stringify({ error: "cannot clear while analysis is running" }));
       return;
     }
-  } catch { /* no status or corrupt — proceed (will be harmless) */ }
+  } catch {
+    /* no status or corrupt — proceed (will be harmless) */
+  }
 
   await snapshotAnalysisJson(projectDir);
   await clearAnalysisEvents(projectDir);
@@ -1476,10 +1519,7 @@ const handleAnalyzeClear = async (
 // Lists the per-run analysis.json snapshots retained for a project. Returns
 // [{ id, timestamp, events: number }] sorted newest-first. UI consumes this
 // via the StageStrip "runs" dropdown so users can revert to a prior run.
-const handleAnalyzeRunsList = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleAnalyzeRunsList = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   // Connect strips the "/api/analyze/runs/" mount; req.url is "<stem>" or similar
   const raw = (req.url ?? "").split("?")[0];
   const stem = decodeURIComponent(raw.replace(/^\/+/, "").split("/")[0]);
@@ -1506,12 +1546,15 @@ const handleAnalyzeRunsList = async (
         const raw = await fs.readFile(fp, "utf8");
         const parsed = JSON.parse(raw);
         events =
-          (parsed?.phase2_events_sec?.length ?? 0) ||
-          (parsed?.phase1_events_sec?.length ?? 0);
+          (parsed?.phase2_events_sec?.length ?? 0) || (parsed?.phase1_events_sec?.length ?? 0);
       } catch {
         /* unreadable run — still list the id */
       }
-      return { id, timestamp: id.replace(/-/g, (m, i) => (i < 10 ? "-" : i < 13 ? "T" : ":")), events };
+      return {
+        id,
+        timestamp: id.replace(/-/g, (m, i) => (i < 10 ? "-" : i < 13 ? "T" : ":")),
+        events,
+      };
     }),
   );
   res.statusCode = 200;
@@ -1585,10 +1628,7 @@ const handleAnalyzeRunsRestore = async (
 // to the process group so energy-bands.py / plot-pioneer.py / claude -p
 // descendants all die together. Writes a final status frame with
 // phase:"cancelled" so the editor's SSE handler clears Running state.
-const handleAnalyzeCancel = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleAnalyzeCancel = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const stem: string = String(body?.stem ?? "").trim();
   if (!STEM_RE.test(stem)) {
@@ -1606,7 +1646,9 @@ const handleAnalyzeCancel = async (
       stdio: ["ignore", "pipe", "ignore"],
     });
     let stdout = "";
-    pgrep.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+    pgrep.stdout?.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
     await new Promise<void>((resolve) => pgrep.on("exit", () => resolve()));
     const pids = stdout.trim().split(/\s+/).filter(Boolean).map(Number).filter(Number.isFinite);
     for (const pid of pids) {
@@ -1630,12 +1672,18 @@ const handleAnalyzeCancel = async (
     const raw = await fs.readFile(statusFile, "utf8");
     const st = JSON.parse(raw);
     if (st?.startedAt) startedAt = st.startedAt;
-  } catch { /* fine */ }
+  } catch {
+    /* fine */
+  }
   const tmp = statusFile + ".tmp";
   const now = Date.now();
   await fs.writeFile(
     tmp,
-    JSON.stringify({ startedAt, phase: "cancelled", stage: null, updatedAt: now, endedAt: now }, null, 2),
+    JSON.stringify(
+      { startedAt, phase: "cancelled", stage: null, updatedAt: now, endedAt: now },
+      null,
+      2,
+    ),
   );
   await fs.rename(tmp, statusFile);
 
@@ -1664,7 +1712,7 @@ const handleAnalyzeEventsUpdate = async (
     return;
   }
   const events = rawEvents
-    .map((v: unknown) => typeof v === "number" ? v : Number(v))
+    .map((v: unknown) => (typeof v === "number" ? v : Number(v)))
     .filter((v: number) => Number.isFinite(v) && v >= 0);
   // Dedupe within 0.05s of each other; keep first occurrence.
   events.sort((a: number, b: number) => a - b);
@@ -1686,7 +1734,9 @@ const handleAnalyzeEventsUpdate = async (
       res.end(JSON.stringify({ error: "cannot edit events while analysis is running" }));
       return;
     }
-  } catch { /* no status — fine */ }
+  } catch {
+    /* no status — fine */
+  }
 
   const analysisFile = path.join(projectDir, "analysis.json");
   let existing: Record<string, unknown> = {};
@@ -1694,7 +1744,9 @@ const handleAnalyzeEventsUpdate = async (
     const raw = await fs.readFile(analysisFile, "utf8");
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") existing = parsed as Record<string, unknown>;
-  } catch { /* missing file is fine */ }
+  } catch {
+    /* missing file is fine */
+  }
   await snapshotAnalysisJson(projectDir);
   const merged = {
     ...existing,
@@ -1706,10 +1758,7 @@ const handleAnalyzeEventsUpdate = async (
   res.end(JSON.stringify({ stem, events: deduped }));
 };
 
-const handleChat = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleChat = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const message: string = String(body?.message ?? "").slice(0, 4000);
   const state = body?.state ?? {};
@@ -1756,9 +1805,7 @@ const handleChat = async (
   child.stdout.on("data", (c) => out.push(c));
   child.stderr.on("data", (c) => err.push(c));
 
-  const code: number = await new Promise((resolve) =>
-    child.on("close", (c) => resolve(c ?? -1)),
-  );
+  const code: number = await new Promise((resolve) => child.on("close", (c) => resolve(c ?? -1)));
   const stdout = Buffer.concat(out).toString("utf8");
   const stderr = Buffer.concat(err).toString("utf8");
 
@@ -1768,12 +1815,12 @@ const handleChat = async (
     // with known markers in stderr/stdout.
     const combined = `${stderr}\n${stdout}`.toLowerCase();
     const rateLimited =
-      /rate[- ]?limit/.test(combined) ||
-      /too many requests/.test(combined) ||
-      /429/.test(combined);
+      /rate[- ]?limit/.test(combined) || /too many requests/.test(combined) || /429/.test(combined);
     if (rateLimited) {
       // Try to pull "retry in Ns" / "retry after Ns" out of the message.
-      const match = combined.match(/retry[^0-9]{0,20}(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes)?/);
+      const match = combined.match(
+        /retry[^0-9]{0,20}(\d+)\s*(s|sec|second|seconds|m|min|minute|minutes)?/,
+      );
       let retryAfter = 60;
       if (match) {
         const n = Number(match[1]);
@@ -1808,10 +1855,17 @@ const handleChat = async (
     if (start === -1 || end <= start) return null;
     try {
       const parsed = JSON.parse(s.slice(start, end + 1));
-      if (parsed && typeof parsed === "object" && typeof parsed.reply === "string" && Array.isArray(parsed.mutations)) {
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof parsed.reply === "string" &&
+        Array.isArray(parsed.mutations)
+      ) {
         return { reply: parsed.reply, mutations: parsed.mutations };
       }
-    } catch { /* not JSON */ }
+    } catch {
+      /* not JSON */
+    }
     return null;
   };
   const finalRe = /<final>([\s\S]*?)<\/final>/g;
@@ -1843,10 +1897,7 @@ const handleChat = async (
 //                    {type:"done", reply, mutations} OR {type:"error", ...}
 //   - Final `done` event parses the accumulated text for <final>{...}</final>
 //     the same way /api/chat does, so the client can still apply mutations.
-const handleChatStream = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleChatStream = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const message: string = String(body?.message ?? "").slice(0, 4000);
   const state = body?.state ?? {};
@@ -1862,12 +1913,15 @@ const handleChatStream = async (
   // between spawns, so context is re-sent each turn). Bounded by the client
   // to last 8 turns @ 600 chars each.
   const historyBlock = rawHistory.length
-    ? "\n\nPrior conversation (most recent last, for context resolution — \"that event\", \"make it bigger\", etc.):\n" +
+    ? '\n\nPrior conversation (most recent last, for context resolution — "that event", "make it bigger", etc.):\n' +
       rawHistory
-        .filter((t: unknown): t is { role: string; content: string } =>
-          !!t && typeof t === "object" &&
-          typeof (t as { role?: unknown }).role === "string" &&
-          typeof (t as { content?: unknown }).content === "string")
+        .filter(
+          (t: unknown): t is { role: string; content: string } =>
+            !!t &&
+            typeof t === "object" &&
+            typeof (t as { role?: unknown }).role === "string" &&
+            typeof (t as { content?: unknown }).content === "string",
+        )
         .map((t) => `[${t.role}]: ${t.content}`)
         .join("\n")
     : "";
@@ -1892,17 +1946,24 @@ const handleChatStream = async (
   });
 
   const send = (obj: unknown) => {
-    try { res.write(JSON.stringify(obj) + "\n"); } catch { /* closed */ }
+    try {
+      res.write(JSON.stringify(obj) + "\n");
+    } catch {
+      /* closed */
+    }
   };
 
   const child = spawn(
     "claude",
     [
       "-p",
-      "--output-format", "stream-json",
+      "--output-format",
+      "stream-json",
       "--verbose",
-      "--permission-mode", "bypassPermissions",
-      "--append-system-prompt", CHAT_SYSTEM,
+      "--permission-mode",
+      "bypassPermissions",
+      "--append-system-prompt",
+      CHAT_SYSTEM,
       userPrompt,
     ],
     { cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"] },
@@ -1917,7 +1978,11 @@ const handleChatStream = async (
   const processLine = (line: string) => {
     if (!line.trim()) return;
     let ev: Record<string, unknown>;
-    try { ev = JSON.parse(line); } catch { return; /* skip malformed */ }
+    try {
+      ev = JSON.parse(line);
+    } catch {
+      return; /* skip malformed */
+    }
     const t = ev.type;
     if (t === "assistant") {
       const m = ev.message as { content?: Array<Record<string, unknown>> } | undefined;
@@ -1943,8 +2008,14 @@ const handleChatStream = async (
         if (c.type === "tool_result") {
           const raw = c.content;
           const text = Array.isArray(raw)
-            ? raw.map((x: unknown) => typeof x === "object" && x && "text" in x ? (x as { text: string }).text : "").join("")
-            : typeof raw === "string" ? raw : "";
+            ? raw
+                .map((x: unknown) =>
+                  typeof x === "object" && x && "text" in x ? (x as { text: string }).text : "",
+                )
+                .join("")
+            : typeof raw === "string"
+              ? raw
+              : "";
           send({
             type: "tool_result",
             tool_use_id: typeof c.tool_use_id === "string" ? c.tool_use_id : "",
@@ -1963,10 +2034,17 @@ const handleChatStream = async (
         if (start === -1 || end <= start) return null;
         try {
           const parsed = JSON.parse(s.slice(start, end + 1));
-          if (parsed && typeof parsed === "object" && typeof parsed.reply === "string" && Array.isArray(parsed.mutations)) {
+          if (
+            parsed &&
+            typeof parsed === "object" &&
+            typeof parsed.reply === "string" &&
+            Array.isArray(parsed.mutations)
+          ) {
             return { reply: parsed.reply, mutations: parsed.mutations };
           }
-        } catch { /* not JSON */ }
+        } catch {
+          /* not JSON */
+        }
         return null;
       };
       const finalRe = /<final>([\s\S]*?)<\/final>/g;
@@ -1974,7 +2052,8 @@ const handleChatStream = async (
       let m: RegExpExecArray | null;
       while ((m = finalRe.exec(result)) !== null) lastFinal = m[1];
       const primary = lastFinal !== null ? tryParse(lastFinal) : null;
-      const payload = primary ?? tryParse(result) ?? { reply: result.trim() || "(no output)", mutations: [] };
+      const payload = primary ??
+        tryParse(result) ?? { reply: result.trim() || "(no output)", mutations: [] };
       send({ type: "done", reply: payload.reply, mutations: payload.mutations });
     }
     // other types (system, rate_limit_event, thinking) are dropped client-side
@@ -2001,9 +2080,18 @@ const handleChatStream = async (
         /rate[- ]?limit/.test(combined) ||
         /too many requests/.test(combined) ||
         /429/.test(combined);
-      send({ type: "error", code, error: rateLimited ? "claude-cli-rate-limited" : "claude-cli-failed", stderr: err.slice(0, 500) });
+      send({
+        type: "error",
+        code,
+        error: rateLimited ? "claude-cli-rate-limited" : "claude-cli-failed",
+        stderr: err.slice(0, 500),
+      });
     }
-    try { res.end(); } catch { /* already closed */ }
+    try {
+      res.end();
+    } catch {
+      /* already closed */
+    }
   });
 
   req.on("close", () => {
@@ -2019,10 +2107,7 @@ const handleChatStream = async (
 // and spawns the user's editor (EDITOR_OPEN_CMD env, default: `code`).
 // Dev-only — this plugin only runs under `vite dev` / `vite preview`.
 
-const handleOpenInEditor = async (
-  req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> => {
+const handleOpenInEditor = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const url = new URL(req.url ?? "", "http://localhost");
   const raw = url.searchParams.get("file") ?? undefined;
   const parsed = parseFileArg(raw);
@@ -2063,14 +2148,16 @@ const handleOpenInEditor = async (
 // Vite plugin wiring
 // ---------------------------------------------------------------------------
 
-const wrap = (
-  method: "GET" | "POST",
-  handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
-): Connect.NextHandleFunction =>
+const wrap =
+  (
+    method: "GET" | "POST",
+    handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
+  ): Connect.NextHandleFunction =>
   (req, res, next) => {
     // Accept HEAD wherever GET is allowed — browsers preload audio via HEAD
     // and falling through to Vite's SPA fallback would 200 with HTML.
-    const ok = method === "GET" ? req.method === "GET" || req.method === "HEAD" : req.method === method;
+    const ok =
+      method === "GET" ? req.method === "GET" || req.method === "HEAD" : req.method === method;
     if (!ok) {
       next();
       return;
@@ -2098,7 +2185,10 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/analyze/run", wrap("POST", handleAnalyzeRun));
     server.middlewares.use("/api/analyze/seed-beats", wrap("POST", handleAnalyzeSeedBeats));
     server.middlewares.use("/api/projects/create", wrap("POST", handleProjectCreate));
-    server.middlewares.use("/api/projects/create-from-path", wrap("POST", handleProjectCreateFromPath));
+    server.middlewares.use(
+      "/api/projects/create-from-path",
+      wrap("POST", handleProjectCreateFromPath),
+    );
     server.middlewares.use("/api/analyze/clear", wrap("POST", handleAnalyzeClear));
     server.middlewares.use("/api/analyze/cancel", wrap("POST", handleAnalyzeCancel));
     server.middlewares.use("/api/analyze/events/update", wrap("POST", handleAnalyzeEventsUpdate));

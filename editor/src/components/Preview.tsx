@@ -8,10 +8,11 @@
 // suppressed in the preview by passing audioSrc=null; at render time
 // (remotion render), the CLI passes audioSrc through and the composition
 // plays it normally.
-import { Player, PlayerRef, CallbackListener } from "@remotion/player";
-import { useRef, useEffect, useMemo } from "react";
+
+import { defaultMusicVideoProps, MusicVideo, type MusicVideoProps } from "@compositions/MusicVideo";
+import { type CallbackListener, Player, type PlayerRef } from "@remotion/player";
+import { useEffect, useMemo, useRef } from "react";
 import { useEditorStore } from "../store";
-import { MusicVideo, defaultMusicVideoProps, type MusicVideoProps } from "@compositions/MusicVideo";
 import { toEditorUrl } from "../utils/url";
 
 export const Preview = () => {
@@ -97,9 +98,7 @@ export const Preview = () => {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {audioUrl && (
-        <audio ref={audioElRef} src={audioUrl} preload="auto" />
-      )}
+      {audioUrl && <audio ref={audioElRef} src={audioUrl} preload="auto" />}
       <Player
         ref={playerRef}
         component={MusicVideo}
@@ -113,32 +112,28 @@ export const Preview = () => {
         controls={false}
         style={{ width: "100%", maxHeight: "100%" }}
         clickToPlay={false}
-      errorFallback={({ error }) => (
-        <div
-          style={{
-            padding: 16,
-            background: "#2a0000",
-            color: "#fff",
-            fontSize: 12,
-            fontFamily: "monospace",
-            width: "100%",
-            height: "100%",
-            overflow: "auto",
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          <div style={{ color: "#f66", fontWeight: 600, marginBottom: 8 }}>
-            Composition error
+        errorFallback={({ error }) => (
+          <div
+            style={{
+              padding: 16,
+              background: "#2a0000",
+              color: "#fff",
+              fontSize: 12,
+              fontFamily: "monospace",
+              width: "100%",
+              height: "100%",
+              overflow: "auto",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            <div style={{ color: "#f66", fontWeight: 600, marginBottom: 8 }}>Composition error</div>
+            {error.message}
+            {error.stack && (
+              <div style={{ marginTop: 8, color: "#ccc", fontSize: 10 }}>{error.stack}</div>
+            )}
           </div>
-          {error.message}
-          {error.stack && (
-            <div style={{ marginTop: 8, color: "#ccc", fontSize: 10 }}>
-              {error.stack}
-            </div>
-          )}
-        </div>
-      )}
-    />
+        )}
+      />
     </div>
   );
 };

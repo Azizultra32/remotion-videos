@@ -1,11 +1,8 @@
-import type { TimelineElement as TimelineElementType } from "../types";
+import { getElementModule, getElementSourcePath } from "@compositions/elements/registry";
 import { useElementDrag } from "../hooks/useElementDrag";
 import { useElementResize } from "../hooks/useElementResize";
 import { useEditorStore } from "../store";
-import {
-  getElementModule,
-  getElementSourcePath,
-} from "@compositions/elements/registry";
+import type { TimelineElement as TimelineElementType } from "../types";
 import { openInEditor } from "../utils/openInEditor";
 
 type Props = {
@@ -41,8 +38,8 @@ export const TimelineElement = ({ element, pxPerSec, height }: Props) => {
 
   const mod = getElementModule(element.type);
   const color = mod
-    ? categoryColors[mod.category] ?? "#666"
-    : legacyColors[element.type] ?? "#666";
+    ? (categoryColors[mod.category] ?? "#666")
+    : (legacyColors[element.type] ?? "#666");
 
   const leftPx = element.startSec * pxPerSec;
   const widthPx = Math.max(HANDLE_W * 2 + 4, element.durationSec * pxPerSec);

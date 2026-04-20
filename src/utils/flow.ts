@@ -65,10 +65,7 @@ export const delay = (offsetSec: number, child: FlowNode): FlowNode => {
   };
 };
 
-export const sequence = (
-  stepSec: number,
-  children: FlowNode[],
-): FlowNode => {
+export const sequence = (stepSec: number, children: FlowNode[]): FlowNode => {
   requireNonNegativeFinite(stepSec, "sequence.stepSec");
   if (children.length === 0) {
     return { kind: "sequence", durationSec: 0, stepSec, children };

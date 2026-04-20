@@ -49,7 +49,20 @@ const useApproxPathLength = (d: string): number => {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { svgPath, viewBoxWidth, viewBoxHeight, stroke, strokeWidth, fill, x, y, widthPct, heightPct, triggerOnBeats, drawDurationFrames } = element.props;
+  const {
+    svgPath,
+    viewBoxWidth,
+    viewBoxHeight,
+    stroke,
+    strokeWidth,
+    fill,
+    x,
+    y,
+    widthPct,
+    heightPct,
+    triggerOnBeats,
+    drawDurationFrames,
+  } = element.props;
   const pathLen = useApproxPathLength(svgPath);
 
   let progress: number;

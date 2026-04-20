@@ -8,8 +8,9 @@
 //   schema._def.type              is a lowercase string like "string", "number"
 //   schema.options                is the public array of enum values
 //   wrapper._def.innerType        is the wrapped schema (optional/default/nullable)
-import type { z } from "zod";
+
 import { EASING_NAMES } from "@utils/easing";
+import type { z } from "zod";
 import { isEasingField } from "../utils/schemaFields";
 
 const fieldStyle: React.CSSProperties = {
@@ -32,13 +33,15 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
   </label>
 );
 
-const isColorField = (name: string): boolean =>
-  /color|stroke|fill|background/i.test(name);
+const isColorField = (name: string): boolean => /color|stroke|fill|background/i.test(name);
 
 // Peel optional/default/nullable off so we render the inner type.
 const unwrap = (schema: any): any => {
   let s = schema;
-  while (s && (s._def?.type === "optional" || s._def?.type === "default" || s._def?.type === "nullable")) {
+  while (
+    s &&
+    (s._def?.type === "optional" || s._def?.type === "default" || s._def?.type === "nullable")
+  ) {
     s = s._def.innerType;
   }
   return s;
@@ -56,9 +59,7 @@ type FieldProps = {
 const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
   const inner = unwrap(schema);
   const tn = defType(inner);
-  const prettyName = name
-    .replace(/([A-Z])/g, " $1")
-    .replace(/^./, (c) => c.toUpperCase());
+  const prettyName = name.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
 
   if (tn === "string") {
     if (isColorField(name)) {
@@ -77,11 +78,7 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
       const current = String(value ?? "linear");
       return (
         <Row label={prettyName}>
-          <select
-            value={current}
-            onChange={(e) => onChange(e.target.value)}
-            style={fieldStyle}
-          >
+          <select value={current} onChange={(e) => onChange(e.target.value)} style={fieldStyle}>
             {EASING_NAMES.map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -134,8 +131,7 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
     // Zod 4: `.options` is the public array of enum values; fall back to
     // deriving from `_def.entries` for exotic schemas.
     const options: string[] =
-      (inner.options as string[]) ??
-      (inner._def?.entries ? Object.values(inner._def.entries) : []);
+      (inner.options as string[]) ?? (inner._def?.entries ? Object.values(inner._def.entries) : []);
     return (
       <Row label={prettyName}>
         <select
@@ -144,7 +140,9 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
           style={fieldStyle}
         >
           {options.map((o) => (
-            <option key={o} value={o}>{o}</option>
+            <option key={o} value={o}>
+              {o}
+            </option>
           ))}
         </select>
       </Row>
@@ -158,7 +156,12 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
         <textarea
           value={arr.join("\n")}
           onChange={(e) =>
-            onChange(e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))
+            onChange(
+              e.target.value
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean),
+            )
           }
           rows={4}
           style={{ ...fieldStyle, fontFamily: "monospace" }}

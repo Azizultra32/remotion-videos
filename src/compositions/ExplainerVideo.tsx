@@ -1,16 +1,15 @@
-import React from "react";
+import { zColor } from "@remotion/zod-types";
+import type React from "react";
 import {
   AbsoluteFill,
-  useCurrentFrame,
-  useVideoConfig,
+  Easing,
   interpolate,
   spring,
-  Easing,
+  useCurrentFrame,
+  useVideoConfig,
 } from "remotion";
 import { z } from "zod";
-import { zColor } from "@remotion/zod-types";
-import { AnimatedTitle } from "../components";
-import { ProgressBar } from "../components";
+import { AnimatedTitle, ProgressBar } from "../components";
 
 const sceneSchema = z.object({
   title: z.string(),
@@ -36,23 +35,22 @@ const SceneContent: React.FC<{
   const transitionDuration = 15;
 
   // Entry: slide in from right
-  const entryProgress = interpolate(
-    sceneFrame,
-    [0, transitionDuration],
-    [0, 1],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) }
-  );
+  const entryProgress = interpolate(sceneFrame, [0, transitionDuration], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.out(Easing.cubic),
+  });
 
   // Exit: slide out to left
   const exitProgress = interpolate(
     sceneFrame,
     [sceneDuration - transitionDuration, sceneDuration],
     [0, 1],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.in(Easing.cubic) }
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.in(Easing.cubic) },
   );
 
-  const translateX = interpolate(entryProgress, [0, 1], [600, 0]) +
-    interpolate(exitProgress, [0, 1], [0, -600]);
+  const translateX =
+    interpolate(entryProgress, [0, 1], [600, 0]) + interpolate(exitProgress, [0, 1], [0, -600]);
 
   const opacity = entryProgress * (1 - exitProgress);
 
@@ -176,10 +174,7 @@ export const ExplainerVideo: React.FC<ExplainerVideoProps> = ({ scenes }) => {
   }
 
   const sceneDuration = durationInFrames / scenes.length;
-  const currentSceneIndex = Math.min(
-    Math.floor(frame / sceneDuration),
-    scenes.length - 1
-  );
+  const currentSceneIndex = Math.min(Math.floor(frame / sceneDuration), scenes.length - 1);
   const sceneFrame = frame - currentSceneIndex * sceneDuration;
   const sceneProgress = sceneFrame / sceneDuration;
   const currentScene = scenes[currentSceneIndex];
@@ -195,12 +190,7 @@ export const ExplainerVideo: React.FC<ExplainerVideoProps> = ({ scenes }) => {
       <AbsoluteFill style={{ opacity: 0.03 }}>
         <svg width="100%" height="100%">
           <defs>
-            <pattern
-              id="dots-pattern"
-              width="30"
-              height="30"
-              patternUnits="userSpaceOnUse"
-            >
+            <pattern id="dots-pattern" width="30" height="30" patternUnits="userSpaceOnUse">
               <circle cx="15" cy="15" r="1.5" fill="white" />
             </pattern>
           </defs>

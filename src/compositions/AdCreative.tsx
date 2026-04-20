@@ -1,18 +1,18 @@
-import React from "react";
+import { zColor } from "@remotion/zod-types";
+import type React from "react";
 import {
   AbsoluteFill,
   Audio,
-  Sequence,
   Img,
+  interpolate,
   OffthreadVideo,
+  Sequence,
+  spring,
   staticFile,
   useCurrentFrame,
   useVideoConfig,
-  interpolate,
-  spring,
 } from "remotion";
 import { z } from "zod";
-import { zColor } from "@remotion/zod-types";
 
 // ---------------------------------------------------------------------------
 // Zod Schema
@@ -275,11 +275,7 @@ const PriceTag: React.FC<{
   const tagRotate = interpolate(scaleIn, [0, 1], [-15, 0]);
 
   // Subtle shimmer
-  const shimmer = interpolate(
-    Math.sin(frame * 0.1),
-    [-1, 1],
-    [0.85, 1]
-  );
+  const shimmer = interpolate(Math.sin(frame * 0.1), [-1, 1], [0.85, 1]);
 
   return (
     <AbsoluteFill
@@ -367,11 +363,7 @@ const CtaSection: React.FC<{
   // Pulsing glow after entry
   const pulsePhase = Math.max(0, frame - 20);
   const pulse = 1 + Math.sin(pulsePhase * 0.18) * 0.035;
-  const glowIntensity = interpolate(
-    Math.sin(pulsePhase * 0.14),
-    [-1, 1],
-    [0.3, 0.8]
-  );
+  const glowIntensity = interpolate(Math.sin(pulsePhase * 0.14), [-1, 1], [0.3, 0.8]);
 
   // Urgency text fade in
   const urgencyOpacity = interpolate(frame, [25, 50], [0, 1], {
@@ -380,11 +372,7 @@ const CtaSection: React.FC<{
   });
 
   // Countdown feel — flicker the arrow
-  const arrowOpacity = interpolate(
-    Math.sin(frame * 0.3),
-    [-1, 1],
-    [0.4, 1]
-  );
+  const arrowOpacity = interpolate(Math.sin(frame * 0.3), [-1, 1], [0.4, 1]);
 
   return (
     <AbsoluteFill
@@ -547,9 +535,7 @@ export const AdCreative: React.FC<AdCreativeProps> = ({
       </Sequence>
 
       {/* Optional voiceover audio track */}
-      {voiceoverUrl && (
-        <Audio src={staticFile(voiceoverUrl)} volume={0.8} />
-      )}
+      {voiceoverUrl && <Audio src={staticFile(voiceoverUrl)} volume={0.8} />}
 
       {/* Optional lip-sync talking head overlay */}
       {lipSyncVideoUrl && (

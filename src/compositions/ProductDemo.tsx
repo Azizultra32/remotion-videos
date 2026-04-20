@@ -1,14 +1,14 @@
-import React from "react";
+import { zColor } from "@remotion/zod-types";
+import type React from "react";
 import {
   AbsoluteFill,
+  interpolate,
   Sequence,
+  spring,
   useCurrentFrame,
   useVideoConfig,
-  interpolate,
-  spring,
 } from "remotion";
 import { z } from "zod";
-import { zColor } from "@remotion/zod-types";
 import { AnimatedTitle } from "../components";
 
 export const productDemoSchema = z.object({
@@ -49,11 +49,7 @@ export const ProductDemo: React.FC<ProductDemoProps> = ({
 
       {/* Features sequence */}
       {features.map((feature, i) => (
-        <Sequence
-          key={feature}
-          from={90 + i * 50}
-          durationInFrames={50}
-        >
+        <Sequence key={feature} from={90 + i * 50} durationInFrames={50}>
           <FeatureScene
             feature={feature}
             index={i}
@@ -89,9 +85,7 @@ const TitleScene: React.FC<{
   });
 
   return (
-    <AbsoluteFill
-      style={{ justifyContent: "center", alignItems: "center" }}
-    >
+    <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
       <AnimatedTitle
         text={productName}
         animationType="scale"
@@ -191,9 +185,7 @@ const CTAScene: React.FC<{
   const scale = spring({ frame, fps, config: { damping: 200 } });
 
   return (
-    <AbsoluteFill
-      style={{ justifyContent: "center", alignItems: "center" }}
-    >
+    <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
       <div
         style={{
           backgroundColor: primaryColor,

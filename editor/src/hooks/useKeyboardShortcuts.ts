@@ -60,9 +60,7 @@ export const useKeyboardShortcuts = () => {
           {
             const bd = s.beatData;
             const events =
-              (bd?.phase2_events_sec?.length
-                ? bd.phase2_events_sec
-                : bd?.phase1_events_sec) ?? [];
+              (bd?.phase2_events_sec?.length ? bd.phase2_events_sec : bd?.phase1_events_sec) ?? [];
             if (events.length === 0) return;
             const i = events.findIndex((t, idx) => {
               const next = events[idx + 1] ?? Number.POSITIVE_INFINITY;
@@ -77,9 +75,7 @@ export const useKeyboardShortcuts = () => {
           {
             const bd = s.beatData;
             const events =
-              (bd?.phase2_events_sec?.length
-                ? bd.phase2_events_sec
-                : bd?.phase1_events_sec) ?? [];
+              (bd?.phase2_events_sec?.length ? bd.phase2_events_sec : bd?.phase1_events_sec) ?? [];
             if (events.length === 0) return;
             const i = events.findIndex((t, idx) => {
               const next = events[idx + 1] ?? Number.POSITIVE_INFINITY;

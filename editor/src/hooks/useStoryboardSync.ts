@@ -79,7 +79,9 @@ export const useStoryboardSync = () => {
         // One microtask later, allow autosave to resume. The setScenes above
         // triggered the change listener already; clearing the flag here means
         // the next mutation (a real user edit) will save.
-        queueMicrotask(() => { hydratingRef.current = false; });
+        queueMicrotask(() => {
+          hydratingRef.current = false;
+        });
       });
 
     return () => {
@@ -104,8 +106,12 @@ export const useStoryboardSync = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stem, storyboard }),
       })
-        .then((r) => { if (r.ok) lastSavedRef.current = serialized; })
-        .catch(() => { /* will retry on next mutation */ });
+        .then((r) => {
+          if (r.ok) lastSavedRef.current = serialized;
+        })
+        .catch(() => {
+          /* will retry on next mutation */
+        });
     }, SAVE_DEBOUNCE_MS);
 
     return () => {

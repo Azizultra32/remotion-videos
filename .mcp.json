@@ -3,9 +3,7 @@
     "remotion-documentation": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "@remotion/mcp@latest"
-      ],
+      "args": ["@remotion/mcp@latest"],
       "env": {}
     }
   }

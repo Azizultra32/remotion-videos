@@ -1,7 +1,7 @@
-import React from "react";
+import type React from "react";
 import { z } from "zod";
-import type { ElementModule, ElementRendererProps } from "../types";
 import { useFFT } from "../../../hooks/useFFT";
+import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   color: z.string(),

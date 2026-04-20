@@ -1,7 +1,11 @@
-import React from "react";
-import { z } from "zod";
+import {
+  createSmoothSvgPath,
+  useWindowedAudioData,
+  visualizeAudioWaveform,
+} from "@remotion/media-utils";
+import type React from "react";
 import { staticFile } from "remotion";
-import { useWindowedAudioData, visualizeAudioWaveform, createSmoothSvgPath } from "@remotion/media-utils";
+import { z } from "zod";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
@@ -27,9 +31,13 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { color, strokeWidth, amplitude, position, height, opacity, numberOfSamples } = element.props;
+  const { color, strokeWidth, amplitude, position, height, opacity, numberOfSamples } =
+    element.props;
   if (!ctx.audioSrc) return null;
-  const resolved = ctx.audioSrc.startsWith("http") || ctx.audioSrc.startsWith("/") ? ctx.audioSrc : staticFile(ctx.audioSrc);
+  const resolved =
+    ctx.audioSrc.startsWith("http") || ctx.audioSrc.startsWith("/")
+      ? ctx.audioSrc
+      : staticFile(ctx.audioSrc);
   const { audioData, dataOffsetInSeconds } = useWindowedAudioData({
     src: resolved,
     frame: ctx.frame,
@@ -53,7 +61,12 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   }));
   const d = createSmoothSvgPath({ points });
 
-  const top = position === "top" ? 0 : position === "bottom" ? ctx.height - height : (ctx.height - height) / 2;
+  const top =
+    position === "top"
+      ? 0
+      : position === "bottom"
+        ? ctx.height - height
+        : (ctx.height - height) / 2;
 
   return (
     <svg
@@ -62,7 +75,14 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
       height={height}
       style={{ position: "absolute", left: 0, top, opacity }}
     >
-      <path d={d} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={d}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 };

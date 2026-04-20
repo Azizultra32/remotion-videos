@@ -10,7 +10,9 @@ if (args[0] === "--list-voices") {
   process.exit(0);
 }
 
-const text = args.find((a) => !a.startsWith("--")) || "Welcome to our product demo. Experience the future of productivity.";
+const text =
+  args.find((a) => !a.startsWith("--")) ||
+  "Welcome to our product demo. Experience the future of productivity.";
 const voiceId = args.find((a) => a.startsWith("--voice="))?.split("=")[1];
 
 console.log(`Generating voiceover for: "${text.slice(0, 60)}..."`);

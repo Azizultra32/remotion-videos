@@ -1,10 +1,5 @@
-import { describe, it, expect } from "vitest";
-import {
-  resolveEvent,
-  resolveEventFrame,
-  resolveStartSec,
-  type EventMark,
-} from "../events";
+import { describe, expect, it } from "vitest";
+import { type EventMark, resolveEvent, resolveEventFrame, resolveStartSec } from "../events";
 
 describe("resolveEvent", () => {
   it("returns the event's timeSec when the name matches", () => {

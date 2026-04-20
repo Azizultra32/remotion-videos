@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { applyMutations } from "../src/utils/applyMutations";
+import { beforeEach, describe, expect, it } from "vitest";
 import { useEditorStore } from "../src/store";
+import { applyMutations } from "../src/utils/applyMutations";
 
 beforeEach(() => {
   useEditorStore.setState({
@@ -21,9 +21,7 @@ describe("applyMutations · events", () => {
     const r = applyMutations([{ op: "addEvent", name: "drop1", timeSec: 30 }]);
     expect(r.applied).toBe(1);
     expect(r.skipped).toBe(0);
-    expect(useEditorStore.getState().events).toEqual([
-      { name: "drop1", timeSec: 30 },
-    ]);
+    expect(useEditorStore.getState().events).toEqual([{ name: "drop1", timeSec: 30 }]);
   });
 
   it("addEvent is idempotent on the same name (updates time)", () => {
@@ -42,43 +40,33 @@ describe("applyMutations · events", () => {
   });
 
   it("addEvent rejects negative timeSec", () => {
-    const r = applyMutations([
-      { op: "addEvent", name: "x", timeSec: -1 },
-    ]);
+    const r = applyMutations([{ op: "addEvent", name: "x", timeSec: -1 }]);
     expect(r.applied).toBe(0);
     expect(r.errors[0]).toMatch(/non-negative/);
   });
 
   it("moveEvent updates an existing event", () => {
     applyMutations([{ op: "addEvent", name: "drop1", timeSec: 10 }]);
-    const r = applyMutations([
-      { op: "moveEvent", name: "drop1", timeSec: 42 },
-    ]);
+    const r = applyMutations([{ op: "moveEvent", name: "drop1", timeSec: 42 }]);
     expect(r.applied).toBe(1);
     expect(useEditorStore.getState().events[0].timeSec).toBe(42);
   });
 
   it("moveEvent rejects when name is absent", () => {
-    const r = applyMutations([
-      { op: "moveEvent", name: "ghost", timeSec: 10 },
-    ]);
+    const r = applyMutations([{ op: "moveEvent", name: "ghost", timeSec: 10 }]);
     expect(r.applied).toBe(0);
     expect(r.errors[0]).toMatch(/no event "ghost"/);
   });
 
   it("renameEvent renames an existing event", () => {
     applyMutations([{ op: "addEvent", name: "old", timeSec: 5 }]);
-    const r = applyMutations([
-      { op: "renameEvent", oldName: "old", newName: "new" },
-    ]);
+    const r = applyMutations([{ op: "renameEvent", oldName: "old", newName: "new" }]);
     expect(r.applied).toBe(1);
     expect(useEditorStore.getState().events[0].name).toBe("new");
   });
 
   it("renameEvent rejects when oldName is absent", () => {
-    const r = applyMutations([
-      { op: "renameEvent", oldName: "ghost", newName: "x" },
-    ]);
+    const r = applyMutations([{ op: "renameEvent", oldName: "ghost", newName: "x" }]);
     expect(r.applied).toBe(0);
     expect(r.errors[0]).toMatch(/no event "ghost"/);
   });
@@ -86,9 +74,7 @@ describe("applyMutations · events", () => {
   it("renameEvent rejects on collision with existing newName", () => {
     applyMutations([{ op: "addEvent", name: "a", timeSec: 1 }]);
     applyMutations([{ op: "addEvent", name: "b", timeSec: 2 }]);
-    const r = applyMutations([
-      { op: "renameEvent", oldName: "a", newName: "b" },
-    ]);
+    const r = applyMutations([{ op: "renameEvent", oldName: "a", newName: "b" }]);
     expect(r.applied).toBe(0);
     expect(r.errors[0]).toMatch(/already exists/);
   });
@@ -117,9 +103,7 @@ describe("applyMutations · events", () => {
       props: {},
     };
     useEditorStore.getState().addElement(el);
-    const r = applyMutations([
-      { op: "updateElement", id: "el-1", patch: { startEvent: "drop1" } },
-    ]);
+    const r = applyMutations([{ op: "updateElement", id: "el-1", patch: { startEvent: "drop1" } }]);
     expect(r.applied).toBe(1);
     expect(useEditorStore.getState().elements[0].startEvent).toBe("drop1");
   });
@@ -135,9 +119,7 @@ describe("applyMutations · events", () => {
       props: {},
       startEvent: "drop1",
     });
-    const r = applyMutations([
-      { op: "updateElement", id: "el-1", patch: { startEvent: null } },
-    ]);
+    const r = applyMutations([{ op: "updateElement", id: "el-1", patch: { startEvent: null } }]);
     expect(r.applied).toBe(1);
     expect(useEditorStore.getState().elements[0].startEvent).toBeUndefined();
   });
@@ -150,7 +132,10 @@ describe("applyMutations · events", () => {
     ]);
     expect(r.applied).toBe(2);
     expect(r.skipped).toBe(1);
-    const names = useEditorStore.getState().events.map((e) => e.name).sort();
+    const names = useEditorStore
+      .getState()
+      .events.map((e) => e.name)
+      .sort();
     expect(names).toEqual(["ok", "ok2"]);
   });
 });

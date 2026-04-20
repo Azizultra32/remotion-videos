@@ -64,3 +64,4 @@ projects/*
 # Biome transients — LSP logs + local cache.
 biome-logs/
 .biome/
+.superpowers/

@@ -158,6 +158,59 @@ export const AssetLibrary = () => {
     }
   };
 
+  // OS-drag dropzone: user drags a file from Finder onto the panel and it
+  // gets POSTed to /api/assets/upload. The upload handler writes to
+  // public/assets/{images,videos}/, and the next polling tick picks up
+  // the new file automatically. We also force an immediate refresh after
+  // upload so the user sees the tile instantly instead of waiting up to
+  // POLL_MS.
+  const [dropActive, setDropActive] = useState(false);
+  const [uploading, setUploading] = useState(0);
+
+  const uploadFile = async (file: File): Promise<void> => {
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    const r = await fetch("/api/assets/upload", { method: "POST", body: fd });
+    if (!r.ok) {
+      const text = await r.text().catch(() => `HTTP ${r.status}`);
+      throw new Error(text);
+    }
+  };
+
+  const handleOsDrop = async (ev: React.DragEvent<HTMLDivElement>) => {
+    ev.preventDefault();
+    setDropActive(false);
+    // Ignore our own intra-app tile drags (they carry x-mv-asset).
+    if (ev.dataTransfer.types.includes("application/x-mv-asset")) return;
+    const files = Array.from(ev.dataTransfer.files ?? []);
+    if (files.length === 0) return;
+    setUploading(files.length);
+    try {
+      for (const f of files) {
+        try { await uploadFile(f); }
+        catch (err) { setError(`upload failed: ${String(err)}`); }
+      }
+      // Force an immediate list refresh. Invalidate the hash so the
+      // poll effect re-renders.
+      prevHashRef.current = "";
+    } finally {
+      setUploading(0);
+    }
+  };
+
+  const handleOsDragOver = (ev: React.DragEvent<HTMLDivElement>) => {
+    // Accept only OS file drags, not intra-app tile drags.
+    if (ev.dataTransfer.types.includes("application/x-mv-asset")) return;
+    if (!ev.dataTransfer.types.includes("Files")) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "copy";
+    if (!dropActive) setDropActive(true);
+  };
+  const handleOsDragLeave = (ev: React.DragEvent<HTMLDivElement>) => {
+    // Only clear when leaving the panel itself, not a child tile.
+    if (ev.currentTarget === ev.target) setDropActive(false);
+  };
+
   const header = (
     <button
       type="button"
@@ -207,13 +260,30 @@ export const AssetLibrary = () => {
 
   return (
     <div
+      onDragOver={handleOsDragOver}
+      onDragLeave={handleOsDragLeave}
+      onDrop={handleOsDrop}
       style={{
         padding: 12,
         borderTop: "1px solid #333",
         borderBottom: "1px solid #333",
-        background: "#0a0a0a",
+        background: dropActive ? "#1a2a3a" : "#0a0a0a",
+        outline: dropActive ? "2px dashed #3a6aaa" : "none",
+        outlineOffset: -2,
+        position: "relative",
+        transition: "background 0.1s",
       }}
     >
+      {uploading > 0 && (
+        <div style={{
+          position: "absolute", top: 4, right: 8,
+          fontSize: 9, color: "#aaa",
+          background: "#1a1a1a", border: "1px solid #333",
+          padding: "2px 6px", borderRadius: 3, zIndex: 2,
+        }}>
+          Uploading {uploading}…
+        </div>
+      )}
       {header}
       {!collapsed && (
         <>

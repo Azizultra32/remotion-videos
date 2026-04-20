@@ -502,6 +502,190 @@ const handleAssetsList = async (
   res.end(JSON.stringify(entries));
 };
 
+
+// ---------------------------------------------------------------------------
+// /api/assets/upload  (POST — multipart upload to the engine-level library)
+// ---------------------------------------------------------------------------
+//
+// Accepts a single multipart/form-data file upload and writes it under
+// public/assets/{images,videos}/<sanitized-filename>. MIME prefix decides
+// which directory. Paired with the AssetLibrary panel's dropzone so users
+// can drag files from the OS directly into the editor instead of dropping
+// them into a Finder window.
+//
+// Hardening:
+//   * 50 MB hard size cap, enforced mid-stream so a malicious 10GB upload
+//     cannot exhaust memory.
+//   * Filename sanitized to [a-z0-9._-]+ with collision-suffix (-2, -3, ...).
+//   * Atomic write: <target>.tmp + fs.rename so a partial read during the
+//     2s AssetLibrary poll never sees half a file.
+//   * Boundary check on the resolved path — a filename with .. cannot
+//     escape public/assets/.
+//   * Zero external deps; tiny multipart parser below handles only the
+//     single-file shape this endpoint actually accepts.
+
+const parseSingleFileUpload = (
+  req: IncomingMessage,
+  sizeLimit: number,
+): Promise<{ filename: string; contentType: string; body: Buffer }> =>
+  new Promise((resolve, reject) => {
+    const ct = String(req.headers["content-type"] ?? "");
+    const bm = ct.match(/boundary=([^;]+)/);
+    if (!bm) return reject(new Error("no-boundary"));
+    const boundary = `--${bm[1]}`;
+    const chunks: Buffer[] = [];
+    let total = 0;
+    req.on("data", (chunk) => {
+      total += chunk.length;
+      if (total > sizeLimit) {
+        req.pause();
+        return reject(new Error("upload-size-exceeded"));
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      try {
+        const body = Buffer.concat(chunks);
+        const headText = body.toString("utf8", 0, Math.min(4096, body.length));
+        const headerEnd = headText.indexOf("\r\n\r\n");
+        if (headerEnd === -1) return reject(new Error("malformed-multipart"));
+        const headerSection = headText.substring(0, headerEnd);
+        const filenameMatch = headerSection.match(/filename="([^"]+)"/);
+        const ctMatch = headerSection.match(/Content-Type:\s*([^\r\n]+)/i);
+        if (!filenameMatch) return reject(new Error("no-filename"));
+        const boundaryBytes = Buffer.from(boundary);
+        const firstBoundary = body.indexOf(boundaryBytes);
+        const headerSep = Buffer.from("\r\n\r\n");
+        const contentStart = body.indexOf(headerSep, firstBoundary) + headerSep.length;
+        const tailBoundary = Buffer.from(`\r\n${boundary}`);
+        let contentEnd = body.indexOf(tailBoundary, contentStart);
+        if (contentEnd === -1) contentEnd = body.length;
+        resolve({
+          filename: filenameMatch[1],
+          contentType: ctMatch ? ctMatch[1].trim() : "application/octet-stream",
+          body: body.subarray(contentStart, contentEnd),
+        });
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", reject);
+  });
+
+const sanitizeAssetFilename = async (
+  dirPath: string,
+  raw: string,
+): Promise<{ filename: string; fullPath: string } | null> => {
+  const base = raw.split("/").pop()?.split("\\").pop() ?? "";
+  if (!base || base === "." || base === "..") return null;
+  const normalized = base
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!/^[a-z0-9._-]+\.[a-z0-9]+$/.test(normalized)) return null;
+  const m = normalized.match(/^(.+?)(\.[a-z0-9]+)$/);
+  if (!m) return null;
+  const stem = m[1];
+  const ext = m[2];
+  let candidate = normalized;
+  let counter = 1;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      await fs.stat(path.join(dirPath, candidate));
+      counter += 1;
+      candidate = `${stem}-${counter}${ext}`;
+    } catch {
+      return { filename: candidate, fullPath: path.join(dirPath, candidate) };
+    }
+  }
+};
+
+const handleAssetsUpload = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  let upload: { filename: string; contentType: string; body: Buffer };
+  try {
+    upload = await parseSingleFileUpload(req, 50 * 1024 * 1024);
+  } catch (err) {
+    const msg = String((err as Error)?.message ?? err);
+    res.statusCode = msg === "upload-size-exceeded" ? 413 : 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: msg }));
+    return;
+  }
+
+  let targetDir: string;
+  let kind: "image" | "video";
+  const mime = upload.contentType.toLowerCase();
+  if (mime.startsWith("image/")) {
+    targetDir = path.join(_PUBLIC_DIR, "assets", "images");
+    kind = "image";
+  } else if (mime.startsWith("video/")) {
+    targetDir = path.join(_PUBLIC_DIR, "assets", "videos");
+    kind = "video";
+  } else {
+    res.statusCode = 415;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "unsupported-media-type", contentType: mime }));
+    return;
+  }
+
+  try {
+    await fs.mkdir(targetDir, { recursive: true });
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "dir-create-failed", detail: String(err) }));
+    return;
+  }
+
+  const sanitized = await sanitizeAssetFilename(targetDir, upload.filename);
+  if (!sanitized) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-filename", raw: upload.filename }));
+    return;
+  }
+
+  // Boundary: the resolved path must still live under public/assets/.
+  const assetsRoot = path.resolve(path.join(_PUBLIC_DIR, "assets")) + path.sep;
+  const resolved = path.resolve(sanitized.fullPath);
+  if (!resolved.startsWith(assetsRoot)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "path-traversal-rejected" }));
+    return;
+  }
+
+  const tmp = `${sanitized.fullPath}.tmp`;
+  try {
+    await fs.writeFile(tmp, upload.body);
+    await fs.rename(tmp, sanitized.fullPath);
+  } catch (err) {
+    try { await fs.unlink(tmp); } catch { /* ignore */ }
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "write-failed", detail: String(err) }));
+    return;
+  }
+
+  const entry: AssetEntry = {
+    path: `assets/${kind}s/${sanitized.filename}`,
+    scope: "global",
+    stem: null,
+    kind,
+    size: upload.body.length,
+    mtime: Date.now(),
+  };
+  res.statusCode = 201;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(entry));
+};
+
 // ---------------------------------------------------------------------------
 // /api/storyboard/:stem  (GET) + /api/storyboard/save (POST)
 // ---------------------------------------------------------------------------
@@ -2468,6 +2652,7 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/assets/list", wrap("GET", handleAssetsList));
+    server.middlewares.use("/api/assets/upload", wrap("POST", handleAssetsUpload));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
     server.middlewares.use("/api/storyboard/save", wrap("POST", handleStoryboardSave));
     server.middlewares.use("/api/storyboard/", wrap("GET", handleStoryboardGet));

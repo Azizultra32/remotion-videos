@@ -77,13 +77,14 @@ export const CanvasWaveform = ({
   const [peaks, setPeaks] = useState<Float32Array | null>(null);
   const [duration, setDuration] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [decodeError, setDecodeError] = useState<string | null>(null);
 
   // Decode + extract peaks whenever the track URL changes.
   useEffect(() => {
     let cancelled = false;
-    let acx: AudioContext | null = null;
     setPeaks(null);
     setDuration(0);
+    setDecodeError(null);
 
     // Fast path — cached peaks from a previous decode. Skips fetch +
     // decodeAudioData + extractPeaks entirely; typical 1–2s → 0ms.
@@ -103,11 +104,16 @@ export const CanvasWaveform = ({
         if (!resp.ok) return;
         const buf = await resp.arrayBuffer();
         if (cancelled) return;
-        acx = new (
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-        )();
-        const audio = await acx.decodeAudioData(buf);
+        // OfflineAudioContext — does not touch the audio output device, so it
+        // works even when another app (Rekordbox, Ableton, etc.) holds
+        // exclusive audio. The constructor's sampleRate is a formal placeholder;
+        // decodeAudioData preserves the source file's native rate.
+        const OfflineCtx =
+          window.OfflineAudioContext ||
+          (window as unknown as { webkitOfflineAudioContext: typeof OfflineAudioContext })
+            .webkitOfflineAudioContext;
+        const offline = new OfflineCtx(1, 1, 44100);
+        const audio = await offline.decodeAudioData(buf);
         if (cancelled) return;
         const channel = audio.getChannelData(0);
         const bucketSize = Math.max(256, Math.floor(channel.length / TARGET_BUCKETS));
@@ -117,18 +123,11 @@ export const CanvasWaveform = ({
         setDuration(audio.duration);
         onReady?.(audio.duration);
         saveCachedPeaks(audioUrl, normalized, audio.duration);
-      } catch {
-        // Decode errors are rare in practice (all ingested tracks are
-        // normalized mp3/wav by mv:scaffold). Silent fail: the fallback
-        // "decoding audio…" overlay stays visible.
-      } finally {
-        if (acx) {
-          try {
-            await acx.close();
-          } catch {
-            /* already closed */
-          }
-        }
+      } catch (err) {
+        if (cancelled) return;
+        // Surface the reason so Rekordbox / audio-device conflicts are
+        // diagnosable without devtools. Rare in practice but real.
+        setDecodeError(err instanceof Error ? err.message : String(err));
       }
     };
     void load();
@@ -169,6 +168,8 @@ export const CanvasWaveform = ({
   };
 
   return (
+    {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
+    {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
     <div
       ref={containerRef}
       onClick={handleClick}
@@ -194,14 +195,28 @@ export const CanvasWaveform = ({
             position: "absolute",
             inset: 0,
             display: "flex",
+            flexDirection: "column",
+            gap: 4,
             alignItems: "center",
             justifyContent: "center",
-            color: "#666",
+            color: decodeError ? "#f88" : "#666",
             fontSize: 11,
+            padding: 12,
+            textAlign: "center",
             pointerEvents: "none",
           }}
         >
-          decoding audio…
+          {decodeError ? (
+            <>
+              <div style={{ fontWeight: 600 }}>audio decode failed</div>
+              <div style={{ fontSize: 10, color: "#c88" }}>{decodeError}</div>
+              <div style={{ fontSize: 10, color: "#888" }}>
+                Close Rekordbox / other apps holding audio, then reload.
+              </div>
+            </>
+          ) : (
+            "decoding audio…"
+          )}
         </div>
       )}
     </div>

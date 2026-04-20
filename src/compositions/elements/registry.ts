@@ -4,6 +4,7 @@ import { BassGlowOverlayModule } from "./audio/BassGlowOverlay";
 import { SpectrumBarsModule } from "./audio/SpectrumBars";
 import { WaveformPathModule } from "./audio/WaveformPath";
 import { PreDropFadeHoldModule } from "./overlays/PreDropFadeHold";
+import { ShaderPulseModule } from "./overlays/ShaderPulse";
 import { VideoClipModule } from "./overlays/VideoClip";
 import { WatermarkMaskModule } from "./overlays/WatermarkMask";
 import { NeonStrokeStackModule } from "./shapes/NeonStrokeStack";
@@ -35,6 +36,7 @@ export const ELEMENT_MODULES: ElementModule<any>[] = [
   PreDropFadeHoldModule,
   WatermarkMaskModule,
   VideoClipModule,
+  ShaderPulseModule,
 ];
 
 export const ELEMENT_REGISTRY: Record<string, ElementModule<any>> = Object.fromEntries(

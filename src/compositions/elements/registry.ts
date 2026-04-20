@@ -8,6 +8,10 @@ import { WaveformPathModule } from "./audio/WaveformPath";
 import { PreDropFadeHoldModule } from "./overlays/PreDropFadeHold";
 import { BeatShockModule } from "./overlays/BeatShock";
 import { BloomGlowModule } from "./overlays/BloomGlow";
+import { BeatColorFlashModule } from "./overlays/BeatColorFlash";
+import { BeatImageCycleModule } from "./overlays/BeatImageCycle";
+import { BeatVideoCycleModule } from "./overlays/BeatVideoCycle";
+import { SpeedVideoModule } from "./overlays/SpeedVideo";
 import { GlitchShockModule } from "./overlays/GlitchShock";
 import { PlasmaBackdropModule } from "./overlays/PlasmaBackdrop";
 import { ShaderPulseModule } from "./overlays/ShaderPulse";
@@ -45,7 +49,11 @@ export const ELEMENT_MODULES: ElementModule<any>[] = [
   ShaderPulseModule,
   BeatShockModule,
   BloomGlowModule,
+  BeatColorFlashModule,
+  BeatImageCycleModule,
+  BeatVideoCycleModule,
   GlitchShockModule,
+  SpeedVideoModule,
   OscilloscopeModule,
   PlasmaBackdropModule,
   SpectrumWaterfallModule,

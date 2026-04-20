@@ -12,6 +12,7 @@ import { BeatColorFlashModule } from "./overlays/BeatColorFlash";
 import { BeatImageCycleModule } from "./overlays/BeatImageCycle";
 import { BeatVideoCycleModule } from "./overlays/BeatVideoCycle";
 import { SpeedVideoModule } from "./overlays/SpeedVideo";
+import { StaticImageModule } from "./overlays/StaticImage";
 import { GlitchShockModule } from "./overlays/GlitchShock";
 import { PlasmaBackdropModule } from "./overlays/PlasmaBackdrop";
 import { ShaderPulseModule } from "./overlays/ShaderPulse";
@@ -54,6 +55,7 @@ export const ELEMENT_MODULES: ElementModule<any>[] = [
   BeatVideoCycleModule,
   GlitchShockModule,
   SpeedVideoModule,
+  StaticImageModule,
   OscilloscopeModule,
   PlasmaBackdropModule,
   SpectrumWaterfallModule,
@@ -85,6 +87,7 @@ export const ELEMENT_SOURCE_PATHS: Record<string, string> = {
   "overlay.preDropFadeHold": "src/compositions/elements/overlays/PreDropFadeHold.tsx",
   "overlay.videoClip": "src/compositions/elements/overlays/VideoClip.tsx",
   "overlay.watermarkMask": "src/compositions/elements/overlays/WatermarkMask.tsx",
+  "overlay.staticImage": "src/compositions/elements/overlays/StaticImage.tsx",
   "shape.neonStack": "src/compositions/elements/shapes/NeonStrokeStack.tsx",
   "shape.pathReveal": "src/compositions/elements/shapes/PathReveal.tsx",
   "shape.sonarRings": "src/compositions/elements/shapes/SonarRings.tsx",

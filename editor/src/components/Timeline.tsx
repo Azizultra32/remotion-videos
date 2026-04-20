@@ -11,7 +11,10 @@ const TRACK_COUNT = 9;
 const TRACK_HEIGHT = 36;
 const RULER_HEIGHT = 22;
 const GUTTER_WIDTH = 96;
-const PX_PER_SEC = 40;
+// pxPerSec derived from shared store zoom. 0.025 sec/px = 40 px/sec default
+// (matches the former fixed scale). Inversely tied to secPerPx so the two
+// views stay at the exact same time axis.
+const DEFAULT_SEC_PER_PX = 0.025;
 
 // Labels indexed by trackIndex. Matches each element module's defaultTrack:
 // text/bell/glitch/typing/sliding/popping → 0, beatDrop/fitboxSVG → 1,
@@ -33,11 +36,17 @@ export const Timeline = () => {
   const elements = useEditorStore((s) => s.elements);
   const compositionDuration = useEditorStore((s) => s.compositionDuration);
   const beatData = useEditorStore((s) => s.beatData);
+  const secPerPx = useEditorStore((s) => s.timelineSecPerPx);
+  const offsetSec = useEditorStore((s) => s.timelineOffsetSec);
+  const setTimelineView = useEditorStore((s) => s.setTimelineView);
+  const effectiveSecPerPx = secPerPx > 0 ? secPerPx : DEFAULT_SEC_PER_PX;
+  const pxPerSec = 1 / effectiveSecPerPx;
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useTimelineDeleteKey();
 
-  const widthPx = compositionDuration * PX_PER_SEC;
+  const widthPx = compositionDuration * pxPerSec;
+  const panPx = offsetSec * pxPerSec;
   const tracksHeight = TRACK_COUNT * TRACK_HEIGHT;
 
   // Auto-follow the playhead. Subscribe imperatively so we don't re-render
@@ -48,7 +57,7 @@ export const Timeline = () => {
     const scroller = scrollRef.current;
     if (!scroller) return;
     const follow = (sec: number) => {
-      const playX = GUTTER_WIDTH + sec * PX_PER_SEC;
+      const playX = GUTTER_WIDTH + sec * pxPerSec;
       const viewL = scroller.scrollLeft + GUTTER_WIDTH;
       const viewR = scroller.scrollLeft + scroller.clientWidth - 32;
       if (playX < viewL || playX > viewR) {
@@ -87,7 +96,7 @@ export const Timeline = () => {
           />
           <TimelineRuler
             compositionDuration={compositionDuration}
-            pxPerSec={PX_PER_SEC}
+            pxPerSec={pxPerSec}
             beatData={beatData}
             height={RULER_HEIGHT}
           />
@@ -132,9 +141,38 @@ export const Timeline = () => {
 
           {/* Bar lanes — single relative container for all tracks so
               beat-markers + playhead can span the whole height */}
-          <div style={{ position: "relative", width: widthPx, height: tracksHeight }}>
-            <TimelineBeatMarkers beatData={beatData} pxPerSec={PX_PER_SEC} height={tracksHeight} />
-            <TimelineEventMarkers pxPerSec={PX_PER_SEC} height={tracksHeight} />
+          <div
+            onWheel={(e) => {
+              // Shared zoom/pan: wheel zooms with cursor anchor, shift-wheel
+              // (or horizontal trackpad) pans. Matches Scrubber behavior so
+              // both views stay glued to the same time axis.
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              const cursorPx = e.clientX - rect.left + panPx; // account for current pan
+              const cursorSec = cursorPx * effectiveSecPerPx;
+              if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+                const deltaSec = (e.shiftKey ? e.deltaY : e.deltaX) * effectiveSecPerPx;
+                setTimelineView({
+                  offsetSec: Math.max(0, Math.min(compositionDuration, offsetSec + deltaSec)),
+                });
+                return;
+              }
+              const zoomFactor = Math.exp(-e.deltaY * 0.002);
+              const nextSecPerPx = Math.max(
+                effectiveSecPerPx / 100,
+                Math.min(effectiveSecPerPx * 4, effectiveSecPerPx / zoomFactor),
+              );
+              // Anchor: keep the cursor time under the cursor
+              const nextOffsetSec = Math.max(
+                0,
+                cursorSec - (e.clientX - rect.left) * nextSecPerPx,
+              );
+              setTimelineView({ secPerPx: nextSecPerPx, offsetSec: nextOffsetSec });
+            }}
+            style={{ position: "relative", width: widthPx, height: tracksHeight, transform: `translateX(${-panPx}px)`, transformOrigin: "0 0" }}
+          >
+            <TimelineBeatMarkers beatData={beatData} pxPerSec={pxPerSec} height={tracksHeight} />
+            <TimelineEventMarkers pxPerSec={pxPerSec} height={tracksHeight} />
             {Array.from({ length: TRACK_COUNT }, (_, i) => (
               <div
                 // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the track identity (trackIndex)
@@ -152,11 +190,11 @@ export const Timeline = () => {
                 {elements
                   .filter((el) => el.trackIndex === i)
                   .map((el) => (
-                    <TimelineElementHost key={el.id} el={el} height={TRACK_HEIGHT} />
+                    <TimelineElementHost key={el.id} el={el} height={TRACK_HEIGHT} pxPerSec={pxPerSec} />
                   ))}
               </div>
             ))}
-            <TimelinePlayhead pxPerSec={PX_PER_SEC} height={tracksHeight} />
+            <TimelinePlayhead pxPerSec={pxPerSec} height={tracksHeight} />
           </div>
         </div>
       </div>
@@ -234,10 +272,10 @@ const useTimelineDeleteKey = () => {
   }, []);
 };
 
-const TimelineElementHost = ({ el, height }: { el: TimelineElementType; height: number }) => {
+const TimelineElementHost = ({ el, height, pxPerSec }: { el: TimelineElementType; height: number; pxPerSec: number }) => {
   const locked = !!el.locked;
-  const leftPx = el.startSec * PX_PER_SEC;
-  const widthPx = Math.max(16, el.durationSec * PX_PER_SEC);
+  const leftPx = el.startSec * pxPerSec;
+  const widthPx = Math.max(16, el.durationSec * pxPerSec);
   return (
     <div
       style={{
@@ -253,7 +291,7 @@ const TimelineElementHost = ({ el, height }: { el: TimelineElementType; height: 
         cursor: locked ? "default" : "grab",
       }}
     >
-      <TimelineElement element={el} pxPerSec={PX_PER_SEC} height={height} />
+      <TimelineElement element={el} pxPerSec={pxPerSec} height={height} />
       {locked && (
         <>
           {/* Dashed border overlay — pointer-events:none so drag/resize on the

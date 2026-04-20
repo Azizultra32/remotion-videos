@@ -88,6 +88,12 @@ export type EditorState = {
   beatData: BeatData | null;
   events: EventMark[];
   scenes: Scene[];
+  // Shared timeline view (zoom + pan). Scrubber and Timeline read + write
+  // these so both stay at the same time-axis. secPerPx = seconds-per-pixel
+  // (inverse of pxPerSec). Default 0.025 sec/px = 40 px/sec, matches the
+  // former fixed Timeline scale.
+  timelineSecPerPx: number;
+  timelineOffsetSec: number;
   compositionDuration: number; // seconds
   fps: number;
   snapMode: SnapMode;
@@ -117,6 +123,7 @@ export type EditorState = {
   addScene: (scene: Scene) => void;
   updateScene: (id: string, patch: Partial<Omit<Scene, "id">>) => void;
   removeScene: (id: string) => void;
+  setTimelineView: (patch: { secPerPx?: number; offsetSec?: number }) => void;
   linkSceneElement: (sceneId: string, elementId: string) => void;
   unlinkSceneElement: (sceneId: string, elementId: string) => void;
   linkSceneEvent: (sceneId: string, eventName: string) => void;

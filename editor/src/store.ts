@@ -19,6 +19,8 @@ export const useEditorStore = create<EditorState>()(
       beatData: null,
       events: [],
       scenes: [],
+      timelineSecPerPx: 0,
+      timelineOffsetSec: 0,
       compositionDuration: 90,
       fps: 24,
       snapMode: "beat",
@@ -68,6 +70,8 @@ export const useEditorStore = create<EditorState>()(
           beatData: null,
           events: [],
           scenes: [],
+          timelineSecPerPx: 0,
+          timelineOffsetSec: 0,
         }),
       // Named time events — in-memory; persisted to disk by useEventsSync.
       setEvents: (events) => set({ events }),
@@ -79,6 +83,11 @@ export const useEditorStore = create<EditorState>()(
           events: renameEventMarkPure(s.events, oldName, newName),
         })),
       setScenes: (scenes) => set({ scenes }),
+      setTimelineView: (patch) =>
+        set((s) => ({
+          timelineSecPerPx: patch.secPerPx !== undefined ? patch.secPerPx : s.timelineSecPerPx,
+          timelineOffsetSec: patch.offsetSec !== undefined ? patch.offsetSec : s.timelineOffsetSec,
+        })),
       addScene: (scene) => set((s) => ({ scenes: [...s.scenes, scene] })),
       updateScene: (id, patch) =>
         set((s) => ({

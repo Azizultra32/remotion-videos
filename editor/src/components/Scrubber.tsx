@@ -8,7 +8,6 @@
 // produces the bucket array, a 2D canvas draws it.
 import { useEffect, useRef, useState } from "react";
 import { useShortcutSurface, useShortcuts } from "../contexts/shortcuts";
-import { useStorage } from "../hooks/useStorage";
 import { useEditorStore } from "../store";
 import { anchoredZoom, clampViewport } from "../utils/timelineScale";
 import { CanvasWaveform } from "./CanvasWaveform";
@@ -111,8 +110,13 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   // switches. secPerPx = 0 is a sentinel meaning "natural fit" — used on
   // first mount before we know containerWidth.
   const stem = audioSrc ? audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "") : null;
-  const [secPerPx, setSecPerPx] = useStorage("scrubber-sec-per-px", 0, stem ?? undefined);
-  const [offsetSec, setOffsetSec] = useStorage("scrubber-offset-sec", 0, stem ?? undefined);
+  // Shared with Timeline via store. secPerPx = 0 is still a sentinel meaning
+  // "natural fit" on first mount; anchoredZoom writes the resolved value.
+  const secPerPx = useEditorStore((s) => s.timelineSecPerPx);
+  const offsetSec = useEditorStore((s) => s.timelineOffsetSec);
+  const setTimelineView = useEditorStore((s) => s.setTimelineView);
+  const setSecPerPx = (v: number) => setTimelineView({ secPerPx: v });
+  const setOffsetSec = (v: number) => setTimelineView({ offsetSec: v });
 
   const scrollPortRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);

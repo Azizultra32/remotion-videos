@@ -65,3 +65,10 @@ projects/*
 biome-logs/
 .biome/
 .superpowers/
+
+# Engine-level shared assets — content is user-provided + binary
+public/assets/images/*
+public/assets/videos/*
+!public/assets/images/.gitkeep
+!public/assets/videos/.gitkeep
+!public/assets/README.md

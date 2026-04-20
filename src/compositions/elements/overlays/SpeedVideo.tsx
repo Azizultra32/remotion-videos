@@ -15,7 +15,7 @@ import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   videoSrc: z.string(),
-  playbackRate: z.number().min(0.1).max(8),
+  playbackRate: z.number().min(0).max(100),
   startFromSec: z.number().min(0),
   fit: z.enum(["cover", "contain"]),
   x: z.number(),
@@ -67,7 +67,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
         src={src}
         muted={muted}
         volume={muted ? 0 : volume}
-        playbackRate={playbackRate}
+        playbackRate={Math.max(0.001, playbackRate)}
         startFrom={Math.max(0, Math.round(startFromSec * 30))}
         style={{ width: "100%", height: "100%", objectFit: fit }}
       />

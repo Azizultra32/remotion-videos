@@ -12,8 +12,22 @@
 //   wrapper._def.innerType        is the wrapped schema (optional/default/nullable)
 
 import { EASING_NAMES } from "@utils/easing";
+import { useState } from "react";
 import type { z } from "zod";
 import { isEasingField } from "../utils/schemaFields";
+import { AssetPicker } from "./AssetPicker";
+
+// Detect asset fields by name so we can render a "Pick" button next to the
+// input. Returns the asset kind (image/video) or null if the field is not
+// an asset. Matches:
+//   images, imageSrc, imagePath, backgroundImage
+//   videos, videoSrc, videoPath, backgroundVideo
+const detectAssetKind = (name: string): "image" | "video" | null => {
+  const n = name.toLowerCase();
+  if (/(^|_)(image|img)s?$|image(src|path|url)$|backgroundimage$/.test(n)) return "image";
+  if (/(^|_)(video|clip)s?$|video(src|path|url)$|backgroundvideo$/.test(n)) return "video";
+  return null;
+};
 
 const fieldStyle: React.CSSProperties = {
   padding: "6px 8px",
@@ -59,10 +73,99 @@ type FieldProps = {
   onChange: (v: unknown) => void;
 };
 
+type AssetFieldProps = {
+  label: string;
+  kind: "image" | "video";
+  multi: boolean;
+  value: unknown;
+  onChange: (v: unknown) => void;
+};
+
+const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const current: string[] = multi
+    ? Array.isArray(value) ? (value as string[]) : []
+    : typeof value === "string" && value ? [value] : [];
+  const summary = multi
+    ? `${current.length} ${kind}${current.length === 1 ? "" : "s"} selected`
+    : current[0] ?? `(no ${kind} chosen)`;
+  return (
+    <Row label={label}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div
+          style={{
+            ...fieldStyle,
+            flex: 1,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            textOverflow: "ellipsis",
+            cursor: "pointer",
+            color: current.length > 0 ? "#fff" : "#888",
+          }}
+          onClick={() => setOpen(true)}
+          title={multi ? current.join("\n") : current[0] ?? ""}
+        >
+          {summary}
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          style={{
+            padding: "6px 10px",
+            background: "#2a4a7a",
+            border: "1px solid #3a6aaa",
+            color: "#fff",
+            fontSize: 11,
+            borderRadius: 4,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Pick {kind}{multi ? "s" : ""}
+        </button>
+      </div>
+      {multi && current.length > 0 && (
+        <div style={{ fontSize: 10, color: "#888", marginTop: 2, maxHeight: 60, overflowY: "auto" }}>
+          {current.map((p) => (
+            <div key={p} style={{ fontFamily: "monospace" }}>{p}</div>
+          ))}
+        </div>
+      )}
+      {open && (
+        <AssetPicker
+          kind={kind}
+          multi={multi}
+          initial={current}
+          onCommit={(paths) => {
+            onChange(multi ? paths : (paths[0] ?? ""));
+            setOpen(false);
+          }}
+          onCancel={() => setOpen(false)}
+        />
+      )}
+    </Row>
+  );
+};
+
 const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
   const inner = unwrap(schema);
   const tn = defType(inner);
   const prettyName = name.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+
+  const assetKind = detectAssetKind(name);
+  if (assetKind && tn === "string") {
+    return (
+      <AssetField label={prettyName} kind={assetKind} multi={false} value={value} onChange={onChange} />
+    );
+  }
+  if (assetKind && tn === "array") {
+    const innerElt = unwrap(inner._def?.element);
+    if (defType(innerElt) === "string") {
+      return (
+        <AssetField label={prettyName} kind={assetKind} multi={true} value={value} onChange={onChange} />
+      );
+    }
+  }
 
   if (tn === "string") {
     if (isColorField(name)) {

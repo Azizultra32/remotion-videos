@@ -378,6 +378,119 @@ const handleTimelineGet = async (req: IncomingMessage, res: ServerResponse): Pro
   res.end(content);
 };
 
+
+// ---------------------------------------------------------------------------
+// /api/assets/list   (GET — engine-wide + per-project asset inventory)
+// ---------------------------------------------------------------------------
+//
+// Scans two roots for browsable media:
+//   1. public/assets/{images,videos}/** — engine-level, available to any project
+//   2. projects/<stem>/{images,videos}/** — per-project
+//
+// Returns items usable in staticFile() paths so BeatImageCycle / BeatVideoCycle
+// / SpeedVideo / etc. can reference them by dropping the result path straight
+// into their schema. Used by the AssetPicker UI in ElementDetail.
+
+type AssetEntry = {
+  path: string;          // e.g. "assets/images/logo.png" or "projects/love-in-traffic/clips/a.mp4"
+  scope: "global" | "project";
+  stem: string | null;    // null for global
+  kind: "image" | "video";
+  size: number;
+  mtime: number;
+};
+
+const IMG_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i;
+const VID_EXT = /\.(mp4|webm|mov|mkv|avi)$/i;
+
+const handleAssetsList = async (
+  _req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const entries: AssetEntry[] = [];
+
+  const walk = async (root: string, scope: "global" | "project", stem: string | null, relPrefix: string) => {
+    let dirents: Array<{ name: string; isDir: boolean }>;
+    try {
+      const ds = await fs.readdir(root, { withFileTypes: true });
+      dirents = ds.map((d) => ({ name: d.name, isDir: d.isDirectory() }));
+    } catch {
+      return;
+    }
+    for (const d of dirents) {
+      if (d.name.startsWith(".")) continue;
+      const full = path.join(root, d.name);
+      const rel = `${relPrefix}/${d.name}`;
+      if (d.isDir) {
+        await walk(full, scope, stem, rel);
+        continue;
+      }
+      const isImg = IMG_EXT.test(d.name);
+      const isVid = VID_EXT.test(d.name);
+      if (!isImg && !isVid) continue;
+      try {
+        const st = await fs.stat(full);
+        entries.push({
+          path: rel.replace(/^\/+/, ""),
+          scope,
+          stem,
+          kind: isImg ? "image" : "video",
+          size: st.size,
+          mtime: st.mtimeMs,
+        });
+      } catch { /* broken file, skip */ }
+    }
+  };
+
+  // Engine-level
+  await walk(path.join(_PUBLIC_DIR, "assets", "images"), "global", null, "assets/images");
+  await walk(path.join(_PUBLIC_DIR, "assets", "videos"), "global", null, "assets/videos");
+
+  // Per-project
+  try {
+    const projectDirs = await fs.readdir(PROJECTS_DIR, { withFileTypes: true });
+    for (const d of projectDirs) {
+      if (!d.isDirectory()) continue;
+      if (d.name.startsWith(".") || d.name.startsWith("_")) continue;
+      await walk(path.join(PROJECTS_DIR, d.name, "images"), "project", d.name, `projects/${d.name}/images`);
+      await walk(path.join(PROJECTS_DIR, d.name, "videos"), "project", d.name, `projects/${d.name}/videos`);
+      // Many tracks keep clips loose in the project root too — scan top-level
+      // for media files and flag them as project-scope.
+      try {
+        const loose = await fs.readdir(path.join(PROJECTS_DIR, d.name), { withFileTypes: true });
+        for (const f of loose) {
+          if (!f.isFile()) continue;
+          if (f.name.startsWith(".")) continue;
+          const isImg = IMG_EXT.test(f.name);
+          const isVid = VID_EXT.test(f.name);
+          if (!isImg && !isVid) continue;
+          try {
+            const st = await fs.stat(path.join(PROJECTS_DIR, d.name, f.name));
+            entries.push({
+              path: `projects/${d.name}/${f.name}`,
+              scope: "project",
+              stem: d.name,
+              kind: isImg ? "image" : "video",
+              size: st.size,
+              mtime: st.mtimeMs,
+            });
+          } catch { /* skip */ }
+        }
+      } catch { /* no project dir */ }
+    }
+  } catch { /* no projects dir */ }
+
+  entries.sort((a, b) => {
+    if (a.scope !== b.scope) return a.scope === "global" ? -1 : 1;
+    if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+    return a.path.localeCompare(b.path);
+  });
+
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(entries));
+};
+
 // ---------------------------------------------------------------------------
 // /api/storyboard/:stem  (GET) + /api/storyboard/save (POST)
 // ---------------------------------------------------------------------------
@@ -2343,6 +2456,7 @@ export const sidecarPlugin = (): Plugin => ({
     });
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
+    server.middlewares.use("/api/assets/list", wrap("GET", handleAssetsList));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
     server.middlewares.use("/api/storyboard/save", wrap("POST", handleStoryboardSave));
     server.middlewares.use("/api/storyboard/", wrap("GET", handleStoryboardGet));

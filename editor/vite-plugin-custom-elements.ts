@@ -115,6 +115,18 @@ export const customElementsPlugin = (): Plugin => {
     if (!server) return;
     const stem = resolveActiveStem();
     if (stem === watchedStem) return;
+    // Unwatch the prior project's custom-elements/ before adding the new
+    // one. Without this, switching projects N times accumulates N stale
+    // watchers, each firing a spurious full-reload on any file event in
+    // an old project's folder.
+    if (watchedStem) {
+      const oldDir = resolveCustomElementsDir(watchedStem);
+      try {
+        server.watcher.unwatch(oldDir);
+      } catch {
+        // Chokidar throws if the path was never added; safe to ignore.
+      }
+    }
     watchedStem = stem;
     if (!stem) return;
     const customDir = resolveCustomElementsDir(stem);

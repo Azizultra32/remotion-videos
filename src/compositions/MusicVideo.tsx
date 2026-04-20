@@ -21,11 +21,25 @@ type SafeRenderProps = {
 };
 class SafeElement extends React.Component<
   SafeRenderProps,
-  { hasError: boolean }
+  { hasError: boolean; lastSig: string }
 > {
-  state = { hasError: false };
+  // hasError is reset whenever the element identity or its prop snapshot
+  // changes. Without this, a transient throw at frame N (e.g. audio data
+  // not yet loaded) latches the element to "render null" for the rest of
+  // its active window. Resetting on prop-sig change lets the next frame
+  // try again — the worst case is repeated throws, which is what the
+  // user wanted anyway: see the actual breakage, not a quiet black box.
+  state = { hasError: false, lastSig: "" };
   static getDerivedStateFromError() {
     return { hasError: true };
+  }
+  static getDerivedStateFromProps(
+    props: SafeRenderProps,
+    state: { hasError: boolean; lastSig: string },
+  ) {
+    const sig = `${props.elementId}|${JSON.stringify(props.element.props)}`;
+    if (sig !== state.lastSig) return { hasError: false, lastSig: sig };
+    return null;
   }
   componentDidCatch(err: Error) {
     // eslint-disable-next-line no-console

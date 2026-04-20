@@ -172,6 +172,35 @@ if (customElementsResult.moduleCount > 0) {
   );
 }
 
+// Belt-and-braces: child.on("close") only fires on graceful exit. SIGTERM
+// (kill from CI), SIGINT (Ctrl+C), and uncaught throws skip the close
+// callback and would leave the barrel populated → next render imports
+// stale modules and the working tree is dirty until someone notices.
+// These handlers reset the barrel before forwarding the original signal.
+let barrelResetDone = false;
+const safeReset = () => {
+  if (barrelResetDone) return;
+  barrelResetDone = true;
+  try {
+    resetCustomElementsBarrel(repoRoot);
+  } catch {
+    // Reset is best-effort during a kill; don't mask the original signal.
+  }
+};
+process.on("SIGINT", () => {
+  safeReset();
+  process.exit(130);
+});
+process.on("SIGTERM", () => {
+  safeReset();
+  process.exit(143);
+});
+process.on("uncaughtException", (err) => {
+  safeReset();
+  console.error("[mv:render] uncaught:", err);
+  process.exit(1);
+});
+
 if (args.dryRun) {
   console.log("--dry-run: would spawn:");
   console.log(`  cwd: ${repoRoot}`);
@@ -179,7 +208,7 @@ if (args.dryRun) {
   console.log(
     '  tip: if remotion errors with "No composition with the ID <name> found", run `npx remotion compositions src/index.ts` for the registered list.',
   );
-  resetCustomElementsBarrel(repoRoot);
+  safeReset();
   process.exit(0);
 }
 
@@ -230,6 +259,6 @@ child.on("close", (code) => {
   // Reset the barrel on BOTH success and failure so the source tree never
   // drifts between renders. If we crashed mid-render, the next render (or
   // the editor) would otherwise import stale project modules by path.
-  resetCustomElementsBarrel(repoRoot);
+  safeReset();
   process.exit(code ?? 1);
 });

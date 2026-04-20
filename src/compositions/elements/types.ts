@@ -1,6 +1,7 @@
 import type { FC } from "react";
 import type { z } from "zod";
 import type { BeatsAPI } from "../../hooks/useBeats";
+import type { EventMark } from "../../utils/events";
 
 export type ElementCategory = "text" | "audio" | "shape" | "overlay" | "video";
 
@@ -25,6 +26,11 @@ export type RenderCtx = {
   absTimeSec: number;
   elementLocalSec: number;
   elementProgress: number;
+  // Named time events (MC-style waitUntil pattern). Elements that want to
+  // anchor behavior to a named moment resolve via resolveEvent(events, name,
+  // fallbackSec) from ../../utils/events. Empty array in tests + renders
+  // where events.json is absent.
+  events: EventMark[];
 };
 
 export type ElementRendererProps<P = Record<string, unknown>> = {

@@ -10,12 +10,17 @@ import { z } from "zod";
 import { useBeats } from "../hooks/useBeats";
 import { ELEMENT_REGISTRY } from "./elements/registry";
 import type { RenderCtx, TimelineElement } from "./elements/types";
+import type { EventMark } from "../utils/events";
 
 export const musicVideoSchema = z.object({
   audioSrc: z.string().nullable(),
   beatsSrc: z.string().nullable(),
   backgroundColor: z.string().default("#000000"),
   elements: z.array(z.any()).default([]),
+  // Named time events (MC-style waitUntil pattern). Authored in the editor
+  // (cyan pills on the waveform) and persisted to projects/<stem>/events.json.
+  // Elements resolve these via ctx.events at render time.
+  events: z.array(z.object({ name: z.string(), timeSec: z.number() })).default([]),
   // When true, suppress the internal <Audio> tag but still expose audioSrc
   // to elements via RenderCtx so audio-reactive visualizers (FFT, waveform)
   // keep working. Used by the editor preview, which owns audio playback
@@ -32,6 +37,7 @@ export type MusicVideoProps = {
   beatsSrc: string | null;
   backgroundColor: string;
   elements: TimelineElement[];
+  events?: EventMark[];
   muteAudioTag?: boolean;
   analysisAudioSrc?: string | null;
 };
@@ -44,6 +50,7 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
   beatsSrc,
   backgroundColor,
   elements,
+  events = [],
   muteAudioTag = false,
   analysisAudioSrc = null,
 }) => {
@@ -91,6 +98,7 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
           absTimeSec,
           elementLocalSec,
           elementProgress,
+          events,
         };
         const Renderer = mod.Renderer;
         // el is a discriminated union across the 16 element types; the registry
@@ -108,4 +116,5 @@ export const defaultMusicVideoProps: MusicVideoProps = {
   beatsSrc: "love-in-traffic-beats.json",
   backgroundColor: "#000000",
   elements: [],
+  events: [],
 };

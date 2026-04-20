@@ -8,10 +8,10 @@
 // suppressed in the preview by passing audioSrc=null; at render time
 // (remotion render), the CLI passes audioSrc through and the composition
 // plays it normally.
-import { Player, PlayerRef } from "@remotion/player";
+import { Player, PlayerRef, CallbackListener } from "@remotion/player";
 import { useRef, useEffect, useMemo } from "react";
 import { useEditorStore } from "../store";
-import { MusicVideo, defaultMusicVideoProps } from "@compositions/MusicVideo";
+import { MusicVideo, defaultMusicVideoProps, type MusicVideoProps } from "@compositions/MusicVideo";
 import { toEditorUrl } from "../utils/url";
 
 export const Preview = () => {
@@ -21,6 +21,7 @@ export const Preview = () => {
   const fps = useEditorStore((s) => s.fps);
   const isPlaying = useEditorStore((s) => s.isPlaying);
   const elements = useEditorStore((s) => s.elements);
+  const events = useEditorStore((s) => s.events);
   const compositionDuration = useEditorStore((s) => s.compositionDuration);
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);
@@ -41,10 +42,11 @@ export const Preview = () => {
       audioSrc: null,
       beatsSrc: beatsSrc ?? defaultMusicVideoProps.beatsSrc,
       elements,
+      events,
       muteAudioTag: true,
       analysisAudioSrc: audioUrl,
     }),
-    [audioUrl, beatsSrc, elements],
+    [audioUrl, beatsSrc, elements, events],
   );
 
   // Transport: isPlaying drives BOTH the Player (visuals) and the <audio>
@@ -86,16 +88,11 @@ export const Preview = () => {
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
-    const handler = (e: { detail: { frame: number } }) => {
+    const handler: CallbackListener<"frameupdate"> = (e) => {
       useEditorStore.setState({ currentTimeSec: e.detail.frame / fps });
     };
-    // Remotion Player types addEventListener per-event and expects a narrower
-    // handler signature; our `handler` closes over fps and the ref. Both casts
-    // point at the same library-type gap.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    player.addEventListener("frameupdate", handler as any);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return () => player.removeEventListener("frameupdate", handler as any);
+    player.addEventListener("frameupdate", handler);
+    return () => player.removeEventListener("frameupdate", handler);
   }, [fps]);
 
   return (
@@ -106,10 +103,9 @@ export const Preview = () => {
       <Player
         ref={playerRef}
         component={MusicVideo}
-        // inputProps typing follows the component\'s schema generic; see Root.tsx
-        // for the same mismatch against Composition\'s schema prop.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        inputProps={inputProps as any}
+        // Player's inputProps is typed against the schema generic (see Root.tsx
+        // for the same library-type gap); narrow to the component's own props.
+        inputProps={inputProps as MusicVideoProps}
         compositionWidth={848}
         compositionHeight={480}
         fps={fps}

@@ -60,3 +60,7 @@ projects/*
 # _plans/ holds design docs + implementation plans — engine-level history
 # we keep tracked.
 !projects/_plans/
+
+# Biome transients — LSP logs + local cache.
+biome-logs/
+.biome/

@@ -184,11 +184,9 @@ type Props = {
 
 export const SchemaEditor: React.FC<Props> = ({ schema, value, onChange }) => {
   // unwrap walks optional/default/nullable wrappers regardless of inner
-  // type; keeping this typed would require re-declaring unwrap\'s return as
-  // a discriminated union over every zod kind. Accepting any at this point
-  // is the practical trade-off — the caller code then discriminates.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const anySchema = unwrap(schema as any);
+  // type. Its signature already takes `any`, so passing a ZodType<any> needs
+  // no further cast — the caller code then discriminates by _def.type.
+  const anySchema = unwrap(schema);
   // Zod 4: `.shape` is a plain object on ZodObject (no function call).
   const shape: Record<string, any> = anySchema?.shape ?? {};
   const keys = Object.keys(shape);

@@ -8,13 +8,16 @@
     "render": "remotion render",
     "still": "remotion still",
     "test": "vitest run",
+    "lint": "npx @biomejs/biome check .",
+    "lint:fix": "npx @biomejs/biome check --write --unsafe .",
     "mv:render": "tsx scripts/cli/mv-render.ts",
     "mv:scaffold": "tsx scripts/cli/mv-scaffold.ts",
     "mv:current": "tsx scripts/cli/mv-current.ts",
     "mv:analyze": "tsx scripts/cli/mv-analyze.ts",
     "mv:seed-beats": "tsx scripts/cli/mv-seed-beats.ts",
     "mv:clear-events": "tsx scripts/cli/mv-clear-events.ts",
-    "mv:switch": "tsx scripts/cli/mv-switch.ts"
+    "mv:switch": "tsx scripts/cli/mv-switch.ts",
+    "mv:project-init-repo": "tsx scripts/cli/mv-project-init-repo.ts"
   },
   "keywords": [],
   "author": "ali",

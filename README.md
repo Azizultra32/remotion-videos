@@ -21,6 +21,10 @@ npm run mv:analyze  -- --project <stem>     # 5-10 min, runs full pipeline
 
 …or drop the mp3 onto the **+ New** button in the editor — same effect, no terminal.
 
+## Linting
+
+`npm run lint` runs [Biome](https://biomejs.dev/) (`npx @biomejs/biome check .`) against the engine — it covers both linter + formatter + import-sort in a single pass, replacing ESLint and Prettier with one zero-config tool. Use `npm run lint:fix` to auto-apply safe and unsafe fixes (the `--unsafe` flag lets Biome rewrite things like `forEach` → `for…of` that ESLint would leave alone). Config lives in `biome.json` at the repo root; `node_modules`, `editor/dist`, `out/`, and `projects/` are ignored so only engine source is checked. Biome is not yet in `devDependencies`, so the first run downloads it via `npx` — add `@biomejs/biome` to `devDependencies` if you want it cached locally.
+
 ## Where projects live
 
 By default, projects go under `<engineRoot>/projects/<stem>/` (gitignored). You can relocate them:

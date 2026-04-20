@@ -1,0 +1,12 @@
+# Python dependencies for the audio-analysis pipeline.
+# Consumed by scripts/*.py (energy-bands, detect-beats, detect-drops,
+# compute-spectrum, hires-energy, plot-pioneer, slice-pioneer-png).
+#
+# Floors pinned to the working environment on 2026-04-19. Upper bounds
+# omitted on purpose — librosa/numpy/scipy release cadence is slow enough
+# that a fresh floor-compatible install keeps behaving.
+librosa>=0.11.0
+numpy>=1.26.4
+scipy>=1.15.1
+matplotlib>=3.7.5
+Pillow>=11.2.1

@@ -43,6 +43,7 @@ export const StoryboardStrip = () => {
   const currentTimeSec = useEditorStore((s) => s.currentTimeSec);
   const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
   const audioSrc = useEditorStore((s) => s.audioSrc);
+  const compositionDuration = useEditorStore((s) => s.compositionDuration);
 
   const [editing, setEditing] = useState<EditDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -126,123 +127,201 @@ export const StoryboardStrip = () => {
 
   if (!audioSrc) return null; // nothing to storyboard against
 
+  const totalSec = compositionDuration || 1;
+
   return (
     <div
       style={{
         display: "flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 16px",
+        alignItems: "stretch",
+        gap: 8,
+        padding: "6px 16px",
         borderBottom: "1px solid #222",
         background: "#0a0a0a",
-        overflowX: "auto",
-        rowGap: 4,
       }}
     >
-      <span
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 90 }}>
+        <span
+          style={{
+            fontSize: 10,
+            color: "#888",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            whiteSpace: "nowrap",
+          }}
+          title="Scenes plan the video structurally. Each scene is a named chunk of time with creative intent, rendered as a proportional block aligned with the waveform below. Click a card to seek; double-click to edit."
+        >
+          Storyboard
+        </span>
+        <button
+          type="button"
+          onClick={openCreate}
+          style={{
+            padding: "3px 10px",
+            fontSize: 10,
+            fontFamily: "monospace",
+            background: "#1a3a1a",
+            border: "1px solid #386",
+            borderRadius: 3,
+            color: "#afa",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+          title="Add a scene at the current playhead position (30s default duration; edit after create)."
+        >
+          + Scene
+        </button>
+      </div>
+      <div
         style={{
-          fontSize: 10,
-          color: "#888",
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          whiteSpace: "nowrap",
+          position: "relative",
+          flex: 1,
+          minWidth: 0,
+          height: 56,
+          background: "#111",
+          border: "1px solid #1f1f1f",
+          borderRadius: 4,
+          overflow: "hidden",
         }}
-        title="Scenes plan the video structurally. Each scene is a named chunk of time with creative intent. Click a card to seek. Drag the yellow event markers on the waveform below to refine; link specific elements to scenes via the Element Detail panel."
       >
-        Storyboard
-      </span>
-      {sorted.length === 0 ? (
-        <span style={{ fontSize: 10, color: "#555", fontStyle: "italic" }}>No scenes yet —</span>
-      ) : (
-        sorted.map((sc) => {
+        {/* Playhead: red line at currentTime, matches the waveform below */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: `${Math.max(0, Math.min(100, (currentTimeSec / totalSec) * 100))}%`,
+            width: 2,
+            background: "#ff4444",
+            transform: "translateX(-1px)",
+            pointerEvents: "none",
+            zIndex: 5,
+          }}
+        />
+        {sorted.length === 0 && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#555",
+              fontSize: 11,
+              fontStyle: "italic",
+              pointerEvents: "none",
+            }}
+          >
+            No scenes yet — click + SCENE to add one at the playhead
+          </div>
+        )}
+        {sorted.map((sc) => {
           const isActive = sc.id === activeId;
+          const leftPct = (sc.startSec / totalSec) * 100;
+          const widthPct = Math.max(1.5, ((sc.endSec - sc.startSec) / totalSec) * 100);
           return (
-            // biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate
-            // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate
+            // biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas
+            // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas
             <div
               key={sc.id}
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "3px 8px",
-                background: isActive ? "#1e3a5f" : "#1a1a1a",
-                border: `1px solid ${isActive ? "#2196F3" : "#333"}`,
+                position: "absolute",
+                top: 4,
+                bottom: 4,
+                left: `${leftPct}%`,
+                width: `${widthPct}%`,
+                background: isActive ? "#1e3a5f" : "#162028",
+                border: `1px solid ${isActive ? "#64b5f6" : "#2a3a4a"}`,
                 borderRadius: 3,
+                padding: "2px 6px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                overflow: "hidden",
+                cursor: "pointer",
                 fontSize: 10,
                 fontFamily: "monospace",
-                whiteSpace: "nowrap",
-                cursor: "pointer",
               }}
               onClick={() => setCurrentTime(sc.startSec)}
-              title={`${sc.name || "(unnamed)"} · ${fmtTime(sc.startSec)} – ${fmtTime(sc.endSec)}${sc.intent ? `\n${sc.intent}` : ""}`}
+              onDoubleClick={() => openEdit(sc)}
+              title={`${sc.name || "(unnamed)"}\n${fmtTime(sc.startSec)}–${fmtTime(sc.endSec)}${sc.intent ? `\n\n${sc.intent}` : ""}\n\nClick: seek to start. Double-click: edit.`}
             >
-              <span style={{ color: "#fff", fontWeight: 600 }}>{sc.name || "Untitled"}</span>
-              <span style={{ color: "#888" }}>
-                {fmtTime(sc.startSec)}–{fmtTime(sc.endSec)}
-              </span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openEdit(sc);
-                }}
-                title="Edit scene"
-                style={{
-                  padding: "0 4px",
-                  background: "transparent",
-                  border: "1px solid #444",
-                  color: "#aaa",
-                  fontSize: 10,
-                  borderRadius: 2,
-                  cursor: "pointer",
-                }}
-              >
-                ✎
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  del(sc);
-                }}
-                title="Delete scene"
-                style={{
-                  padding: "0 4px",
-                  background: "transparent",
-                  border: "1px solid #544",
-                  color: "#c88",
-                  fontSize: 10,
-                  borderRadius: 2,
-                  cursor: "pointer",
-                }}
-              >
-                ×
-              </button>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 4 }}>
+                <span
+                  style={{
+                    color: "#fff",
+                    fontWeight: 600,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flex: 1,
+                  }}
+                >
+                  {sc.name || "Untitled"}
+                </span>
+                <span style={{ color: "#888", fontSize: 9, whiteSpace: "nowrap" }}>
+                  {fmtTime(sc.startSec)}–{fmtTime(sc.endSec)}
+                </span>
+              </div>
+              {sc.intent && (
+                <span
+                  style={{
+                    color: "#9ab",
+                    fontSize: 9,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {sc.intent}
+                </span>
+              )}
+              <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEdit(sc);
+                  }}
+                  title="Edit scene"
+                  style={{
+                    padding: "0 4px",
+                    background: "transparent",
+                    border: "1px solid #446",
+                    color: "#8bf",
+                    fontSize: 9,
+                    borderRadius: 2,
+                    cursor: "pointer",
+                  }}
+                >
+                  edit
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    del(sc);
+                  }}
+                  title="Delete scene"
+                  style={{
+                    padding: "0 4px",
+                    background: "transparent",
+                    border: "1px solid #644",
+                    color: "#f88",
+                    fontSize: 9,
+                    borderRadius: 2,
+                    cursor: "pointer",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             </div>
           );
-        })
-      )}
-      <button
-        type="button"
-        onClick={openCreate}
-        style={{
-          padding: "3px 10px",
-          fontSize: 10,
-          fontFamily: "monospace",
-          background: "#1a3a1a",
-          border: "1px solid #386",
-          borderRadius: 3,
-          color: "#afa",
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-        }}
-        title="Add a scene at the current playhead position (30s default duration; edit after create)."
-      >
-        + Scene
-      </button>
+        })}
+      </div>
 
       {editing && (
         // biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate

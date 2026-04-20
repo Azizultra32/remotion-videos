@@ -83,18 +83,23 @@ async function main(): Promise<void> {
     env: { ...process.env, FORCE_COLOR: "0" },
   });
 
-  let port: number | null = null;
-  const portPromise = new Promise<number>((resolveP) => {
-    const onChunk = (chunk: Buffer) => {
-      const text = chunk.toString();
-      const m = text.match(/localhost:(\d+)/);
-      if (m) {
-        port = Number(m[1]);
-        resolveP(port);
+  // Detect port by polling a small range of candidate ports rather than
+  // parsing Vite's output (ANSI color / buffering made that brittle).
+  const portPromise = new Promise<number>(async (resolveP, reject) => {
+    const candidates = [4000, 4001, 4002, 4003, 4004, 5173, 5174];
+    const start = Date.now();
+    while (Date.now() - start < 40_000) {
+      for (const candidate of candidates) {
+        try {
+          const r = await fetch(`http://localhost:${candidate}/api/assets/list`, {
+            signal: AbortSignal.timeout(1_000),
+          });
+          if (r.ok) { resolveP(candidate); return; }
+        } catch { /* port not up yet */ }
       }
-    };
-    child.stdout?.on("data", onChunk);
-    child.stderr?.on("data", onChunk);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    reject(new Error("no candidate port responded"));
   });
 
   let failureMessage: string | null = null;
@@ -102,7 +107,7 @@ async function main(): Promise<void> {
     const detectedPort = await Promise.race([
       portPromise,
       new Promise<number>((_, rej) =>
-        setTimeout(() => rej(new Error("timeout waiting for port")), 20_000),
+        setTimeout(() => rej(new Error("timeout waiting for port")), 45_000),
       ),
     ]);
     const base = `http://localhost:${detectedPort}`;

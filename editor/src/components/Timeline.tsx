@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useEditorStore } from "../store";
 import type { TimelineElement as TimelineElementType } from "../types";
+import { snapTime } from "../utils/time";
+import { ELEMENT_REGISTRY } from "@compositions/elements/registry";
 import { TimelineBeatMarkers } from "./TimelineBeatMarkers";
 import { TimelineEventMarkers } from "./TimelineEventMarkers";
 import { TimelineElement } from "./TimelineElement";
@@ -15,6 +17,16 @@ const GUTTER_WIDTH = 96;
 // (matches the former fixed scale). Inversely tied to secPerPx so the two
 // views stay at the exact same time axis.
 const DEFAULT_SEC_PER_PX = 0.025;
+
+// Click-from-AssetLibrary defaults. Must stay in sync with the constants in
+// AssetLibrary.tsx — both resolve the same "image vs video → which element
+// module wraps it" question, and they must agree or drop-to-timeline and
+// click-at-playhead produce different element types for the same asset.
+const IMAGE_MODULE_ID_FOR_DROP = "overlay.staticImage";
+const VIDEO_MODULE_ID_FOR_DROP = "overlay.speedVideo";
+
+const newIdFromDrop = () => `el-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
 
 // Labels indexed by trackIndex. Matches each element module's defaultTrack:
 // text/bell/glitch/typing/sliding/popping → 0, beatDrop/fitboxSVG → 1,
@@ -144,6 +156,59 @@ export const Timeline = () => {
           {/* Bar lanes — single relative container for all tracks so
               beat-markers + playhead can span the whole height */}
           <div
+            onDragOver={(e) => {
+              // Accept only asset drags from AssetLibrary; native file
+              // drops land on the AssetLibrary panel's dropzone instead.
+              if (!e.dataTransfer.types.includes("application/x-mv-asset")) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }}
+            onDrop={(e) => {
+              const payload = e.dataTransfer.getData("application/x-mv-asset");
+              if (!payload) return;
+              e.preventDefault();
+              let asset: { path: string; kind: "image" | "video" };
+              try { asset = JSON.parse(payload); }
+              catch { return; }
+
+              const rect = e.currentTarget.getBoundingClientRect();
+              // Data-space pixel = visual-offset + current pan. Timeline
+              // applies translateX(-panPx) to this container, so clientX
+              // - rect.left is the visual x, and we add panPx back to get
+              // the un-translated (data-space) x.
+              const dataPx = e.clientX - rect.left + panPx;
+              const rawSec = Math.max(0, Math.min(compositionDuration, dataPx * effectiveSecPerPx));
+
+              // Track row. clientY - rect.top is already in the
+              // container's local space (tracks start at top=0).
+              const dropTrack = Math.floor((e.clientY - rect.top) / TRACK_HEIGHT);
+              if (dropTrack < 0 || dropTrack >= TRACK_COUNT) return;
+
+              // Respect the user's snap setting — matches the drag/resize
+              // behavior. shiftKey inverts as elsewhere.
+              const state = useEditorStore.getState();
+              const snappedSec = snapTime(rawSec, state.snapMode, state.beatData, e.shiftKey);
+
+              const modId = asset.kind === "image" ? IMAGE_MODULE_ID_FOR_DROP : VIDEO_MODULE_ID_FOR_DROP;
+              const mod = ELEMENT_REGISTRY[modId];
+              if (!mod) return;
+              const seededProps =
+                asset.kind === "image"
+                  ? { ...mod.defaults, imageSrc: asset.path }
+                  : { ...mod.defaults, videoSrc: asset.path };
+
+              const newEl: TimelineElementType = {
+                id: newIdFromDrop(),
+                label: `${mod.label}: ${asset.path.split("/").pop() ?? asset.path}`,
+                type: mod.id,
+                trackIndex: dropTrack,
+                startSec: snappedSec,
+                durationSec: mod.defaultDurationSec,
+                props: seededProps,
+              };
+              state.addElement(newEl);
+              state.selectElement(newEl.id);
+            }}
             onWheel={(e) => {
               // Shared zoom/pan: wheel zooms with cursor anchor, shift-wheel
               // (or horizontal trackpad) pans. Matches Scrubber behavior so

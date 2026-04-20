@@ -14,7 +14,12 @@ Agents must obey this file. Humans can override locally (`ENGINE_UNLOCK=1 <comma
 These paths hold reusable infrastructure: the render engine, the editor app, the analysis pipeline, and the contract docs themselves. Agents **cannot** modify them unless the user unlocks.
 
 ```
-src/                           Remotion compositions + hooks + Root.tsx
+src/hooks/                     Remotion hooks (locked)
+src/utils/                     shared util modules (locked)
+src/lib/                       library modules (locked)
+src/components/                Remotion UI components (locked)
+src/Root.tsx                   composition registration (locked)
+src/compositions/**            element authoring library (FREE-WRITE — no ENGINE_UNLOCK required)
 editor/                        Vite editor app (UI + sidecar plugin)
 scripts/                       All Python + shell + TypeScript scripts
 public/fonts/                  engine-level assets

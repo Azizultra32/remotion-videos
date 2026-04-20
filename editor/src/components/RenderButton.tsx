@@ -1,6 +1,7 @@
 // src/components/RenderButton.tsx
 // Render-to-MP4 trigger button — wired to the Vite sidecar via useRender().
 import { useRender } from "../hooks/useRender";
+import { useEditorStore } from "../store";
 
 // Base button style matches ProjectActions' `btn` shape.
 const base: React.CSSProperties = {
@@ -77,6 +78,11 @@ const progressFill = (pct: number): React.CSSProperties => ({
 
 export const RenderButton = () => {
   const { render, status, progress, error: renderError, outPath, outName, cancel } = useRender();
+  const inPointSec = useEditorStore((s) => s.inPointSec);
+  const outPointSec = useEditorStore((s) => s.outPointSec);
+  const fps = useEditorStore((s) => s.fps);
+  const hasRange = inPointSec !== null && outPointSec !== null && outPointSec > inPointSec;
+  const rangeSec = hasRange ? (outPointSec as number) - (inPointSec as number) : 0;
 
   const pct =
     progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
@@ -140,15 +146,42 @@ export const RenderButton = () => {
     );
   }
 
-  // idle
+  // idle — show both "Render MP4" (full) and "Render Range" (if in/out set)
   return (
-    <button
-      type="button"
-      style={idle}
-      onClick={() => render()}
-      title="Render timeline to MP4 via sidecar"
-    >
-      Render MP4
-    </button>
+    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+      <button
+        type="button"
+        style={idle}
+        onClick={() => render()}
+        title="Render the full timeline to MP4 via sidecar"
+      >
+        Render MP4
+      </button>
+      {hasRange && (
+        <button
+          type="button"
+          onClick={() => {
+            const start = Math.floor((inPointSec as number) * fps);
+            const end = Math.ceil((outPointSec as number) * fps);
+            render(`musicvideo-range-${Date.now()}`, { frames: { start, end } });
+          }}
+          style={{
+            padding: "4px 10px",
+            fontSize: 11,
+            fontFamily: "monospace",
+            background: "#1e3a5f",
+            border: "1px solid #3b82f6",
+            borderRadius: 3,
+            color: "#dbeafe",
+            cursor: "pointer",
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+          }}
+          title={`Render just the in/out range: ${(inPointSec as number).toFixed(2)}s → ${(outPointSec as number).toFixed(2)}s (${rangeSec.toFixed(2)}s / ~${Math.max(1, Math.ceil(rangeSec * fps))} frames)`}
+        >
+          Render range ({rangeSec.toFixed(1)}s)
+        </button>
+      )}
+    </div>
   );
 };

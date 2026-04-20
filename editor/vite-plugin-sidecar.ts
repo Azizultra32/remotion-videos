@@ -834,6 +834,19 @@ const handleRender = async (req: IncomingMessage, res: ServerResponse): Promise<
     outPath,
     `--props=${JSON.stringify(props)}`,
   ];
+  // Optional partial-range render: body.frames = { start, end } in frame
+  // indices (inclusive). Passes through as --frames=start-end. Used by
+  // the editor's in/out selector ([ / ]) to render just the marked range.
+  const framesReq = body?.frames;
+  if (
+    framesReq && typeof framesReq === "object" &&
+    typeof (framesReq as {start?: unknown}).start === "number" &&
+    typeof (framesReq as {end?: unknown}).end === "number"
+  ) {
+    const start = Math.max(0, Math.floor(Number((framesReq as {start: number}).start)));
+    const end = Math.max(start, Math.floor(Number((framesReq as {end: number}).end)));
+    args.push(`--frames=${start}-${end}`);
+  }
   const child = spawn("npx", args, {
     cwd: REPO_ROOT,
     stdio: ["ignore", "pipe", "pipe"],

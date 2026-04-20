@@ -9,7 +9,7 @@ export type RenderStatus = "idle" | "rendering" | "done" | "error" | "cancelled"
 export type RenderProgress = { done: number; total: number };
 
 export interface UseRenderReturn {
-  render: (name?: string) => Promise<void>;
+  render: (name?: string, options?: { frames?: { start: number; end: number } }) => Promise<void>;
   status: RenderStatus;
   progress: RenderProgress | null;
   error: string | null;
@@ -61,7 +61,10 @@ export const useRender = (): UseRenderReturn => {
     }
   }, []);
 
-  const render = useCallback(async (name?: string) => {
+  const render = useCallback(async (
+    name?: string,
+    options?: { frames?: { start: number; end: number } },
+  ) => {
     const renderName = name ?? `musicvideo-${Date.now()}`;
     const props = exportProject();
 
@@ -78,7 +81,7 @@ export const useRender = (): UseRenderReturn => {
       const response = await fetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ props, name: renderName }),
+        body: JSON.stringify({ props, name: renderName, frames: options?.frames }),
         signal: controller.signal,
       });
 

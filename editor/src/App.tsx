@@ -64,7 +64,7 @@ export const App = () => {
     // Intentionally run once — we only want to hydrate missing state, not
     // fight the user's later picks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setBeatsSrc, beatsSrc]);
 
   // Reactive beats load: re-fetches whenever the store's beatsSrc changes
   // (i.e. when SongPicker calls setTrack). toEditorUrl routes

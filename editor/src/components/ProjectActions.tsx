@@ -35,6 +35,7 @@ export const ProjectActions = () => {
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <RenderButton />
       <button
+        type="button"
         onClick={() => downloadProjectFile()}
         title="Download current timeline as .musicvideo.json (feeds `remotion render --props=...`)"
         style={btn}
@@ -42,6 +43,7 @@ export const ProjectActions = () => {
         Export JSON
       </button>
       <button
+        type="button"
         onClick={() => fileRef.current?.click()}
         title="Load a .musicvideo.json file"
         style={{ ...btn, background: "#2a1a3a", borderColor: "#63a", color: "#c8f" }}

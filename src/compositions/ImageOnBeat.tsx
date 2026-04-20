@@ -102,7 +102,7 @@ export const ImageOnBeat: React.FC<z.infer<typeof imageOnBeatSchema>> = ({
   const changeStep = Math.max(1, Math.floor(changeEveryNBeats));
   const currentStep = Math.floor(beatsSinceStart / changeStep);
   const imageIdx = currentStep % images.length;
-  const nextIdx = (imageIdx + 1) % images.length;
+  const _nextIdx = (imageIdx + 1) % images.length;
 
   // Time of the last image change (for transition animation).
   const lastChangeBeatIdx = startIdx + currentStep * changeStep;

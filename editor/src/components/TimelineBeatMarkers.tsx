@@ -24,9 +24,9 @@ export const TimelineBeatMarkers = ({ beatData, pxPerSec, height }: Props) => {
         zIndex: 0,
       }}
     >
-      {breakdowns.map((b, i) => (
+      {breakdowns.map((b) => (
         <div
-          key={`bd${i}`}
+          key={`bd${b.start}`}
           style={{
             position: "absolute",
             left: b.start * pxPerSec,
@@ -37,11 +37,11 @@ export const TimelineBeatMarkers = ({ beatData, pxPerSec, height }: Props) => {
           }}
         />
       ))}
-      {beatData.beats.map((t, i) => {
+      {beatData.beats.map((t) => {
         const isDown = downbeats.has(t);
         return (
           <div
-            key={`b${i}`}
+            key={`b${t}`}
             style={{
               position: "absolute",
               left: t * pxPerSec,

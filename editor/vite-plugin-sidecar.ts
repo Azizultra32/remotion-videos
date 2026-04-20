@@ -132,7 +132,7 @@ const reconcileOrphanStatusFiles = async (projectsDir: string): Promise<void> =>
       endedAt: now,
       updatedAt: now,
     };
-    const tmp = statusFile + ".tmp";
+    const tmp = `${statusFile}.tmp`;
     try {
       await fs.writeFile(tmp, JSON.stringify(reconciled, null, 2));
       await fs.rename(tmp, statusFile);
@@ -150,7 +150,7 @@ const reconcileOrphanStatusFiles = async (projectsDir: string): Promise<void> =>
 // Fire-and-forget: boot-time orphan sweep. We don't block plugin init on it.
 void reconcileOrphanStatusFiles(PROJECTS_DIR);
 
-const PUBLIC_DIR = path.join(REPO_ROOT, "public"); // kept for legacy engine assets (fonts, etc.)
+const _PUBLIC_DIR = path.join(REPO_ROOT, "public"); // kept for legacy engine assets (fonts, etc.)
 
 // Per-stem in-process lock so concurrent /api/timeline/save calls don't
 // interleave their writes. Each write waits for the previous one on the
@@ -445,7 +445,7 @@ const handleStoryboardSave = async (req: IncomingMessage, res: ServerResponse): 
   const prev = STORYBOARD_LOCK.get(stem) ?? Promise.resolve();
   const next = prev.then(async () => {
     const dest = path.join(projectDir, "storyboard.json");
-    const tmp = dest + ".tmp";
+    const tmp = `${dest}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(storyboard, null, 2));
     await fs.rename(tmp, dest);
   });
@@ -488,6 +488,27 @@ const handleCurrentGet = async (_req: IncomingMessage, res: ServerResponse): Pro
     res.end(JSON.stringify({ error: "no current project" }));
     return;
   }
+  // Validate: the stored stem must exist under the ACTIVE MV_PROJECTS_DIR.
+  // When a user switches MV_PROJECTS_DIR between sessions, .current-project
+  // may still point at a stem absent from the new root. Report 404 instead
+  // of returning a dead pointer.
+  if (content && STEM_RE.test(content)) {
+    const projectDir = path.join(PROJECTS_DIR, content);
+    try {
+      const st = await fs.stat(projectDir);
+      if (!st.isDirectory()) throw new Error("not a directory");
+    } catch {
+      res.statusCode = 404;
+      res.setHeader("Content-Type", "application/json");
+      res.end(
+        JSON.stringify({
+          error: `current project "${content}" not found under MV_PROJECTS_DIR (${PROJECTS_DIR})`,
+          stale: content,
+        }),
+      );
+      return;
+    }
+  }
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify({ stem: content }));
@@ -502,7 +523,7 @@ const handleCurrentSave = async (req: IncomingMessage, res: ServerResponse): Pro
     res.end(JSON.stringify({ error: "bad stem" }));
     return;
   }
-  await fs.writeFile(CURRENT_PROJECT_FILE, stem + "\n");
+  await fs.writeFile(CURRENT_PROJECT_FILE, `${stem}\n`);
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({ ok: true, stem }));
 };
@@ -538,7 +559,7 @@ const handleTimelineSave = async (req: IncomingMessage, res: ServerResponse): Pr
   const prev = TIMELINE_LOCK.get(stem) ?? Promise.resolve();
   const next = prev.then(async () => {
     const dest = path.join(projectDir, "timeline.json");
-    const tmp = dest + ".tmp";
+    const tmp = `${dest}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(timeline, null, 2));
     await fs.rename(tmp, dest);
   });
@@ -618,7 +639,7 @@ const handleEventsSave = async (req: IncomingMessage, res: ServerResponse): Prom
   const prev = EVENTS_LOCK.get(stem) ?? Promise.resolve();
   const next = prev.then(async () => {
     const destFile = path.join(projectDir, "events.json");
-    const tmp = destFile + ".tmp";
+    const tmp = `${destFile}.tmp`;
     await fs.writeFile(tmp, serializeEventsFile(toPersist.events));
     await fs.rename(tmp, destFile);
   });
@@ -1186,7 +1207,7 @@ const clearAnalysisEvents = async (projectDir: string): Promise<void> => {
     phase1_events_sec: [],
     phase2_events_sec: [],
   };
-  await fs.writeFile(analysisFile, JSON.stringify(merged, null, 2) + "\n", "utf8");
+  await fs.writeFile(analysisFile, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
 };
 
 // POST /api/analyze/run  {stem}
@@ -1228,7 +1249,7 @@ const handleAnalyzeRun = async (req: IncomingMessage, res: ServerResponse): Prom
       res.end(JSON.stringify({ error: "status file mid-write; retry in a moment" }));
       return;
     }
-    if (parsed && parsed.startedAt && !parsed.endedAt) {
+    if (parsed?.startedAt && !parsed.endedAt) {
       res.statusCode = 409;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "analysis already in flight", state: parsed }));
@@ -1445,7 +1466,7 @@ const handleProjectCreate = async (req: IncomingMessage, res: ServerResponse): P
   if (![".mp3", ".wav", ".m4a"].includes(ext)) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "expected .mp3/.wav/.m4a filename (got " + ext + ")" }));
+    res.end(JSON.stringify({ error: `expected .mp3/.wav/.m4a filename (got ${ext})` }));
     return;
   }
 
@@ -1498,7 +1519,7 @@ const handleAnalyzeClear = async (req: IncomingMessage, res: ServerResponse): Pr
   try {
     const raw = await fs.readFile(statusFile, "utf8");
     const st = JSON.parse(raw);
-    if (st && st.startedAt && !st.endedAt) {
+    if (st?.startedAt && !st.endedAt) {
       res.statusCode = 409;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "cannot clear while analysis is running" }));
@@ -1552,7 +1573,7 @@ const handleAnalyzeRunsList = async (req: IncomingMessage, res: ServerResponse):
       }
       return {
         id,
-        timestamp: id.replace(/-/g, (m, i) => (i < 10 ? "-" : i < 13 ? "T" : ":")),
+        timestamp: id.replace(/-/g, (_m, i) => (i < 10 ? "-" : i < 13 ? "T" : ":")),
         events,
       };
     }),
@@ -1675,7 +1696,7 @@ const handleAnalyzeCancel = async (req: IncomingMessage, res: ServerResponse): P
   } catch {
     /* fine */
   }
-  const tmp = statusFile + ".tmp";
+  const tmp = `${statusFile}.tmp`;
   const now = Date.now();
   await fs.writeFile(
     tmp,
@@ -1728,7 +1749,7 @@ const handleAnalyzeEventsUpdate = async (
   try {
     const raw = await fs.readFile(statusFile, "utf8");
     const st = JSON.parse(raw);
-    if (st && st.startedAt && !st.endedAt) {
+    if (st?.startedAt && !st.endedAt) {
       res.statusCode = 409;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ error: "cannot edit events while analysis is running" }));
@@ -1752,7 +1773,7 @@ const handleAnalyzeEventsUpdate = async (
     ...existing,
     phase2_events_sec: deduped,
   };
-  await fs.writeFile(analysisFile, JSON.stringify(merged, null, 2) + "\n", "utf8");
+  await fs.writeFile(analysisFile, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({ stem, events: deduped }));
@@ -1796,7 +1817,7 @@ const handleChat = async (req: IncomingMessage, res: ServerResponse): Promise<vo
   // stdin:"ignore" is load-bearing: without it claude waits 3s for piped
   // stdin, prints a warning, then never emits output in the Vite subprocess
   // context. Closing stdin up-front lets it move straight to the API call.
-  const child = spawn("claude", args, {
+  const child = spawn(process.env.CLAUDE_BIN || "claude", args, {
     cwd: REPO_ROOT,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -1947,14 +1968,14 @@ const handleChatStream = async (req: IncomingMessage, res: ServerResponse): Prom
 
   const send = (obj: unknown) => {
     try {
-      res.write(JSON.stringify(obj) + "\n");
+      res.write(`${JSON.stringify(obj)}\n`);
     } catch {
       /* closed */
     }
   };
 
   const child = spawn(
-    "claude",
+    process.env.CLAUDE_BIN || "claude",
     [
       "-p",
       "--output-format",
@@ -1986,7 +2007,7 @@ const handleChatStream = async (req: IncomingMessage, res: ServerResponse): Prom
     const t = ev.type;
     if (t === "assistant") {
       const m = ev.message as { content?: Array<Record<string, unknown>> } | undefined;
-      const content = Array.isArray(m?.content) ? m!.content : [];
+      const content = Array.isArray(m?.content) ? m?.content : [];
       for (const c of content) {
         const ct = c.type;
         if (ct === "text" && typeof c.text === "string") {
@@ -2003,7 +2024,7 @@ const handleChatStream = async (req: IncomingMessage, res: ServerResponse): Prom
       }
     } else if (t === "user") {
       const m = ev.message as { content?: Array<Record<string, unknown>> } | undefined;
-      const content = Array.isArray(m?.content) ? m!.content : [];
+      const content = Array.isArray(m?.content) ? m?.content : [];
       for (const c of content) {
         if (c.type === "tool_result") {
           const raw = c.content;

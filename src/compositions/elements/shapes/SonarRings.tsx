@@ -46,7 +46,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const maxR = Math.min(ctx.width, ctx.height) * (maxRadiusPct / 100);
 
   return (
-    <svg
+    <svg role="img" aria-label="Sonar rings shape"
       width={ctx.width}
       height={ctx.height}
       style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
@@ -57,6 +57,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
         const opacity = (1 - age) ** fadeExponent;
         return (
           <circle
+            // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
             key={`${ts}-${i}`}
             cx={cx}
             cy={cy}

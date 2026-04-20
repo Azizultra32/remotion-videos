@@ -183,7 +183,7 @@ export const SongPicker = () => {
             fontFamily: "monospace",
             background: uploading ? "#222" : "#1a3a1a",
             color: uploading ? "#666" : "#afa",
-            border: "1px solid " + (uploading ? "#333" : "#386"),
+            border: `1px solid ${uploading ? "#333" : "#386"}`,
             borderRadius: 3,
             cursor: uploading ? "not-allowed" : "pointer",
             whiteSpace: "nowrap",

@@ -16,7 +16,7 @@
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
+import { resolveProjectDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -54,7 +54,7 @@ if (!existsSync(projectDir)) {
 if (existsSync(statusFile)) {
   try {
     const st = JSON.parse(readFileSync(statusFile, "utf8"));
-    if (st && st.startedAt && !st.endedAt) {
+    if (st?.startedAt && !st.endedAt) {
       console.error(`[mv:clear-events] refusing: mv:analyze is running for ${stem}`);
       console.error(`  wait for it to finish (check .analyze-status.json) or kill it first`);
       process.exit(1);
@@ -79,8 +79,8 @@ const merged = {
   phase2_events_sec: [],
 };
 
-const tmp = analysisFile + ".tmp";
-writeFileSync(tmp, JSON.stringify(merged, null, 2) + "\n");
+const tmp = `${analysisFile}.tmp`;
+writeFileSync(tmp, `${JSON.stringify(merged, null, 2)}\n`);
 renameSync(tmp, analysisFile);
 
 const beatsLen = Array.isArray((existing as Record<string, unknown>).beats)

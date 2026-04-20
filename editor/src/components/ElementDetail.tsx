@@ -109,6 +109,7 @@ export const ElementDetail = () => {
             ORIGIN: {origin.toUpperCase()}
           </span>
           <button
+            type="button"
             onClick={() => setElementLocked(element.id, !isLocked)}
             style={{
               fontSize: 10,
@@ -133,6 +134,7 @@ export const ElementDetail = () => {
           </span>
         </h3>
         <button
+          type="button"
           onClick={() => removeElement(element.id)}
           style={{
             padding: "4px 10px",
@@ -187,6 +189,7 @@ export const ElementDetail = () => {
         </Field>
         {beatData && snapMode !== "off" && (
           <button
+            type="button"
             onClick={snapStart}
             title="Snap start time to nearest detected beat"
             style={{
@@ -265,6 +268,7 @@ export const ElementDetail = () => {
 
       {hasSpringProps && (
         <button
+          type="button"
           onClick={openTimingEditor}
           style={{
             padding: "6px 8px",

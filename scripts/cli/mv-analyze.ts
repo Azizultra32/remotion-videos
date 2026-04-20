@@ -21,7 +21,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
+import { resolveProjectDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -36,7 +36,7 @@ const writeStatus = (
 ) => {
   try {
     const target = statusFile(stem);
-    const tmp = target + ".tmp";
+    const tmp = `${target}.tmp`;
     // Write to sibling tmp then atomic rename — the editor's SSE reader
     // reads the file on every watch event, and a partial write would
     // throw JSON.parse. rename on same filesystem is atomic on POSIX.
@@ -177,7 +177,7 @@ console.log(`  projects/${stem}/analysis/full.png`);
     energy_bands: source.energy_bands,
     energy_bands_meta: source.energy_bands_meta,
   };
-  writeFileSync(destAnalysis, JSON.stringify(seeded, null, 2) + "\n");
+  writeFileSync(destAnalysis, `${JSON.stringify(seeded, null, 2)}\n`);
   console.log(
     `  seeded projects/${stem}/analysis.json with ${beats.beats.length} beats + energy bands`,
   );
@@ -312,7 +312,7 @@ child.on("close", (code) => {
         }
       }
       const merged = { ...existing, ...phase2 };
-      writeFileSync(dest, JSON.stringify(merged, null, 2) + "\n");
+      writeFileSync(dest, `${JSON.stringify(merged, null, 2)}\n`);
       console.log(
         `[mv:analyze] merged phase2-events -> projects/${stem}/analysis.json (preserved beats + bands)`,
       );

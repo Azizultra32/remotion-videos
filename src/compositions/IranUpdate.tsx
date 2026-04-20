@@ -888,6 +888,7 @@ export const IranUpdate: React.FC<IranUpdateProps> = ({ useAudio }) => {
         const duration = SCENE_DURATIONS[i];
         currentFrame += duration;
         return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
           <Sequence key={i} from={start} durationInFrames={duration}>
             <SceneComponent />
           </Sequence>

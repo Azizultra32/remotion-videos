@@ -11,7 +11,7 @@ export const ChatPane = () => {
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, pending]);
+  }, []);
 
   const cooling = Boolean(cooldown && cooldown.remainingSec > 0);
   const inputDisabled = pending || cooling;
@@ -64,6 +64,7 @@ export const ChatPane = () => {
           Chat
         </span>
         <button
+          type="button"
           onClick={clear}
           disabled={pending || messages.length === 0}
           style={{
@@ -94,7 +95,7 @@ export const ChatPane = () => {
           }}
         >
           <span style={{ fontSize: 13 }}>&#9888;</span>
-          <span>Claude CLI rate-limited — retry in {cooldown!.remainingSec}s</span>
+          <span>Claude CLI rate-limited — retry in {cooldown?.remainingSec}s</span>
         </div>
       )}
 
@@ -207,7 +208,7 @@ export const ChatPane = () => {
           onKeyDown={onKeyDown}
           placeholder={
             cooling
-              ? `Cooling down — ${cooldown!.remainingSec}s remaining`
+              ? `Cooling down — ${cooldown?.remainingSec}s remaining`
               : "Describe what you want — Enter or ⌘↩ to send, Shift+Enter for newline"
           }
           rows={3}
@@ -229,6 +230,7 @@ export const ChatPane = () => {
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
           {pending ? (
             <button
+              type="button"
               onClick={cancel}
               style={{
                 background: "#3a1a1a",
@@ -244,6 +246,7 @@ export const ChatPane = () => {
             </button>
           ) : (
             <button
+              type="button"
               onClick={submit}
               disabled={!input.trim() || inputDisabled}
               style={{
@@ -329,7 +332,7 @@ const MessageBubble = ({
             const inputSummary = (() => {
               try {
                 const s = JSON.stringify(tc.input);
-                return s.length > 60 ? s.slice(0, 60) + "…" : s;
+                return s.length > 60 ? `${s.slice(0, 60)}…` : s;
               } catch {
                 return "";
               }
@@ -338,13 +341,15 @@ const MessageBubble = ({
             const chipBorder = tc.isError ? "#b91c1c" : running ? "#3b82f6" : "#22c55e";
             const chipText = tc.isError ? "#fca5a5" : running ? "#93c5fd" : "#86efac";
             return (
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
+              {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
               <div
                 key={tc.id || tc.name}
                 style={{
                   fontSize: 10,
                   fontFamily: "monospace",
                   background: chipColor,
-                  border: "1px solid " + chipBorder,
+                  border: `1px solid ${chipBorder}`,
                   borderRadius: 3,
                   color: chipText,
                   padding: "3px 6px",
@@ -446,6 +451,7 @@ const MessageBubble = ({
           )}
           {showUndo && !message.undone && (
             <button
+              type="button"
               onClick={onUndo}
               style={{
                 marginLeft: "auto",

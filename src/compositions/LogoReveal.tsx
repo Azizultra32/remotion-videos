@@ -274,6 +274,7 @@ const ParticlesStyle: React.FC<{
 
         return (
           <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
             key={`particle-${index}`}
             style={{
               position: "absolute",

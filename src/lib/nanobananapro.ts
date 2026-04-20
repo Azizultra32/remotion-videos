@@ -1,6 +1,6 @@
-import crypto from "crypto";
-import fs from "fs";
-import path from "path";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 const API_BASE = "https://api.nanobananapro.com/v1";
 const POLL_INTERVAL_MS = 2000;

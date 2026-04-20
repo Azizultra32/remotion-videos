@@ -218,7 +218,7 @@ export const BeatDrop: React.FC<z.infer<typeof beatDropSchema>> = ({
             backgroundColor: "#000",
           }}
         >
-          <svg
+          <svg role="img" aria-label="Beat drop visual"
             width={width}
             height={height}
             viewBox={`0 0 ${width} ${height}`}

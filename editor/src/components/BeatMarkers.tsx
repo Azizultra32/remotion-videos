@@ -15,7 +15,7 @@ export const BeatMarkers = ({
   const toX = (t: number) => ((t - start) / duration) * widthPx;
 
   return (
-    <svg
+    <svg role="img" aria-label="Beat markers"
       style={{
         position: "absolute",
         top: 0,
@@ -28,9 +28,9 @@ export const BeatMarkers = ({
       {/* Beat ticks (thin, subtle) */}
       {beatData.beats
         .filter((t) => t >= start && t <= end)
-        .map((t, i) => (
+        .map((t) => (
           <line
-            key={`b${i}`}
+            key={`b${t}`}
             x1={toX(t)}
             x2={toX(t)}
             y1={0}
@@ -42,9 +42,9 @@ export const BeatMarkers = ({
       {/* Drop markers (bold red) */}
       {beatData.drops
         .filter((t) => t >= start && t <= end)
-        .map((t, i) => (
+        .map((t) => (
           <line
-            key={`d${i}`}
+            key={`d${t}`}
             x1={toX(t)}
             x2={toX(t)}
             y1={0}
@@ -56,9 +56,9 @@ export const BeatMarkers = ({
       {/* Breakdown regions (dark red shading) */}
       {beatData.breakdowns
         .filter((b) => b.end >= start && b.start <= end)
-        .map((b, i) => (
+        .map((b) => (
           <rect
-            key={`bd${i}`}
+            key={`bd${b.start}`}
             x={toX(b.start)}
             width={toX(b.end) - toX(b.start)}
             y={0}

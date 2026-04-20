@@ -48,6 +48,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
             {this.state.error?.message || "An unknown error occurred"}
           </p>
           <button
+            type="button"
             onClick={() => this.setState({ hasError: false, error: null })}
             style={{
               padding: "4px 12px",

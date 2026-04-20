@@ -45,7 +45,7 @@ export const serializeEventsFile = (events: EventMark[]): string => {
     version: EVENTS_FILE_VERSION,
     events: sorted,
   };
-  return JSON.stringify(payload, null, 2) + "\n";
+  return `${JSON.stringify(payload, null, 2)}\n`;
 };
 
 export const findEvent = (events: EventMark[], name: string): EventMark | null =>

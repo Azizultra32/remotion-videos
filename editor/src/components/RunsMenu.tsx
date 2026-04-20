@@ -20,7 +20,7 @@ type RunEntry = { id: string; timestamp: string; events: number };
 const fmtRunId = (id: string): string => {
   const iso = id.replace(/-/g, (_m, i) => (i < 10 ? "-" : i < 13 ? "T" : ":"));
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return id;
+  if (Number.isNaN(d.getTime())) return id;
   const mon = d.toLocaleString("en-US", { month: "short" });
   const day = String(d.getDate());
   const hh = String(d.getHours()).padStart(2, "0");
@@ -53,14 +53,14 @@ export const RunsMenu = () => {
   useEffect(() => {
     if (open) void fetchRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, stem]);
+  }, [open, fetchRuns]);
 
   // Also refetch once on mount so the badge shows the count without needing
   // the dropdown to be opened first.
   useEffect(() => {
     void fetchRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stem]);
+  }, [fetchRuns]);
 
   // Click-outside to close.
   useEffect(() => {
@@ -106,6 +106,7 @@ export const RunsMenu = () => {
   return (
     <div ref={containerRef} style={{ position: "relative" }}>
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
         title="Previous analysis snapshots (last 10). Click to pick one to restore."
         style={{
@@ -153,6 +154,7 @@ export const RunsMenu = () => {
           </div>
           {runs.map((run) => (
             <button
+              type="button"
               key={run.id}
               disabled={busy !== null}
               onClick={() => void restore(run.id)}

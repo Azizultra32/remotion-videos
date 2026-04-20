@@ -6,7 +6,7 @@ const DROP_FLASH_DURATION_SEC = 0.35;
 
 export const SpectrumDisplay = () => {
   const { beatData, currentTimeSec, compositionDuration } = useEditorStore();
-  if (!beatData || !beatData.energy) return null;
+  if (!beatData?.energy) return null;
 
   // Find nearest energy point
   const energyPoint = beatData.energy.find((e) => Math.abs(e.t - currentTimeSec) < 0.5);
@@ -54,7 +54,7 @@ export const SpectrumDisplay = () => {
             transition: "width 0.1s ease-out, background 0.2s",
           }}
         />
-        {drops.map((dropTime, i) => {
+        {drops.map((dropTime) => {
           const leftPct = (dropTime / totalSec) * 100;
           if (leftPct < 0 || leftPct > 100) return null;
           const timeSinceDrop = currentTimeSec - dropTime;
@@ -62,7 +62,7 @@ export const SpectrumDisplay = () => {
           const opacity = isActive ? 1 - timeSinceDrop / DROP_FLASH_DURATION_SEC : 0.25;
           return (
             <div
-              key={`drop-${i}`}
+              key={`drop-${dropTime}`}
               title={`Drop @ ${dropTime.toFixed(2)}s`}
               style={{
                 position: "absolute",

@@ -3,7 +3,6 @@ import type React from "react";
 import type { CalculateMetadataFunction } from "remotion";
 import {
   AbsoluteFill,
-  Easing,
   interpolate,
   Series,
   spring,
@@ -407,6 +406,7 @@ export const VideoStitcher: React.FC<VideoStitcherProps> = ({ scenes }) => {
     <AbsoluteFill>
       <Series>
         {scenes.map((scene, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
           <Series.Sequence key={`scene-${index}`} durationInFrames={scene.durationInFrames}>
             <SceneRenderer scene={scene} sceneIndex={index} totalScenes={scenes.length} />
           </Series.Sequence>

@@ -19,9 +19,9 @@
  *   --dry-run            Show what would happen without doing it
  */
 
-import { execFileSync } from "child_process";
-import fs from "fs";
-import path from "path";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { generateVoiceover } from "../src/lib/elevenlabs";
 import { generateProductImage } from "../src/lib/nanobananapro";
 import { generateLipSync } from "../src/lib/wavespeed";
@@ -88,9 +88,9 @@ async function main() {
     }
 
     brandConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    console.log(`  Brand: ${brandConfig!.name}`);
-    console.log(`  Colors: ${JSON.stringify(brandConfig!.colors)}`);
-    summary.push(`Brand: ${brandConfig!.name}`);
+    console.log(`  Brand: ${brandConfig?.name}`);
+    console.log(`  Colors: ${JSON.stringify(brandConfig?.colors)}`);
+    summary.push(`Brand: ${brandConfig?.name}`);
   }
 
   // ------------------------------------------------------------------
@@ -235,7 +235,7 @@ async function main() {
   // ------------------------------------------------------------------
   // Summary
   // ------------------------------------------------------------------
-  console.log("\n" + "=".repeat(60));
+  console.log(`\n${"=".repeat(60)}`);
   console.log("  Pipeline Summary");
   console.log("=".repeat(60));
   if (summary.length === 0) {

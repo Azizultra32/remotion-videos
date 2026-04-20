@@ -311,7 +311,7 @@ export const useChat = () => {
         abortRef.current = null;
       }
     },
-    [pending, cooldown],
+    [pending, cooldown, messages.filter],
   );
 
   const cancel = useCallback(() => {

@@ -87,7 +87,7 @@ export const useShortcuts = (
     // Caller is responsible for memoizing bindings; re-registration on
     // every render is safe but wasteful.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, context]);
+  }, [api, context, bindings.map]);
 };
 
 // Returns pointer handlers that push/pop a context onto the active stack.

@@ -19,10 +19,10 @@
  *   ]
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import { bundle } from "@remotion/bundler";
 import { getCompositions, type RenderMediaOnProgress, renderMedia } from "@remotion/renderer";
-import fs from "fs";
-import path from "path";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing

@@ -43,7 +43,7 @@ export const useAutoSeedBeats = () => {
         const r = await fetch(`/api/projects/${encodeURIComponent(stem)}/.analyze-status.json`);
         if (r.ok) {
           const st = (await r.json()) as { startedAt?: number; endedAt?: number | null } | null;
-          if (st && st.startedAt && !st.endedAt) return; // run in flight
+          if (st?.startedAt && !st.endedAt) return; // run in flight
         }
       } catch {
         // no status file / parse error — proceed; seed-beats is harmless

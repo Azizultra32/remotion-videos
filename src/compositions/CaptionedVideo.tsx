@@ -318,12 +318,14 @@ export const CaptionedVideo: React.FC<CaptionedVideoProps> = ({
             {visibleCaptions.map((line, lineIndex) => {
               if (!line.words || line.words.length === 0) {
                 return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
                   <React.Fragment key={`line-${lineIndex}`}>{renderFullLine(line)}</React.Fragment>
                 );
               }
 
               return (
                 <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
                   key={`line-${lineIndex}`}
                   style={{
                     ...lineTextStyle,

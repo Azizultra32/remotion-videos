@@ -143,6 +143,7 @@ const TestimonialCard: React.FC<{
         >
           {Array.from({ length: 5 }).map((_, i) => (
             <Star
+              // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
               key={i}
               filled={i < testimonial.rating}
               index={i}

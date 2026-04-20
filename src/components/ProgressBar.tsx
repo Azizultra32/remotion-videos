@@ -60,6 +60,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
             const isActive = i === currentIndex;
             return (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
                 key={i}
                 style={{
                   width: isActive ? 28 : 8,
@@ -153,6 +154,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
             const fillWidth = isCurrent ? segmentProgress * 100 : isPast ? 100 : 0;
             return (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
                 key={i}
                 style={{
                   flex: 1,

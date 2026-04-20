@@ -34,7 +34,7 @@ const expand = (p: string): string => {
 
 export const resolveProjectsDir = (engineRoot: string): string => {
   const override = process.env.MV_PROJECTS_DIR;
-  if (override && override.trim()) {
+  if (override?.trim()) {
     return resolve(expand(override.trim()));
   }
   return join(engineRoot, "projects");

@@ -93,10 +93,14 @@ beforeAll(async () => {
 
   viteProc = spawn("npx", ["vite", "--port", String(PORT)], {
     cwd: editorRoot,
-    env: { ...process.env, MV_PROJECTS_DIR: tmpProjects },
+    env: {
+      ...process.env,
+      MV_PROJECTS_DIR: tmpProjects,
+      CLAUDE_BIN: resolve(editorRoot, "tests/fixtures/claude-stub.sh"),
+    },
     stdio: ["ignore", "pipe", "pipe"],
   }) as ChildProcessWithoutNullStreams;
-  // Don't let vite's output clog the test runner — drain streams.
+  // Drain streams so vite's buffers don't block on a full pipe.
   viteProc.stdout.on("data", () => {});
   viteProc.stderr.on("data", () => {});
   await waitForPort(PORT);
@@ -206,6 +210,46 @@ describe("sidecar integration", () => {
     const raw = readFileSync(join(tmpProjects, STEM, "analysis.json"), "utf8");
     const data = JSON.parse(raw);
     expect(data.phase2_events_sec.length).toBe(3);
+  });
+
+  it("POST /api/chat parses the stub's <final> block into reply + mutations", { timeout: 15_000 }, async () => {
+    const r = await fetch(`http://localhost:${PORT}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "seek to 12.5",
+        state: {
+          currentTimeSec: 0,
+          compositionDuration: 60,
+          fps: 24,
+          audioSrc: null,
+          beatsSrc: null,
+          elements: [],
+        },
+      }),
+    });
+    expect(r.ok).toBe(true);
+    const body = (await r.json()) as {
+      reply: string;
+      mutations: Array<{ op: string; sec: number }>;
+    };
+    expect(body.reply).toBe("stub ack");
+    expect(body.mutations).toEqual([{ op: "seekTo", sec: 12.5 }]);
+  });
+
+  it("GET /api/current-project returns 404 for a stem missing under MV_PROJECTS_DIR", async () => {
+    const { writeFileSync: wfs, readFileSync: rfs, existsSync: ex } = await import("node:fs");
+    const cpFile = resolve(editorRoot, "..", ".current-project");
+    const backup = ex(cpFile) ? rfs(cpFile, "utf8") : null;
+    wfs(cpFile, "stem-that-does-not-exist\n");
+    try {
+      const r = await fetch(`http://localhost:${PORT}/api/current-project`);
+      expect(r.status).toBe(404);
+      const body = await r.json();
+      expect(body.stale).toBe("stem-that-does-not-exist");
+    } finally {
+      if (backup !== null) wfs(cpFile, backup);
+    }
   });
 
   it("rejects malformed stems with 400", async () => {

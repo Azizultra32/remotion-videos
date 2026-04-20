@@ -123,7 +123,7 @@ export const StoryboardStrip = () => {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing]);
+  }, [editing, save]);
 
   if (!audioSrc) return null; // nothing to storyboard against
 
@@ -158,6 +158,8 @@ export const StoryboardStrip = () => {
         sorted.map((sc) => {
           const isActive = sc.id === activeId;
           return (
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
             <div
               key={sc.id}
               style={{
@@ -166,7 +168,7 @@ export const StoryboardStrip = () => {
                 gap: 4,
                 padding: "3px 8px",
                 background: isActive ? "#1e3a5f" : "#1a1a1a",
-                border: "1px solid " + (isActive ? "#2196F3" : "#333"),
+                border: `1px solid ${isActive ? "#2196F3" : "#333"}`,
                 borderRadius: 3,
                 fontSize: 10,
                 fontFamily: "monospace",
@@ -174,13 +176,14 @@ export const StoryboardStrip = () => {
                 cursor: "pointer",
               }}
               onClick={() => setCurrentTime(sc.startSec)}
-              title={`${sc.name || "(unnamed)"} · ${fmtTime(sc.startSec)} – ${fmtTime(sc.endSec)}${sc.intent ? "\n" + sc.intent : ""}`}
+              title={`${sc.name || "(unnamed)"} · ${fmtTime(sc.startSec)} – ${fmtTime(sc.endSec)}${sc.intent ? `\n${sc.intent}` : ""}`}
             >
               <span style={{ color: "#fff", fontWeight: 600 }}>{sc.name || "Untitled"}</span>
               <span style={{ color: "#888" }}>
                 {fmtTime(sc.startSec)}–{fmtTime(sc.endSec)}
               </span>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   openEdit(sc);
@@ -199,6 +202,7 @@ export const StoryboardStrip = () => {
                 ✎
               </button>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   del(sc);
@@ -221,6 +225,7 @@ export const StoryboardStrip = () => {
         })
       )}
       <button
+        type="button"
         onClick={openCreate}
         style={{
           padding: "3px 10px",
@@ -241,6 +246,8 @@ export const StoryboardStrip = () => {
       </button>
 
       {editing && (
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
         <div
           style={{
             position: "fixed",
@@ -284,7 +291,6 @@ export const StoryboardStrip = () => {
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: "#aaa" }}>Name</span>
               <input
-                autoFocus
                 type="text"
                 value={editing.name}
                 onChange={(e) => setEditing({ ...editing, name: e.target.value })}
@@ -361,6 +367,7 @@ export const StoryboardStrip = () => {
             )}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
               <button
+                type="button"
                 onClick={() => setEditing(null)}
                 style={{
                   padding: "6px 12px",
@@ -375,6 +382,7 @@ export const StoryboardStrip = () => {
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={save}
                 style={{
                   padding: "6px 12px",

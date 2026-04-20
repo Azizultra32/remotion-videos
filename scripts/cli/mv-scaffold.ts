@@ -12,7 +12,7 @@
 // Suggests next steps at the end (run mv:analyze, pick the track in editor).
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
-import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
+import { ensureProjectsDir, resolveProjectDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -84,7 +84,7 @@ const starterTimeline = {
   compositionDuration: 90,
   elements: [],
 };
-writeFileSync(timelinePath, JSON.stringify(starterTimeline, null, 2) + "\n");
+writeFileSync(timelinePath, `${JSON.stringify(starterTimeline, null, 2)}\n`);
 
 console.log(`scaffolded projects/${stem}/`);
 console.log(`  audio:    projects/${stem}/audio${audioExt} (copy of ${audioSource})`);

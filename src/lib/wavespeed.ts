@@ -1,6 +1,6 @@
-import crypto from "crypto";
-import fs from "fs";
-import path from "path";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 const API_BASE = "https://api.wavespeed.ai/api/v2";
 const POLL_INTERVAL_MS = 3000;

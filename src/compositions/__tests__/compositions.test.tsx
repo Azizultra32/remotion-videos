@@ -1,4 +1,3 @@
-import React from "react";
 import { describe, expect, it } from "vitest";
 
 // Test that all compositions can be imported

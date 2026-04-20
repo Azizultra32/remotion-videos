@@ -20,7 +20,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
+import { resolveProjectDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -91,8 +91,8 @@ if (existing.duration_sec == null && existing.duration == null) {
   merged.duration_sec = beats.duration;
 }
 
-const tmp = destAnalysis + ".tmp";
-writeFileSync(tmp, JSON.stringify(merged, null, 2) + "\n");
+const tmp = `${destAnalysis}.tmp`;
+writeFileSync(tmp, `${JSON.stringify(merged, null, 2)}\n`);
 renameSync(tmp, destAnalysis);
 
 console.log(

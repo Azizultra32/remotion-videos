@@ -188,7 +188,7 @@ export const ExplainerVideo: React.FC<ExplainerVideoProps> = ({ scenes }) => {
     >
       {/* Subtle background pattern */}
       <AbsoluteFill style={{ opacity: 0.03 }}>
-        <svg width="100%" height="100%">
+        <svg role="img" aria-label="Explainer graphic" width="100%" height="100%">
           <defs>
             <pattern id="dots-pattern" width="30" height="30" patternUnits="userSpaceOnUse">
               <circle cx="15" cy="15" r="1.5" fill="white" />

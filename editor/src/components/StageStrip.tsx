@@ -84,7 +84,7 @@ const phaseBadge = (done: boolean, active: boolean): React.CSSProperties => ({
   whiteSpace: "nowrap" as const,
   background: active ? "#1e88e5" : done ? "#103a5c" : "#1a1a1a",
   color: done || active ? "#fff" : "#666",
-  border: "1px solid " + (active ? "#64b5f6" : done ? "#2196F3" : "#333"),
+  border: `1px solid ${active ? "#64b5f6" : done ? "#2196F3" : "#333"}`,
 });
 
 export const StageStrip = () => {
@@ -138,7 +138,7 @@ export const StageStrip = () => {
             // Any live status frame means the run is real; stop showing
             // the local "starting..." indicator.
             setKicking(false);
-            if (parsed && parsed.endedAt) setBusy(null);
+            if (parsed?.endedAt) setBusy(null);
             retryRef.current.attempt = 0;
           } catch {
             /* ignore malformed */
@@ -201,9 +201,9 @@ export const StageStrip = () => {
   // Which phase band is active right now (for the "active" badge styling).
   const activePhase: "phase1" | "phase2" | null = !isRunning
     ? null
-    : status!.phase.startsWith("phase1")
+    : status?.phase.startsWith("phase1")
       ? "phase1"
-      : status!.phase.startsWith("phase2") || status!.phase === "done"
+      : status?.phase.startsWith("phase2") || status?.phase === "done"
         ? "phase2"
         : null;
 
@@ -404,6 +404,7 @@ export const StageStrip = () => {
             NO BEAT GRID
           </span>
           <button
+            type="button"
             onClick={seedBeats}
             disabled={isRunning || busy !== null}
             title="Run detect-beats.py on this project's audio and merge beats/downbeats/bpm_global into analysis.json. Preserves all other fields. Takes ~30-60s."
@@ -434,7 +435,7 @@ export const StageStrip = () => {
                   whiteSpace: "nowrap",
                   background: done ? "#2196F3" : active ? "#1e88e5" : "transparent",
                   color: done || active ? "#fff" : "#555",
-                  border: "1px solid " + (i <= currentIdx ? "#2196F3" : "#2a2a2a"),
+                  border: `1px solid ${i <= currentIdx ? "#2196F3" : "#2a2a2a"}`,
                   opacity: active ? 1 : done ? 0.85 : 0.5,
                   // Pulse only the currently-running stage. Done stages
                   // stay solid; upcoming stages stay dim static.
@@ -442,7 +443,7 @@ export const StageStrip = () => {
                 }}
               >
                 {s.toUpperCase()}
-                {active && status!.stage ? `  ${status!.stage.current}/${status!.stage.total}` : ""}
+                {active && status?.stage ? `  ${status?.stage.current}/${status?.stage.total}` : ""}
               </span>
             );
           })}
@@ -536,6 +537,7 @@ export const StageStrip = () => {
       <div style={{ flex: 1 }} />
 
       <button
+        type="button"
         onClick={() => {
           if (!stem || isRunning || busy) return;
           const state = useEditorStore.getState();
@@ -561,6 +563,7 @@ export const StageStrip = () => {
 
       {isRunning || busy === "run" || kicking ? (
         <button
+          type="button"
           onClick={cancelRun}
           title="Kill the in-flight mv:analyze process group and mark the run cancelled. Artifacts already written are kept."
           style={btnStyle("danger", false)}
@@ -569,6 +572,7 @@ export const StageStrip = () => {
         </button>
       ) : (
         <button
+          type="button"
           onClick={runAnalysis}
           title="Run npm run mv:analyze in the background. Takes 5-10 min. Live progress streams here."
           style={btnStyle("primary", false)}
@@ -579,6 +583,7 @@ export const StageStrip = () => {
 
       <RunsMenu />
       <button
+        type="button"
         onClick={clearEvents}
         disabled={busy === "clear" || isRunning || (phase1Count === 0 && phase2Count === 0)}
         title="Remove all pipeline-origin events (Phase 1 + Phase 2) from the timeline. User elements are kept. Does not delete on-disk PNG artifacts."

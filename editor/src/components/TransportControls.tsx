@@ -58,6 +58,7 @@ export const TransportControls = () => {
 
   const jumpButton = (label: string, delta: number, title: string) => (
     <button
+      type="button"
       onClick={() => jump(delta)}
       title={title}
       style={{
@@ -98,6 +99,7 @@ export const TransportControls = () => {
         }}
       >
         <button
+          type="button"
           onClick={() => {
             setPlaying(false);
             setCurrentTime(0);
@@ -121,6 +123,7 @@ export const TransportControls = () => {
         {jumpButton("-1s", -1, "Left · jump back 1s")}
 
         <button
+          type="button"
           onClick={() => setPlaying(!isPlaying)}
           title="Space · play / pause"
           style={{
@@ -142,6 +145,7 @@ export const TransportControls = () => {
         {jumpButton("+5s", 5, "Shift+Right · jump forward 5s")}
 
         <button
+          type="button"
           onClick={() => {
             setPlaying(false);
             setCurrentTime(Math.max(0, compositionDuration - 1));
@@ -178,6 +182,7 @@ export const TransportControls = () => {
         </div>
 
         <button
+          type="button"
           onClick={cycleSnapMode}
           style={snapButtonStyle(snapMode)}
           title={
@@ -189,6 +194,7 @@ export const TransportControls = () => {
         </button>
 
         <button
+          type="button"
           onClick={() => {
             setPlaying(false);
             setCurrentTime(0);
@@ -208,6 +214,7 @@ export const TransportControls = () => {
         </button>
 
         <button
+          type="button"
           onClick={() => setCurrentTime(0)}
           style={{
             padding: "4px 12px",

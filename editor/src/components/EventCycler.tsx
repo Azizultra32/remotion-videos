@@ -29,7 +29,7 @@ const chipStyle = (active: boolean, selected: boolean): React.CSSProperties => (
   fontSize: 10,
   fontFamily: "monospace",
   background: selected ? "#8a5a1a" : active ? "#2196F3" : "#1a1a1a",
-  border: "1px solid " + (selected ? "#c89040" : active ? "#2196F3" : "#333"),
+  border: `1px solid ${selected ? "#c89040" : active ? "#2196F3" : "#333"}`,
   borderRadius: 3,
   color: "#fff",
   cursor: "pointer",
@@ -244,6 +244,7 @@ export const EventCycler = () => {
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", rowGap: 4 }}>
         <button
+          type="button"
           onClick={() => go(Math.max(0, activeIndex - 1))}
           disabled={activeIndex <= 0}
           style={chipStyle(false, false)}
@@ -252,6 +253,8 @@ export const EventCycler = () => {
         </button>
         {events.map((t, i) => (
           <button
+            type="button"
+            // biome-ignore lint/suspicious/noArrayIndexKey: activeIndex/selectedIdx use the array index as the event identity
             key={`evt-${i}`}
             onClick={() => go(i)}
             style={chipStyle(i === activeIndex, i === selectedIdx)}
@@ -261,6 +264,7 @@ export const EventCycler = () => {
           </button>
         ))}
         <button
+          type="button"
           onClick={() => go(Math.min(events.length - 1, activeIndex + 1))}
           disabled={activeIndex >= events.length - 1}
           style={chipStyle(false, false)}
@@ -298,6 +302,7 @@ export const EventCycler = () => {
             }}
           />
           <button
+            type="button"
             onClick={() => void saveTyped()}
             disabled={busy}
             title="Save the typed time."
@@ -306,6 +311,7 @@ export const EventCycler = () => {
             SET
           </button>
           <button
+            type="button"
             onClick={() => void nudge(-NUDGE_SEC)}
             disabled={busy}
             title={`Move event earlier by ${NUDGE_SEC}s.`}
@@ -314,6 +320,7 @@ export const EventCycler = () => {
             ← NUDGE
           </button>
           <button
+            type="button"
             onClick={() => void nudge(NUDGE_SEC)}
             disabled={busy}
             title={`Move event later by ${NUDGE_SEC}s.`}
@@ -322,6 +329,7 @@ export const EventCycler = () => {
             NUDGE →
           </button>
           <button
+            type="button"
             onClick={() => void snapSelected()}
             disabled={busy}
             title="Snap this event to the nearest detected beat. Requires a beat grid — if none, run Seed Beats first (error inlines)."
@@ -330,6 +338,7 @@ export const EventCycler = () => {
             Snap to beat
           </button>
           <button
+            type="button"
             onClick={() => void snapToPlayhead()}
             disabled={busy}
             title="Move this event to the current playhead position."
@@ -338,6 +347,7 @@ export const EventCycler = () => {
             Snap to playhead
           </button>
           <button
+            type="button"
             onClick={() => void duplicate()}
             disabled={busy}
             title="Add a new event 0.1s after this one."
@@ -346,6 +356,7 @@ export const EventCycler = () => {
             Duplicate
           </button>
           <button
+            type="button"
             onClick={() => void deleteSelected()}
             disabled={busy}
             title="Remove this event from analysis.json. The pipeline element disappears too. User-origin elements stay."

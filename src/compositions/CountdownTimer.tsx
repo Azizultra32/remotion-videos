@@ -92,6 +92,7 @@ const GlitchText: React.FC<{
 
         return (
           <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
             key={bandIndex}
             style={{
               position: "absolute",
@@ -153,6 +154,7 @@ const NeonParticles: React.FC<{ frame: number; accentColor: string }> = ({
 
         return (
           <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
             key={index}
             style={{
               position: "absolute",
@@ -310,7 +312,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = (inputProps) => {
       )}
 
       {showCircle && (
-        <svg
+        <svg role="img" aria-label="Countdown visualization"
           width={circleRadius * 2 + 80}
           height={circleRadius * 2 + 80}
           viewBox={`0 0 ${circleRadius * 2 + 80} ${circleRadius * 2 + 80}`}

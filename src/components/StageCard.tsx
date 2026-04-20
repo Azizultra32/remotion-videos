@@ -120,7 +120,7 @@ export const StageCard: React.FC<StageCardProps> = ({
             <p
               style={{
                 fontSize: 20,
-                color: textColor + "aa",
+                color: `${textColor}aa`,
                 fontFamily: "system-ui, sans-serif",
                 margin: 0,
                 lineHeight: 1.5,

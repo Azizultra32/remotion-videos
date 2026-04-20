@@ -108,6 +108,7 @@ export const Timeline = () => {
           >
             {Array.from({ length: TRACK_COUNT }, (_, i) => (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the track identity (trackIndex)
                 key={i}
                 style={{
                   height: TRACK_HEIGHT,
@@ -134,6 +135,7 @@ export const Timeline = () => {
             <TimelineBeatMarkers beatData={beatData} pxPerSec={PX_PER_SEC} height={tracksHeight} />
             {Array.from({ length: TRACK_COUNT }, (_, i) => (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the track identity (trackIndex)
                 key={i}
                 style={{
                   position: "absolute",

@@ -32,7 +32,7 @@ export const ProductDemo: React.FC<ProductDemoProps> = ({
   primaryColor,
   textColor,
 }) => {
-  const frame = useCurrentFrame();
+  const _frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
 
   return (

@@ -61,6 +61,7 @@ export const Sidebar = () => {
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {byCategory[cat].map((mod) => (
               <button
+                type="button"
                 key={mod.id}
                 onClick={() => handleAdd(mod.id)}
                 title={mod.description}

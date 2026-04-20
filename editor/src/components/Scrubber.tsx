@@ -241,6 +241,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
             effectiveSecPerPx > 0 &&
             effectiveSecPerPx < naturalSecPerPx * 0.98 && (
               <button
+                type="button"
                 onClick={() => {
                   setSecPerPx(0);
                   setOffsetSec(0);
@@ -290,6 +291,8 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
           overflow: "hidden",
         }}
       >
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
         <div
           style={{
             position: "relative",
@@ -341,7 +344,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
             set to "none" so only the event-line hit targets intercept
             clicks; plain clicks fall through to wavesurfer. */}
           {ready && beatData && (
-            <svg
+            <svg role="img" aria-label="Audio scrubber overlay"
               style={{
                 position: "absolute",
                 inset: 0,
@@ -353,9 +356,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
               viewBox={`0 0 ${totalSec} 100`}
             >
               {/* Breakdown regions - purely decorative. */}
-              {beatData.breakdowns.map((b, i) => (
+              {beatData.breakdowns.map((b) => (
                 <rect
-                  key={`bd${i}`}
+                  key={`bd${b.start}`}
                   x={b.start}
                   width={Math.max(0.01, b.end - b.start)}
                   y={0}
@@ -364,9 +367,9 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
                 />
               ))}
               {/* Drop markers - decorative. */}
-              {beatData.drops.map((t, i) => (
+              {beatData.drops.map((t) => (
                 <line
-                  key={`d${i}`}
+                  key={`d${t}`}
                   x1={t}
                   x2={t}
                   y1={0}
@@ -383,6 +386,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
                   const x = dragState?.idx === i ? dragState.sec : t;
                   return (
                     <line
+                      // biome-ignore lint/suspicious/noArrayIndexKey: index identifies the event during drag (dragState.idx === i)
                       key={`ph1-${i}`}
                       x1={x}
                       x2={x}
@@ -400,6 +404,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
                 const x = dragState?.idx === i ? dragState.sec : t;
                 return (
                   <line
+                    // biome-ignore lint/suspicious/noArrayIndexKey: index identifies the event during drag (dragState.idx === i)
                     key={`ph2-${i}`}
                     x1={x}
                     x2={x}
@@ -510,6 +515,7 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
                 const previewLeft = isDragging ? (dragState.sec / totalSec) * 100 : left;
                 return (
                   <div
+                    // biome-ignore lint/suspicious/noArrayIndexKey: index identifies the event during drag (dragState.idx === i)
                     key={`hit-${i}`}
                     onPointerDown={onPointerDown}
                     title={`Event ${i + 1} at ${t.toFixed(2)}s — drag to move (shift disables beat-snap), click to select, Delete key to remove`}

@@ -67,9 +67,9 @@ export const TimelineRuler = ({ compositionDuration, pxPerSec, beatData, height 
             {formatSec(s)}
           </div>
         ))}
-      {drops.map((t, i) => (
+      {drops.map((t) => (
         <div
-          key={`drop${i}`}
+          key={`drop${t}`}
           title={`Drop @ ${t.toFixed(2)}s`}
           style={{
             position: "absolute",

@@ -71,6 +71,7 @@ export const WaveformViz: React.FC<WaveformVizProps> = ({
       {/* Waveform bars */}
       {bars.map((bar, i) => (
         <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
           key={i}
           style={{
             position: "absolute",

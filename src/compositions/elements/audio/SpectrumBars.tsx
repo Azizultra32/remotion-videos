@@ -82,6 +82,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
         const h = Math.max(1, Math.min(height, v * height * amplitude));
         return (
           <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
             key={i}
             style={{
               width: Math.max(1, barW),

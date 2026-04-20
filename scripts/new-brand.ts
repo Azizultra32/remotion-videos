@@ -10,9 +10,9 @@
  *   fonts/ (empty dir)
  */
 
-import fs from "fs";
-import path from "path";
-import readline from "readline";
+import fs from "node:fs";
+import path from "node:path";
+import readline from "node:readline";
 
 // ---------------------------------------------------------------------------
 // Defaults
@@ -226,7 +226,7 @@ async function main() {
 
   // Write brand-config.json
   const configPath = path.join(brandDir, "brand-config.json");
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
   // Write .gitkeep files so empty dirs are tracked
   for (const dir of dirs) {

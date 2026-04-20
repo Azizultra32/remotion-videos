@@ -14,7 +14,7 @@
 
 import { existsSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
+import { resolveProjectDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -52,5 +52,5 @@ if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
 }
 
 const currentFile = resolve(repoRoot, ".current-project");
-writeFileSync(currentFile, stem + "\n");
+writeFileSync(currentFile, `${stem}\n`);
 console.log(`[mv:switch] active project -> ${stem}`);

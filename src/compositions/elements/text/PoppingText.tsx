@@ -61,6 +61,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
         const color = colors[i % colors.length] ?? "#fff";
         return (
           <span
+            // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
             key={i}
             style={{
               color,

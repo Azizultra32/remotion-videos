@@ -5,7 +5,7 @@ import { snapTime } from "../utils/time";
 
 export const useElementDrag = (elementId: string, pxPerSec: number) => {
   const dragStart = useRef<{ x: number; origStart: number } | null>(null);
-  const { updateElement, compositionDuration } = useEditorStore();
+  const { updateElement } = useEditorStore();
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -71,7 +71,7 @@ export const useElementDrag = (elementId: string, pxPerSec: number) => {
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
-    [elementId, pxPerSec, updateElement, compositionDuration],
+    [elementId, pxPerSec, updateElement],
   );
 
   return { onMouseDown };

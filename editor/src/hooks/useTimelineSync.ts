@@ -244,7 +244,7 @@ export const useTimelineSync = () => {
         eventsRef.current = null;
       }
     };
-  }, []);
+  }, [openWatcher, openEventsWatcher]);
 
   // ---- (2) Debounced autosave on element mutations ----
   useEffect(() => {

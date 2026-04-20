@@ -52,7 +52,7 @@ const normalizeKey = (raw: string): string => {
 };
 
 export const parseKeyPattern = (pattern: string): ParsedKey => {
-  if (!pattern || !pattern.trim()) {
+  if (!pattern?.trim()) {
     throw new Error("parseKeyPattern: empty pattern");
   }
   const parts = pattern.split("+").map((p) => p.trim());

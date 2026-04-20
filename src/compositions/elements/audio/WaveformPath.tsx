@@ -69,7 +69,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
         : (ctx.height - height) / 2;
 
   return (
-    <svg
+    <svg role="img" aria-label="Audio waveform path"
       viewBox={`0 0 ${ctx.width} ${height}`}
       width={ctx.width}
       height={height}

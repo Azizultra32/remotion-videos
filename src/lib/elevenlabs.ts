@@ -1,6 +1,6 @@
-import crypto from "crypto";
-import fs from "fs";
-import path from "path";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 const API_BASE = "https://api.elevenlabs.io/v1";
 
@@ -72,5 +72,6 @@ export async function listVoices(): Promise<Array<{ voice_id: string; name: stri
 
   if (!response.ok) throw new Error(`Failed to list voices: ${response.status}`);
   const data = await response.json();
+  // biome-ignore lint/suspicious/noExplicitAny: ElevenLabs /voices response shape is third-party, untyped
   return data.voices.map((v: any) => ({ voice_id: v.voice_id, name: v.name }));
 }

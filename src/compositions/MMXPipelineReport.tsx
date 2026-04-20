@@ -185,7 +185,7 @@ const StageCard: React.FC<{
         {/* Status badge */}
         <div
           style={{
-            backgroundColor: statusColor + "20",
+            backgroundColor: `${statusColor}20`,
             color: statusColor,
             paddingLeft: 16,
             paddingRight: 16,

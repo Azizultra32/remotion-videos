@@ -212,8 +212,8 @@ const ConnectionLine: React.FC<{
 
   if (progress <= 0) return null;
 
-  const currentX = from.x + (to.x - from.x) * progress;
-  const currentY = from.y + (to.y - from.y) * progress;
+  const _currentX = from.x + (to.x - from.x) * progress;
+  const _currentY = from.y + (to.y - from.y) * progress;
 
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -295,7 +295,7 @@ export const MapAnimation: React.FC<MapAnimationProps> = ({
     >
       {/* Subtle grid background */}
       <AbsoluteFill style={{ opacity: 0.05 }}>
-        <svg width="100%" height="100%">
+        <svg role="img" aria-label="World map" width="100%" height="100%">
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
               <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth={0.5} />
@@ -385,10 +385,11 @@ export const MapAnimation: React.FC<MapAnimationProps> = ({
           height: MAP_HEIGHT,
         }}
       >
-        <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} width={MAP_WIDTH} height={MAP_HEIGHT}>
+        <svg role="img" aria-label="Map regions and connections" viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} width={MAP_WIDTH} height={MAP_HEIGHT}>
           {/* Background region dots */}
           {REGION_DOTS.map((dot, i) => (
             <circle
+              // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
               key={`bg-${i}`}
               cx={dot.x}
               cy={dot.y}
@@ -401,6 +402,7 @@ export const MapAnimation: React.FC<MapAnimationProps> = ({
           {/* Connection lines */}
           {connections.map((conn, i) => (
             <ConnectionLine
+              // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
               key={`conn-${i}`}
               from={locations[conn.from]}
               to={locations[conn.to]}
@@ -414,6 +416,7 @@ export const MapAnimation: React.FC<MapAnimationProps> = ({
           {/* Location dots */}
           {locations.map((loc, i) => (
             <LocationDot
+              // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
               key={`loc-${i}`}
               location={loc}
               index={i}

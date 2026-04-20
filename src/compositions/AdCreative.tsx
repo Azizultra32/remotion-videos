@@ -41,7 +41,7 @@ export type AdCreativeProps = z.infer<typeof adCreativeSchema>;
 // Constants
 // ---------------------------------------------------------------------------
 
-const TOTAL_FRAMES = 450; // 15 seconds at 30fps
+const _TOTAL_FRAMES = 450; // 15 seconds at 30fps
 
 // Section timing (frames)
 const REVEAL_START = 0;
@@ -202,6 +202,7 @@ const FeatureHighlights: React.FC<{
 
         return (
           <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
             key={i}
             style={{
               display: "flex",
@@ -225,7 +226,7 @@ const FeatureHighlights: React.FC<{
                 flexShrink: 0,
               }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <svg role="img" aria-label="Ad creative decoration" width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path
                   d="M5 13l4 4L19 7"
                   stroke="#fff"

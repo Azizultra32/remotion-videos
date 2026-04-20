@@ -269,7 +269,7 @@ const FeatureSlide: React.FC<{
             style={{
               fontFamily: config.typography.body,
               fontSize: 30,
-              color: config.colors.text + "bb",
+              color: `${config.colors.text}bb`,
               margin: 0,
               lineHeight: 1.6,
             }}
@@ -288,7 +288,7 @@ const FeatureSlide: React.FC<{
           fontFamily: config.typography.heading,
           fontSize: 24,
           fontWeight: 700,
-          color: config.colors.primary + "44",
+          color: `${config.colors.primary}44`,
         }}
       >
         {String(index + 1).padStart(2, "0")}
@@ -435,6 +435,7 @@ export const BrandedDemo: React.FC<BrandedDemoProps> = ({
       {/* Feature slides */}
       {features.map((feature, i) => (
         <Sequence
+          // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
           key={i}
           from={INTRO_DURATION + i * FEATURE_DURATION}
           durationInFrames={FEATURE_DURATION}

@@ -25,7 +25,7 @@ try {
     console.error("no active project (.current-project is empty)");
     process.exit(1);
   }
-  process.stdout.write(stem + "\n");
+  process.stdout.write(`${stem}\n`);
 } catch {
   console.error("no active project (.current-project not found)");
   console.error("Open the editor and pick a track to set this file.");

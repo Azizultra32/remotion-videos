@@ -76,6 +76,7 @@ const SpectrumBars: React.FC<{
         const v = frequencies[Math.floor((i / nBars) * frequencies.length)] ?? 0;
         return (
           <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: deterministic Remotion render; array never reorders
             key={i}
             style={{
               width: barW - 1,

@@ -50,9 +50,21 @@ npm run mv:clear-events -- --project <stem>            # wipe Phase 1 + Phase 2 
   notes.md           ← optional cut direction, zeta points, vocabulary
   .analyze-status.json  ← transient per-run status file, tailed by the editor via SSE (gitignored)
   analysis/          ← pipeline artifacts: source.json, full.png, phase1/2 PNGs, manifest, segment json
+  custom-elements/   ← per-project React element modules (*.tsx) — creative freezone
 ```
 
 All edits — editor GUI, ChatPane, external Claude Code sessions — converge on the same on-disk JSON at `<MV_PROJECTS_DIR>/<stem>/timeline.json`. Autosave writes within 500 ms; `.current-project` at repo root tracks the active stem so external sessions discover it via `mv:current`.
+
+**Adding creative elements without touching the engine (IMPORTANT):**
+When a track needs a new visual effect, write it at `projects/<stem>/custom-elements/<Name>.tsx` — NOT under `src/compositions/elements/`. The renderer generates a barrel file before each bundle (`scripts/cli/custom-elements-barrel.ts`) and resets it on exit; the editor's Vite plugin (`editor/vite-plugin-custom-elements.ts`) does the same via a virtual module. This means:
+
+- The engine never grows when you add a new creative idea for one track.
+- Your project can override an engine element for its own render by reusing the same `id` (intentional — a track can retune a primitive without forking the engine).
+- `mv:scaffold` seeds `custom-elements/` with a working `ExampleElement.tsx.example` — rename to `.tsx` to activate.
+- Restart the editor (or change the active project) to pick up new `.tsx` files.
+- Contract: default-export an `ElementModule<P>` whose `id` is unique. See `src/compositions/elements/types.ts` for the type and any built-in element (e.g. `src/compositions/elements/overlays/StaticImage.tsx`) for a worked example.
+
+Engine commits become rare by design — they're reserved for truly reusable infrastructure (new hooks, new analysis, engine-level fixes), not per-track creative content.
 
 ## Parallel Agent Coordination
 If you suspect another Claude Code / coding-agent session is running on this

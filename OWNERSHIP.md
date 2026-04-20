@@ -40,6 +40,7 @@ remotion.config.ts             Remotion config
 
 ```
 projects/<stem>/               per-track content (gitignored; user local)
+projects/<stem>/custom-elements/  per-project React element modules (*.tsx) — the creative freezone
 projects/_plans/               shared design docs + implementation plans (TRACKED)
 brands/                        per-brand workspaces (tracked)
 out/                           rendered MP4s (gitignored)
@@ -47,6 +48,8 @@ out/                           rendered MP4s (gitignored)
 ```
 
 Project data lives where `MV_PROJECTS_DIR` points, defaulting to `<engineRoot>/projects/`. The entire `projects/<stem>/` tree is gitignored — audio, analysis, timeline, PNGs, everything. The only exception is `projects/_plans/` which holds engine-level design docs shared across the codebase.
+
+**`custom-elements/` is the designated home for new creative visuals.** The renderer (`scripts/cli/mv-render.ts`) and the editor (`editor/vite-plugin-custom-elements.ts`) both scan this directory and surface its modules to the composition's element registry. Adding a new effect here does NOT require an engine commit and does NOT need `ENGINE_UNLOCK=1`. See `CLAUDE.md` for the authoring contract.
 
 ## Forbidden (gitignored — never commit)
 

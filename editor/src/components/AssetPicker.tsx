@@ -110,7 +110,7 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
             style={{ background: "#1a1a1a", border: "1px solid #333", color: "#ddd", padding: "3px 6px", borderRadius: 3, fontSize: 11 }}
           >
             <option value="all">All scopes</option>
-            <option value="global">Global (engine)</option>
+            <option value="global">Library (shared)</option>
             <option value="project">Project</option>
           </select>
           <input
@@ -165,7 +165,7 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                     {e.path.split("/").pop()}
                   </div>
                   <div style={{ fontSize: 9, color: "#666", display: "flex", justifyContent: "space-between" }}>
-                    <span>{e.scope === "global" ? "engine" : e.stem}</span>
+                    <span>{e.scope === "global" ? "lib" : e.stem}</span>
                     <span>{(e.size / 1024).toFixed(0)} KB</span>
                   </div>
                 </button>

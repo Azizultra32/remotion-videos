@@ -23,6 +23,7 @@ import { Player, type PlayerRef } from "@remotion/player";
 import { useEffect, useMemo, useRef } from "react";
 import { useEditorStore } from "../store";
 import { useStorage } from "../hooks/useStorage";
+import { SIDEBAR_COL_WIDTH, DEFAULT_LEFT_MARGIN } from "../constants/layout";
 import { toEditorUrl } from "../utils/url";
 import {
   computeDragPosition,
@@ -36,9 +37,12 @@ const HEADER_HEIGHT = 32;
 const TOTAL_HEIGHT = WINDOW_HEIGHT + HEADER_HEIGHT;
 
 const defaultTopCenter = (): Pos => {
-  if (typeof window === "undefined") return { x: 80, y: 24 };
+  // Never start on top of the left sidebar — the floating window would
+  // otherwise cover the Element Library / Asset Library on first open.
+  const sidebarSafeX = SIDEBAR_COL_WIDTH + DEFAULT_LEFT_MARGIN;
+  if (typeof window === "undefined") return { x: sidebarSafeX, y: 24 };
   return {
-    x: Math.max(0, Math.floor((window.innerWidth - WINDOW_WIDTH) / 2)),
+    x: Math.max(sidebarSafeX, Math.floor((window.innerWidth - WINDOW_WIDTH) / 2)),
     y: 24,
   };
 };

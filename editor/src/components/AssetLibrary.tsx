@@ -1,20 +1,20 @@
 // editor/src/components/AssetLibrary.tsx
 //
-// Dashboard-level asset panel (distinct from the modal AssetPicker that
-// opens from a SchemaEditor field button). Always visible in the left rail,
-// polls /api/assets/list for a live inventory of engine-wide + per-project
-// media, and turns a thumbnail into a one-click "add element at playhead"
-// affordance. Click = default action for the kind; shift+click = copy path.
+// Dashboard-level asset panel. Polls /api/assets/list and turns a thumbnail
+// into a one-click "add element at playhead" affordance. Click = default
+// action; shift+click = copy path (will be replaced by right-click menu).
 //
-// Why a panel AND a modal, not just one:
-//   - Modal (AssetPicker): reactive — already inside an element's field,
-//     need to pick a file for THAT field.
-//   - Panel (this file): proactive — browsing the library, want to drop
-//     an asset ONTO the timeline and let the editor decide which element
-//     wraps it.
+// On the word "engine": it is DELIBERATELY absent here. In this codebase
+// "engine" means the write-locked application code (src/**, editor/**, etc.
+// governed by ENGINE_UNLOCK=1). The shared-across-projects scope for a PNG
+// file is NOT engine — it is just a library of content that happens to live
+// at public/assets/. Using "engine" as a UI label would steal vocabulary
+// from a different layer and imply the file needs unlock to modify, which
+// is false. The wire value stays scope: "global" (truthful — visible to
+// every project); the UI label is "Library".
 
 import { ELEMENT_REGISTRY } from "@compositions/elements/registry";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditorStore } from "../store";
 import type { TimelineElement } from "../types";
 
@@ -29,11 +29,12 @@ type AssetEntry = {
 
 const POLL_MS = 2000;
 
-// When the user clicks a tile, we drop it onto the timeline wrapped in the
-// appropriate element module. Kept as two constants so they're easy to swap
-// (e.g., swap BeatImageCycle for a simpler "static image" module later).
-const IMAGE_MODULE_ID = "overlay.beatImageCycle"; // images: string[]
-const VIDEO_MODULE_ID = "overlay.speedVideo";     // videoSrc: string
+// Click-to-add defaults. Swap these to change what type of element a click
+// produces for each kind. The static-image module is the right default here
+// because "I dropped a photo onto the timeline" should produce a photo on
+// screen, not a beat-cycling sequence of one image.
+const IMAGE_MODULE_ID = "overlay.staticImage";
+const VIDEO_MODULE_ID = "overlay.speedVideo";
 
 const newId = () => `el-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -43,6 +44,15 @@ const urlFor = (e: AssetEntry): string =>
 const kbLabel = (bytes: number): string =>
   bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(0)} KB`;
 
+// Cheap content hash over the entries list. We only need to notice when the
+// set of files changed (new / removed / touched). Counting + max-mtime is
+// sufficient and avoids JSON.stringify on every poll.
+const hashEntries = (es: AssetEntry[]): string => {
+  let maxM = 0;
+  for (const e of es) if (e.mtime > maxM) maxM = e.mtime;
+  return `${es.length}:${maxM}`;
+};
+
 export const AssetLibrary = () => {
   const [entries, setEntries] = useState<AssetEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,20 +60,30 @@ export const AssetLibrary = () => {
   const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">("all");
   const [kindFilter, setKindFilter] = useState<"all" | "image" | "video">("all");
   const [search, setSearch] = useState("");
+  const prevHashRef = useRef<string>("");
 
   // Poll every POLL_MS so files dropped into public/assets/ appear without
-  // reloading the editor. Cancel-flag on unmount keeps useEffect tidy.
+  // reloading the editor. Two optimizations vs the naive interval:
+  //   1. Skip the fetch entirely when the tab is hidden.
+  //   2. Skip setState when the content hash is unchanged — React would
+  //      otherwise re-render the whole tile grid every 2s for nothing.
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      if (document.visibilityState === "hidden") return;
       try {
         const r = await fetch("/api/assets/list");
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data: AssetEntry[] = await r.json();
-        if (!cancelled) {
-          setEntries(data);
+        if (cancelled) return;
+        const h = hashEntries(data);
+        if (h === prevHashRef.current) {
           setError(null);
+          return;
         }
+        prevHashRef.current = h;
+        setEntries(data);
+        setError(null);
       } catch (err) {
         if (!cancelled) setError(String((err as Error)?.message ?? err));
       }
@@ -97,7 +117,7 @@ export const AssetLibrary = () => {
     }
     const seededProps =
       e.kind === "image"
-        ? { ...mod.defaults, images: [e.path] }
+        ? { ...mod.defaults, imageSrc: e.path }
         : { ...mod.defaults, videoSrc: e.path };
     const el: TimelineElement = {
       id: newId(),
@@ -125,6 +145,19 @@ export const AssetLibrary = () => {
     else addElementForAsset(e);
   };
 
+  const onTileDragStart = (e: AssetEntry, ev: React.DragEvent<HTMLButtonElement>) => {
+    ev.dataTransfer.setData(
+      "application/x-mv-asset",
+      JSON.stringify({ path: e.path, kind: e.kind }),
+    );
+    ev.dataTransfer.effectAllowed = "copy";
+    const img = ev.currentTarget.querySelector("img, video") as HTMLElement | null;
+    if (img) {
+      const rect = (img as HTMLElement).getBoundingClientRect();
+      ev.dataTransfer.setDragImage(img, rect.width / 2, rect.height / 2);
+    }
+  };
+
   const header = (
     <button
       type="button"
@@ -140,7 +173,7 @@ export const AssetLibrary = () => {
       }}
       title={collapsed ? "Expand asset library" : "Collapse asset library"}
     >
-      <span style={{ fontSize: 9, color: "#888", width: 10 }}>{collapsed ? "\u25B6" : "\u25BC"}</span>
+      <span style={{ fontSize: 9, color: "#888", width: 10 }}>{collapsed ? "▶" : "▼"}</span>
       <span
         style={{
           fontSize: 10,
@@ -153,10 +186,24 @@ export const AssetLibrary = () => {
       </span>
       <span style={{ flex: 1 }} />
       <span style={{ fontSize: 9, color: "#555" }}>
-        {entries ? `${filtered.length}/${entries.length}` : "\u2026"}
+        {entries ? `${filtered.length}/${entries.length}` : "…"}
       </span>
     </button>
   );
+
+  // Segmented filter: single row of chip buttons. Denser and clearer in a
+  // 240px rail than two native <select> dropdowns.
+  const segBtn = (active: boolean): React.CSSProperties => ({
+    padding: "2px 6px",
+    background: active ? "#2a4a7a" : "#1a1a1a",
+    border: `1px solid ${active ? "#3a6aaa" : "#333"}`,
+    color: active ? "#fff" : "#aaa",
+    fontSize: 10,
+    borderRadius: 3,
+    cursor: "pointer",
+    flex: 1,
+    minWidth: 0,
+  });
 
   return (
     <div
@@ -170,35 +217,28 @@ export const AssetLibrary = () => {
       {header}
       {!collapsed && (
         <>
-          <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
-            <select
-              value={scopeFilter}
-              onChange={(ev) => setScopeFilter(ev.target.value as typeof scopeFilter)}
-              style={selectStyle}
-              title="Filter by scope"
-            >
-              <option value="all">All scopes</option>
-              <option value="global">Engine</option>
-              <option value="project">Project</option>
-            </select>
-            <select
-              value={kindFilter}
-              onChange={(ev) => setKindFilter(ev.target.value as typeof kindFilter)}
-              style={selectStyle}
-              title="Filter by media kind"
-            >
-              <option value="all">Any</option>
-              <option value="image">Images</option>
-              <option value="video">Videos</option>
-            </select>
+          <div style={{ display: "flex", gap: 3, marginBottom: 4 }}>
+            <button type="button" style={segBtn(kindFilter === "all")} onClick={() => setKindFilter("all")}>All</button>
+            <button type="button" style={segBtn(kindFilter === "image")} onClick={() => setKindFilter("image")}>Img</button>
+            <button type="button" style={segBtn(kindFilter === "video")} onClick={() => setKindFilter("video")}>Vid</button>
+          </div>
+          <div style={{ display: "flex", gap: 3, marginBottom: 6 }}>
+            <button type="button" style={segBtn(scopeFilter === "all")} onClick={() => setScopeFilter("all")}>Any scope</button>
+            <button type="button" style={segBtn(scopeFilter === "global")} onClick={() => setScopeFilter("global")} title="Library — shared across all projects">Library</button>
+            <button type="button" style={segBtn(scopeFilter === "project")} onClick={() => setScopeFilter("project")}>Project</button>
           </div>
           <input
             type="text"
             value={search}
             onChange={(ev) => setSearch(ev.target.value)}
-            placeholder="Filter by name\u2026"
+            placeholder="Filter by name…"
             style={{
-              ...selectStyle,
+              background: "#1a1a1a",
+              border: "1px solid #333",
+              borderRadius: 3,
+              color: "#ddd",
+              fontSize: 10,
+              padding: "3px 6px",
               width: "100%",
               marginBottom: 8,
               boxSizing: "border-box",
@@ -212,7 +252,7 @@ export const AssetLibrary = () => {
           )}
 
           {!entries && !error && (
-            <div style={{ color: "#666", fontSize: 10, padding: "8px 0" }}>Loading\u2026</div>
+            <div style={{ color: "#666", fontSize: 10, padding: "8px 0" }}>Loading…</div>
           )}
 
           {entries && filtered.length === 0 && (
@@ -226,7 +266,7 @@ export const AssetLibrary = () => {
               }}
             >
               {entries.length === 0
-                ? "No assets yet. Drop files into public/assets/images/ or public/assets/videos/ \u2014 they'll appear here within a couple of seconds."
+                ? "No assets yet. Drop files into public/assets/images/ or public/assets/videos/ — they'll appear here within a couple of seconds."
                 : "No matches for current filters."}
             </div>
           )}
@@ -242,15 +282,17 @@ export const AssetLibrary = () => {
               <button
                 key={e.path}
                 type="button"
+                draggable
                 onClick={(ev) => handleTileClick(e, ev.shiftKey)}
-                title={`${e.path}\n${kbLabel(e.size)} \u00B7 ${new Date(e.mtime).toLocaleString()}\nClick: add ${e.kind} element at playhead\nShift+click: copy path`}
+                onDragStart={(ev) => onTileDragStart(e, ev)}
+                title={`${e.path}\n${kbLabel(e.size)} · ${new Date(e.mtime).toLocaleString()}\nClick: add ${e.kind} element at playhead\nShift+click: copy path\nDrag: drop onto a timeline track`}
                 style={{
                   position: "relative",
                   padding: 0,
                   background: "#1a1a1a",
                   border: "1px solid #333",
                   borderRadius: 3,
-                  cursor: "pointer",
+                  cursor: "grab",
                   overflow: "hidden",
                   aspectRatio: "1 / 1",
                   display: "flex",
@@ -271,14 +313,15 @@ export const AssetLibrary = () => {
                     <img
                       src={urlFor(e)}
                       alt={e.path}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      draggable={false}
+                      style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
                     />
                   ) : (
                     <video
                       src={urlFor(e)}
                       muted
                       preload="metadata"
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
                     />
                   )}
                 </div>
@@ -300,7 +343,7 @@ export const AssetLibrary = () => {
                     {e.path.split("/").pop()}
                   </span>
                   <span style={{ color: "#555", fontSize: 8 }}>
-                    {e.scope === "global" ? "eng" : (e.stem ?? "").slice(0, 3)}
+                    {e.scope === "global" ? "lib" : (e.stem ?? "").slice(0, 3)}
                   </span>
                 </div>
               </button>
@@ -309,23 +352,11 @@ export const AssetLibrary = () => {
 
           {entries && entries.length > 0 && (
             <div style={{ fontSize: 9, color: "#555", marginTop: 8, lineHeight: 1.4 }}>
-              Click a tile to add it at the playhead. Shift+click copies the path. Drop files into
-              public/assets/ for engine-wide, or projects/&lt;stem&gt;/images|videos/ per-track.
+              Click to add at the playhead · Shift+click to copy path · Drag onto a timeline track for precise placement.
             </div>
           )}
         </>
       )}
     </div>
   );
-};
-
-const selectStyle: React.CSSProperties = {
-  background: "#1a1a1a",
-  border: "1px solid #333",
-  borderRadius: 3,
-  color: "#ddd",
-  fontSize: 10,
-  padding: "3px 4px",
-  flex: 1,
-  minWidth: 0,
 };

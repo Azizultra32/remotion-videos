@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { AssetLibrary } from "./components/AssetLibrary";
+import { SIDEBAR_COL_WIDTH, CHAT_COL_WIDTH } from "./constants/layout";
 import { ChatPane } from "./components/ChatPane";
 import { ElementDetail } from "./components/ElementDetail";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -81,7 +82,7 @@ export const App = () => {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "240px minmax(0, 1fr) 320px",
+          gridTemplateColumns: `${SIDEBAR_COL_WIDTH}px minmax(0, 1fr) ${CHAT_COL_WIDTH}px`,
           gridTemplateRows: "auto auto minmax(0, 1fr) 360px",
           height: "100vh",
           width: "100vw",

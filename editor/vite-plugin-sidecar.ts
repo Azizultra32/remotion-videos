@@ -417,28 +417,39 @@ const handleAssetsList = async (
     } catch {
       return;
     }
+    const rootResolved = path.resolve(root);
     for (const d of dirents) {
       if (d.name.startsWith(".")) continue;
       const full = path.join(root, d.name);
       const rel = `${relPrefix}/${d.name}`;
+      // Never follow symlinks: a link inside public/assets/ pointing at
+      // /etc/hosts, ~/.ssh/id_rsa, or ../../.env would otherwise be
+      // enumerated and its URL served by Vite. lstat + explicit skip.
+      let lst;
+      try {
+        lst = await fs.lstat(full);
+      } catch { continue; }
+      if (lst.isSymbolicLink()) continue;
+      // Boundary check — belt and suspenders against any odd ../ filename.
+      const fullResolved = path.resolve(full);
+      if (!fullResolved.startsWith(rootResolved + path.sep)) continue;
       if (d.isDir) {
+        if (!lst.isDirectory()) continue;
         await walk(full, scope, stem, rel);
         continue;
       }
+      if (!lst.isFile()) continue;
       const isImg = IMG_EXT.test(d.name);
       const isVid = VID_EXT.test(d.name);
       if (!isImg && !isVid) continue;
-      try {
-        const st = await fs.stat(full);
-        entries.push({
-          path: rel.replace(/^\/+/, ""),
-          scope,
-          stem,
-          kind: isImg ? "image" : "video",
-          size: st.size,
-          mtime: st.mtimeMs,
-        });
-      } catch { /* broken file, skip */ }
+      entries.push({
+        path: rel.replace(/^\/+/, ""),
+        scope,
+        stem,
+        kind: isImg ? "image" : "video",
+        size: lst.size,
+        mtime: lst.mtimeMs,
+      });
     }
   };
 

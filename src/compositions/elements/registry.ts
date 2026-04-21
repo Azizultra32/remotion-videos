@@ -16,11 +16,13 @@ import { StaticImageModule } from "./overlays/StaticImage";
 import { GlitchShockModule } from "./overlays/GlitchShock";
 import { PlasmaBackdropModule } from "./overlays/PlasmaBackdrop";
 import { ShaderPulseModule } from "./overlays/ShaderPulse";
+import { MotionBlurTextModule } from "./overlays/MotionBlurText";
 import { VideoClipModule } from "./overlays/VideoClip";
 import { WatermarkMaskModule } from "./overlays/WatermarkMask";
 import { NeonStrokeStackModule } from "./shapes/NeonStrokeStack";
 import { PathRevealModule } from "./shapes/PathReveal";
 import { SonarRingsModule } from "./shapes/SonarRings";
+import { ShapeClipModule } from "./shapes/ShapeClip";
 import { BeatDropWordsModule } from "./text/BeatDropWords";
 import { BellCurveRevealModule } from "./text/BellCurveReveal";
 import { FitboxSVGWordModule } from "./text/FitboxSVGWord";
@@ -65,6 +67,8 @@ const ENGINE_ELEMENT_MODULES: ElementModule<any>[] = [
   OscilloscopeModule,
   PlasmaBackdropModule,
   SpectrumWaterfallModule,
+  MotionBlurTextModule,
+  ShapeClipModule,
 ];
 
 // Merge built-ins with per-project custom elements. Later entries win on id
@@ -112,6 +116,8 @@ export const ELEMENT_SOURCE_PATHS: Record<string, string> = {
   "text.popping": "src/compositions/elements/text/PoppingText.tsx",
   "text.sliding": "src/compositions/elements/text/SlidingText.tsx",
   "text.typing": "src/compositions/elements/text/TypingText.tsx",
+  "overlay.motionBlurText": "src/compositions/elements/overlays/MotionBlurText.tsx",
+  "shape.shapeClip": "src/compositions/elements/shapes/ShapeClip.tsx",
 };
 
 export const getElementSourcePath = (type: string): string | null =>

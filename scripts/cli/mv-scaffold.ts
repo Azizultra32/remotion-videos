@@ -174,4 +174,6 @@ console.log(`  2. Open editor (npm run dev in editor/), pick "${stem}" in the So
 console.log(
   `  3. Rename custom-elements/${exampleModuleName}.tsx.example → .tsx to activate your first custom element`,
 );
-console.log(`  4. git add projects/${stem}/ && git commit -m "feat(projects): add ${stem}"`);
+console.log(
+  `  4. (Project content is gitignored by design. If you want history, point MV_PROJECTS_DIR at a separate git repo and commit there.)`,
+);

@@ -124,8 +124,27 @@ const isPidAlive = (pid: number): boolean => {
     return (e as NodeJS.ErrnoException).code === "EPERM";
   }
 };
-if (existsSync(LOCK_FILE)) {
-  const raw = readFileSync(LOCK_FILE, "utf8").trim();
+// Atomic create-or-fail via O_EXCL (`flag: "wx"`). Two processes racing
+// the existsSync→readFileSync→writeFileSync sequence could both see no
+// lock and write sequentially — the later writer would silently win and
+// both renders would proceed. Using "wx" means only one process ever
+// succeeds on the create; the others hit EEXIST and fall into the
+// stale-check branch. TOCTOU-safe.
+const tryAcquireLock = (): boolean => {
+  try {
+    writeFileSync(LOCK_FILE, String(process.pid), { flag: "wx" });
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw e;
+  }
+};
+
+if (!tryAcquireLock()) {
+  // Existing lock: inspect and either refuse or reclaim.
+  const raw = (() => {
+    try { return readFileSync(LOCK_FILE, "utf8").trim(); } catch { return ""; }
+  })();
   const otherPid = Number.parseInt(raw, 10);
   if (Number.isFinite(otherPid) && isPidAlive(otherPid)) {
     console.error(
@@ -134,11 +153,16 @@ if (existsSync(LOCK_FILE)) {
     console.error("  If you're sure no other render is running, remove the lock manually.");
     process.exit(1);
   }
-  // Stale lock from a crashed prior run; reclaim.
-  console.warn(`[mv:render] reclaiming stale lock (PID ${raw} not alive)`);
-  try { unlinkSync(LOCK_FILE); } catch { /* race with another reclaim; fall through */ }
+  // Stale lock from a crashed prior run; reclaim via unlink + retry.
+  // If another process reclaims simultaneously, one of us loses the wx
+  // race below and refuses — that's acceptable: user retries.
+  console.warn(`[mv:render] reclaiming stale lock (PID ${raw || "?"} not alive)`);
+  try { unlinkSync(LOCK_FILE); } catch { /* simultaneous reclaim; fall through */ }
+  if (!tryAcquireLock()) {
+    console.error(`[mv:render] lost race reclaiming stale lock; try again.`);
+    process.exit(1);
+  }
 }
-writeFileSync(LOCK_FILE, String(process.pid));
 
 const timelinePath = resolve(projectDir, "timeline.json");
 const audioPath = resolve(projectDir, "audio.mp3");

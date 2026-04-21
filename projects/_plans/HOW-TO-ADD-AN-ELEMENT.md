@@ -72,9 +72,9 @@ The alias is wired in three places — keep it consistent if you ever add a new 
 - `editor/vite.config.ts` — Vite `resolve.alias` for the editor preview
 - `tsconfig.json` `compilerOptions.paths` — TypeScript IDE intellisense
 
-The alias resolves to `src/compositions/elements/`. So `@engine/types` → `src/compositions/elements/types.ts`, `@engine/overlays/StaticImage` → that file, etc.
+**The alias is deliberately narrow**: `@engine/types` is the ONLY subpath that resolves — NOT a prefix. Attempts like `@engine/overlays/StaticImage` or `@engine/../registry` fail to resolve. This is a security decision: a prefix alias would let any custom element write `from "@engine/../../utils/secret"` and reach arbitrary engine internals (Webpack/Vite don't normalize `..` before alias resolution). If you genuinely need another engine surface in a custom element, either (a) import via a relative path knowing your project dir will be machine-specific, or (b) propose adding another explicit exact-match alias entry to all three config files.
 
-Why an alias instead of a relative path: custom elements can live anywhere `MV_PROJECTS_DIR` points (external volumes, separate repos). A relative path baked at scaffold time would break the moment the project moves to a different machine. The alias is portable.
+Why an alias instead of a relative path for `types`: custom elements can live anywhere `MV_PROJECTS_DIR` points (external volumes, separate repos). A relative path baked at scaffold time would break the moment the project moves to a different machine. The alias is portable — for the types contract, which is all you should need.
 
 ## Common pitfalls
 

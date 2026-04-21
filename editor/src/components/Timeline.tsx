@@ -1,7 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useShortcuts, useShortcutSurface } from "../contexts/shortcuts";
 import { useEditorStore } from "../store";
 import type { TimelineElement as TimelineElementType } from "../types";
 import { snapTime } from "../utils/time";
+import { anchoredZoom, clampViewport } from "../utils/timelineScale";
 import { ELEMENT_REGISTRY } from "@compositions/elements/registry";
 import { TimelineBeatMarkers } from "./TimelineBeatMarkers";
 import { TimelineEventMarkers } from "./TimelineEventMarkers";
@@ -59,23 +61,72 @@ export const Timeline = () => {
 
   useTimelineDeleteKey();
 
+  const zoomByCenter = (zoomFactor: number) => {
+    const scroller = scrollRef.current;
+    const barsPx = Math.max(1, (scroller?.clientWidth ?? 1000) - GUTTER_WIDTH);
+    const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
+      currentSecPerPx: effectiveSecPerPx,
+      currentOffsetSec: offsetSec,
+      zoomFactor,
+      anchorPx: barsPx / 2,
+      minSecPerPx: 0.001,
+      maxSecPerPx: 1.0,
+    });
+    setTimelineView({
+      secPerPx: nextSecPerPx,
+      offsetSec: clampViewport({
+        offsetSec: nextOffset,
+        secPerPx: nextSecPerPx,
+        containerPx: barsPx,
+        totalSec: compositionDuration,
+      }),
+    });
+  };
+
+  // Keyboard zoom bindings — active only while the pointer is over the
+  // Timeline surface (pushed via useShortcutSurface on the root div).
+  const timelineShortcuts = useMemo(
+    () => [
+      { pattern: "=", handler: () => zoomByCenter(1.25) },
+      { pattern: "+", handler: () => zoomByCenter(1.25) },
+      { pattern: "-", handler: () => zoomByCenter(1 / 1.25) },
+      { pattern: "0", handler: () => setTimelineView({ secPerPx: 0, offsetSec: 0 }) },
+    ],
+    // zoomByCenter reads from the store each call; bindings themselves
+    // don't need to re-register when zoom/offset change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  useShortcuts("timeline", timelineShortcuts);
+  const surfaceHandlers = useShortcutSurface("timeline");
+
   const widthPx = compositionDuration * pxPerSec;
   const panPx = offsetSec * pxPerSec;
   const tracksHeight = TRACK_COUNT * TRACK_HEIGHT;
 
-  // Auto-follow the playhead. Subscribe imperatively so we don't re-render
-  // the Timeline on every frame — just nudge scrollLeft when the playhead
-  // approaches the visible edge. Keeps ~40px of leading gutter visible
-  // when scrolled, so the user can still see track labels while scrubbing.
+  // Auto-follow the playhead via the SAME pan axis everything else uses
+  // (timelineOffsetSec in the store → transform: translateX on the bars).
+  // Writing to scroller.scrollLeft here would fight the transform and
+  // cause the jerk users noticed when the playhead crosses the edge.
   useEffect(() => {
-    const scroller = scrollRef.current;
-    if (!scroller) return;
     const follow = (sec: number) => {
-      const playX = GUTTER_WIDTH + sec * pxPerSec;
-      const viewL = scroller.scrollLeft + GUTTER_WIDTH;
-      const viewR = scroller.scrollLeft + scroller.clientWidth - 32;
-      if (playX < viewL || playX > viewR) {
-        scroller.scrollLeft = Math.max(0, playX - scroller.clientWidth / 2);
+      const scroller = scrollRef.current;
+      if (!scroller) return;
+      const state = useEditorStore.getState();
+      const cur = state.timelineSecPerPx > 0 ? state.timelineSecPerPx : DEFAULT_SEC_PER_PX;
+      const barsPx = Math.max(1, scroller.clientWidth - GUTTER_WIDTH);
+      const visibleSec = barsPx * cur;
+      const leftTime = state.timelineOffsetSec;
+      const rightTime = leftTime + visibleSec;
+      const edgePad = visibleSec * 0.08; // keep the playhead 8% inset
+      if (sec < leftTime + edgePad || sec > rightTime - edgePad) {
+        const nextOffset = clampViewport({
+          offsetSec: Math.max(0, sec - visibleSec / 2),
+          secPerPx: cur,
+          containerPx: barsPx,
+          totalSec: state.compositionDuration,
+        });
+        state.setTimelineView({ offsetSec: nextOffset });
       }
     };
     follow(useEditorStore.getState().currentTimeSec);
@@ -88,7 +139,9 @@ export const Timeline = () => {
     <div
       ref={scrollRef}
       className="timeline-scroll"
-      style={{ height: "100%", overflow: "auto", background: "#0a0a0a" }}
+      style={{ height: "100%", overflowX: "hidden", overflowY: "auto", background: "#0a0a0a" }}
+      onPointerEnter={surfaceHandlers.onPointerEnter}
+      onPointerLeave={surfaceHandlers.onPointerLeave}
     >
       <div style={{ position: "relative", width: GUTTER_WIDTH + widthPx, minHeight: "100%" }}>
         {/* Ruler row — sticky left corner + scrolling ticks */}
@@ -167,7 +220,13 @@ export const Timeline = () => {
               const target = e.target as HTMLElement;
               if (target.closest?.('[data-timeline-element="true"]')) return;
               const rect = e.currentTarget.getBoundingClientRect();
-              const dataPx = e.clientX - rect.left + panPx;
+              // rect.left is post-CSS-transform. Children are absolutely
+              // positioned at left=startSec*pxPerSec with no nested
+              // transform — so (e.clientX - rect.left) is already data-x.
+              // Adding panPx was a double-count that made click-to-seek
+              // land `offsetSec` seconds past the cursor whenever the
+              // view was panned.
+              const dataPx = e.clientX - rect.left;
               const rawSec = Math.max(0, Math.min(compositionDuration, dataPx * effectiveSecPerPx));
               const state = useEditorStore.getState();
               // Snap to beat grid by default — matches drag/resize behavior.
@@ -192,11 +251,12 @@ export const Timeline = () => {
               catch { return; }
 
               const rect = e.currentTarget.getBoundingClientRect();
-              // Data-space pixel = visual-offset + current pan. Timeline
-              // applies translateX(-panPx) to this container, so clientX
-              // - rect.left is the visual x, and we add panPx back to get
-              // the un-translated (data-space) x.
-              const dataPx = e.clientX - rect.left + panPx;
+              // rect.left is post-CSS-transform; the children inside the
+              // bars container have no nested transform. So e.clientX -
+              // rect.left is already data-space. The previous +panPx was
+              // a double-count that landed drops offsetSec seconds past
+              // where the user dropped when the timeline was panned.
+              const dataPx = e.clientX - rect.left;
               const rawSec = Math.max(0, Math.min(compositionDuration, dataPx * effectiveSecPerPx));
 
               // Track row. clientY - rect.top is already in the
@@ -230,44 +290,63 @@ export const Timeline = () => {
               state.selectElement(newEl.id);
             }}
             onWheel={(e) => {
-              // Gesture model (matches DaVinci/Premiere muscle memory):
-              //   pinch OR cmd/ctrl+wheel      → zoom, anchored at cursor
-              //   plain wheel / 2-finger drag  → pan along the time axis
-              //   shift+wheel                  → pan (explicit override)
-              //
-              // macOS trackpad pinch arrives as a wheel event with
-              // ctrlKey:true — that's why ctrl is the zoom modifier.
-              // Absolute zoom bounds: 0.001 sec/px (very fine) to 1.0
-              // sec/px (whole minute visible). Relative bounds per-tick
-              // made zooming feel sticky and "fucked" per user feedback.
+              // Gesture model (matches DaVinci / Premiere muscle memory
+              // and Scrubber.tsx so both views agree):
+              //   pinch OR cmd/ctrl+wheel  → zoom, anchored at cursor
+              //   shift+wheel              → pan (explicit)
+              //   horizontal trackpad      → pan
+              //   plain vertical wheel     → pan along the time axis too,
+              //                               so the user doesn't have to
+              //                               reach for shift
+              // macOS trackpad pinch arrives with ctrlKey:true — that's
+              // why ctrl is the zoom modifier.
+              const isZoom = e.ctrlKey || e.metaKey;
               e.preventDefault();
               e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              const cursorPx = e.clientX - rect.left + panPx;
-              const cursorSec = cursorPx * effectiveSecPerPx;
-
-              const isZoomGesture = e.ctrlKey || e.metaKey;
-              if (isZoomGesture) {
-                const zoomFactor = Math.exp(-e.deltaY * 0.01);
-                const nextSecPerPx = Math.max(
-                  0.001,
-                  Math.min(1.0, effectiveSecPerPx / zoomFactor),
-                );
-                const nextOffsetSec = Math.max(
-                  0,
-                  cursorSec - (e.clientX - rect.left) * nextSecPerPx,
-                );
-                setTimelineView({ secPerPx: nextSecPerPx, offsetSec: nextOffsetSec });
+              const scroller = scrollRef.current;
+              const barsPx = Math.max(1, (scroller?.clientWidth ?? 1000) - GUTTER_WIDTH);
+              if (!isZoom) {
+                // Pan: deltaX from horizontal trackpad, else deltaY.
+                const rawDelta =
+                  Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+                const deltaSec = rawDelta * effectiveSecPerPx;
+                setTimelineView({
+                  offsetSec: clampViewport({
+                    offsetSec: offsetSec + deltaSec,
+                    secPerPx: effectiveSecPerPx,
+                    containerPx: barsPx,
+                    totalSec: compositionDuration,
+                  }),
+                });
                 return;
               }
-
-              // Pan: deltaX (horizontal trackpad) OR deltaY (mouse wheel
-              // or shift-wheel). Positive delta moves view RIGHT in time.
-              const rawDelta =
-                Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-              const deltaSec = rawDelta * effectiveSecPerPx;
+              // Zoom — anchorPx is the cursor position measured from the
+              // BARS viewport left (NOT from the transformed element's
+              // rect.left, which already includes -panPx). Subtracting
+              // panPx here cancels the transform so anchorPx lines up
+              // with the coordinate system anchoredZoom expects.
+              const rect = e.currentTarget.getBoundingClientRect();
+              const anchorPx = Math.max(
+                0,
+                Math.min(barsPx, e.clientX - rect.left - panPx),
+              );
+              const zoomFactor = Math.exp(-e.deltaY * 0.01);
+              const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
+                currentSecPerPx: effectiveSecPerPx,
+                currentOffsetSec: offsetSec,
+                zoomFactor,
+                anchorPx,
+                minSecPerPx: 0.001,
+                maxSecPerPx: 1.0,
+              });
               setTimelineView({
-                offsetSec: Math.max(0, Math.min(compositionDuration, offsetSec + deltaSec)),
+                secPerPx: nextSecPerPx,
+                offsetSec: clampViewport({
+                  offsetSec: nextOffset,
+                  secPerPx: nextSecPerPx,
+                  containerPx: barsPx,
+                  totalSec: compositionDuration,
+                }),
               });
             }}
             style={{ position: "relative", width: widthPx, height: tracksHeight, transform: `translateX(${-panPx}px)`, transformOrigin: "0 0" }}

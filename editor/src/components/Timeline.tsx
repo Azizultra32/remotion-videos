@@ -157,14 +157,15 @@ export const Timeline = () => {
               beat-markers + playhead can span the whole height */}
           <div
             onPointerDown={(e) => {
-              // Click-to-seek on the timeline itself (not the waveform).
-              // An element's own onPointerDown stopPropagation()'s, so
-              // this fires ONLY on empty space between elements.
-              // Right-click and drag-initiating clicks (secondary button,
-              // shift for range, etc.) pass through unchanged so existing
-              // selection/drag logic still works.
+              // Click-to-seek on the timeline. Fires on any empty spot —
+              // container, track row, beat markers, etc. Bails only when
+              // the click started INSIDE an element (data-timeline-element)
+              // so drag/select still works. Previously the handler bailed
+              // on ANY child (via e.target !== e.currentTarget) which
+              // meant clicking on a track row never seeked — user complaint.
               if (e.button !== 0) return;
-              if (e.target !== e.currentTarget) return;
+              const target = e.target as HTMLElement;
+              if (target.closest?.('[data-timeline-element="true"]')) return;
               const rect = e.currentTarget.getBoundingClientRect();
               const dataPx = e.clientX - rect.left + panPx;
               const rawSec = Math.max(0, Math.min(compositionDuration, dataPx * effectiveSecPerPx));
@@ -229,31 +230,45 @@ export const Timeline = () => {
               state.selectElement(newEl.id);
             }}
             onWheel={(e) => {
-              // Shared zoom/pan: wheel zooms with cursor anchor, shift-wheel
-              // (or horizontal trackpad) pans. Matches Scrubber behavior so
-              // both views stay glued to the same time axis.
+              // Gesture model (matches DaVinci/Premiere muscle memory):
+              //   pinch OR cmd/ctrl+wheel      → zoom, anchored at cursor
+              //   plain wheel / 2-finger drag  → pan along the time axis
+              //   shift+wheel                  → pan (explicit override)
+              //
+              // macOS trackpad pinch arrives as a wheel event with
+              // ctrlKey:true — that's why ctrl is the zoom modifier.
+              // Absolute zoom bounds: 0.001 sec/px (very fine) to 1.0
+              // sec/px (whole minute visible). Relative bounds per-tick
+              // made zooming feel sticky and "fucked" per user feedback.
               e.preventDefault();
+              e.stopPropagation();
               const rect = e.currentTarget.getBoundingClientRect();
-              const cursorPx = e.clientX - rect.left + panPx; // account for current pan
+              const cursorPx = e.clientX - rect.left + panPx;
               const cursorSec = cursorPx * effectiveSecPerPx;
-              if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-                const deltaSec = (e.shiftKey ? e.deltaY : e.deltaX) * effectiveSecPerPx;
-                setTimelineView({
-                  offsetSec: Math.max(0, Math.min(compositionDuration, offsetSec + deltaSec)),
-                });
+
+              const isZoomGesture = e.ctrlKey || e.metaKey;
+              if (isZoomGesture) {
+                const zoomFactor = Math.exp(-e.deltaY * 0.01);
+                const nextSecPerPx = Math.max(
+                  0.001,
+                  Math.min(1.0, effectiveSecPerPx / zoomFactor),
+                );
+                const nextOffsetSec = Math.max(
+                  0,
+                  cursorSec - (e.clientX - rect.left) * nextSecPerPx,
+                );
+                setTimelineView({ secPerPx: nextSecPerPx, offsetSec: nextOffsetSec });
                 return;
               }
-              const zoomFactor = Math.exp(-e.deltaY * 0.002);
-              const nextSecPerPx = Math.max(
-                effectiveSecPerPx / 100,
-                Math.min(effectiveSecPerPx * 4, effectiveSecPerPx / zoomFactor),
-              );
-              // Anchor: keep the cursor time under the cursor
-              const nextOffsetSec = Math.max(
-                0,
-                cursorSec - (e.clientX - rect.left) * nextSecPerPx,
-              );
-              setTimelineView({ secPerPx: nextSecPerPx, offsetSec: nextOffsetSec });
+
+              // Pan: deltaX (horizontal trackpad) OR deltaY (mouse wheel
+              // or shift-wheel). Positive delta moves view RIGHT in time.
+              const rawDelta =
+                Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+              const deltaSec = rawDelta * effectiveSecPerPx;
+              setTimelineView({
+                offsetSec: Math.max(0, Math.min(compositionDuration, offsetSec + deltaSec)),
+              });
             }}
             style={{ position: "relative", width: widthPx, height: tracksHeight, transform: `translateX(${-panPx}px)`, transformOrigin: "0 0" }}
           >

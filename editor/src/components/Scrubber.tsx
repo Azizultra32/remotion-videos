@@ -140,10 +140,18 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (!effectiveSecPerPx || !containerWidth) return;
+    // Same gesture model as Timeline.tsx onWheel (they must agree):
+    //   pinch / cmd / ctrl → zoom (anchored at cursor)
+    //   plain wheel        → pan
+    //   shift+wheel        → pan (explicit)
     e.preventDefault();
-    if (e.shiftKey || e.deltaX !== 0) {
-      // Pan: shift-wheel or trackpad horizontal scroll
-      const deltaSec = (e.deltaX !== 0 ? e.deltaX : e.deltaY) * effectiveSecPerPx;
+    e.stopPropagation();
+
+    const isZoomGesture = e.ctrlKey || e.metaKey;
+    if (!isZoomGesture) {
+      // Pan — deltaX (horizontal trackpad) or deltaY (wheel/shift-wheel).
+      const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      const deltaSec = rawDelta * effectiveSecPerPx;
       const next = clampViewport({
         offsetSec: offsetSec + deltaSec,
         secPerPx: effectiveSecPerPx,
@@ -153,11 +161,11 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
       setOffsetSec(next);
       return;
     }
+
     // Zoom anchored at cursor
     const rect = scrollPortRef.current?.getBoundingClientRect();
     if (!rect) return;
     const cursorPxInView = Math.max(0, Math.min(containerWidth, e.clientX - rect.left));
-    // deltaY < 0 = zoom IN (factor > 1); deltaY > 0 = zoom OUT
     const zoomFactor = 1.1 ** (-e.deltaY / 100);
     const maxSecPerPx = naturalSecPerPx || effectiveSecPerPx; // cap zoom-out at fit-to-view
     const minSecPerPx = (naturalSecPerPx || effectiveSecPerPx) / 100; // cap zoom-in at 100x

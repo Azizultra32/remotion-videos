@@ -46,6 +46,7 @@ export const TimelineElement = ({ element, pxPerSec, height }: Props) => {
 
   return (
     <div
+      data-timeline-element="true"
       style={{
         position: "absolute",
         left: leftPx,

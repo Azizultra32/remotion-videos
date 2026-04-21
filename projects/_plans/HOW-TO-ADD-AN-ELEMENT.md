@@ -1,6 +1,6 @@
 # How to add a new visual element
 
-**Short version:** Drop a `.tsx` file under `projects/<stem>/custom-elements/` that default-exports an `ElementModule<P>`. Restart the editor (or switch to this project). Reference it by its `id` from `timeline.json`. Engine never grows.
+**Short version:** Drop a `.tsx` file under `projects/<stem>/custom-elements/` that default-exports an `ElementModule<P>`. The editor auto-reloads on add/edit/remove. Reference it by its `id` from `timeline.json`. Engine never grows.
 
 ---
 

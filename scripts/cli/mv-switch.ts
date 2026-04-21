@@ -12,7 +12,7 @@
 // Usage:
 //   npm run mv:switch -- --project <stem>
 
-import { existsSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { resolveProjectDir } from "./paths";
 
@@ -51,6 +51,12 @@ if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
   process.exit(1);
 }
 
+// Atomic write via tmp + rename. The editor's SongPicker (sidecar) and
+// this CLI both write .current-project; without atomicity, a third
+// process reading mid-write would see a partial filename. tmp + rename
+// also gives "last writer wins" cleanly without partial-file artifacts.
 const currentFile = resolve(repoRoot, ".current-project");
-writeFileSync(currentFile, `${stem}\n`);
+const tmpCurrentFile = `${currentFile}.tmp.${process.pid}`;
+writeFileSync(tmpCurrentFile, `${stem}\n`);
+renameSync(tmpCurrentFile, currentFile);
 console.log(`[mv:switch] active project -> ${stem}`);

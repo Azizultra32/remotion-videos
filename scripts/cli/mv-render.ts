@@ -21,7 +21,7 @@ import {
   createHash,
   // keep import shape for node:crypto
 } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import {
   generateCustomElementsBarrel,
@@ -333,7 +333,17 @@ child.on("close", (code) => {
       if (prior.renders.length > 500) {
         prior.renders = prior.renders.slice(-500);
       }
-      writeFileSync(manifestPath, `${JSON.stringify(prior, null, 2)}\n`);
+      // Atomic write via tmp + rename. The lockfile only protects against
+      // SAME-process races; two renders on different projects can both
+      // reach this append simultaneously. Without atomic rename, the
+      // later writer's read sees the prior content (missing the earlier
+      // writer's just-appended entry) and clobbers it. tmp + rename keeps
+      // each writer's payload whole even if they race; the loser's entry
+      // is the one missing from the manifest, but the file itself is
+      // never corrupt.
+      const tmpManifestPath = `${manifestPath}.tmp.${process.pid}`;
+      writeFileSync(tmpManifestPath, `${JSON.stringify(prior, null, 2)}\n`);
+      renameSync(tmpManifestPath, manifestPath);
       console.log(`[mv:render] manifest updated: ${manifestPath}`);
     } catch (err) {
       console.warn("[mv:render] failed to update manifest:", err);

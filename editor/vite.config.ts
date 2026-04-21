@@ -2,23 +2,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { resolveProjectsDir } from "../scripts/cli/paths";
 import { customElementsPlugin } from "./vite-plugin-custom-elements";
 import { sidecarPlugin } from "./vite-plugin-sidecar";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "..");
 
-// Resolve the projects root the same way scripts/cli/paths.ts does so Vite's
-// fs.allow list covers per-project custom-elements/ dirs that may live
-// outside the repo (MV_PROJECTS_DIR can point anywhere).
-const resolveProjectsDir = (): string => {
-  const override = process.env.MV_PROJECTS_DIR?.trim();
-  if (override) {
-    return override.startsWith("~/")
-      ? path.resolve(process.env.HOME || "", override.slice(2))
-      : path.resolve(override);
-  }
-  return path.resolve(__dirname, "../projects");
-};
+// Single source of truth for the projects-dir resolver lives at
+// scripts/cli/paths.ts (handles MV_PROJECTS_DIR overrides + `~/`
+// expansion via node:os homedir()). Importing rather than re-
+// implementing prevents drift between Vite's fs.allow list and what
+// the renderer/sidecar see at runtime.
 
 export default defineConfig({
   plugins: [react(), sidecarPlugin(), customElementsPlugin()],
@@ -73,7 +68,7 @@ export default defineConfig({
     // overrides it. Explicitly whitelist both the repo root and the projects
     // root so the custom-elements Vite plugin can load them.
     fs: {
-      allow: [path.resolve(__dirname, ".."), resolveProjectsDir()],
+      allow: [repoRoot, resolveProjectsDir(repoRoot)],
     },
   },
 });

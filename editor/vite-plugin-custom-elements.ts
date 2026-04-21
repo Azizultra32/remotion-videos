@@ -25,6 +25,11 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin, ViteDevServer } from "vite";
+// Canonical resolver lives at scripts/cli/paths.ts. Importing rather
+// than re-implementing prevents the editor and CLI from drifting (prior
+// in-house copy used process.env.HOME, broken on Windows + missed bare
+// `~`; the shared resolver uses node:os homedir() correctly).
+import { resolveProjectsDir as resolveProjectsDirShared } from "../scripts/cli/paths";
 
 const __filename = fileURLToPath(import.meta.url);
 const editorDir = dirname(__filename);
@@ -44,18 +49,8 @@ const resolveActiveStem = (): string | null => {
   }
 };
 
-const resolveProjectsDir = (): string => {
-  const override = process.env.MV_PROJECTS_DIR?.trim();
-  if (override) {
-    return override.startsWith("~/")
-      ? resolve(process.env.HOME || "", override.slice(2))
-      : resolve(override);
-  }
-  return resolve(repoRoot, "projects");
-};
-
 const resolveCustomElementsDir = (stem: string): string =>
-  resolve(resolveProjectsDir(), stem, "custom-elements");
+  resolve(resolveProjectsDirShared(repoRoot), stem, "custom-elements");
 
 const EMPTY_BODY = `// virtual: no active project, empty barrel
 import type { ElementModule } from "./types";

@@ -589,16 +589,25 @@ const sanitizeAssetFilename = async (
   if (!m) return null;
   const stem = m[1];
   const ext = m[2];
+  // Atomic claim via O_EXCL: instead of stat-then-write (TOCTOU race
+  // when two uploads hit the same filename in parallel), try to create
+  // an empty placeholder file with `wx` flag. If it succeeds, the name
+  // is ours. If EEXIST, increment and retry. The caller will overwrite
+  // the placeholder with the real bytes via the atomic tmp + rename
+  // pattern further down — the placeholder is just a name reservation.
   let candidate = normalized;
   let counter = 1;
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    const fullPath = path.join(dirPath, candidate);
     try {
-      await fs.stat(path.join(dirPath, candidate));
+      const handle = await fs.open(fullPath, "wx");
+      await handle.close();
+      return { filename: candidate, fullPath };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
       counter += 1;
       candidate = `${stem}-${counter}${ext}`;
-    } catch {
-      return { filename: candidate, fullPath: path.join(dirPath, candidate) };
     }
   }
 };
@@ -664,9 +673,15 @@ const handleAssetsUpload = async (
   const tmp = `${sanitized.fullPath}.tmp`;
   try {
     await fs.writeFile(tmp, upload.body);
+    // Atomic rename overwrites the wx-claim placeholder created by
+    // sanitizeAssetFilename (a 0-byte file reserving the name).
     await fs.rename(tmp, sanitized.fullPath);
   } catch (err) {
     try { await fs.unlink(tmp); } catch { /* ignore */ }
+    // Best-effort cleanup of the wx-claim placeholder on failure so the
+    // filename is freed for the user's next attempt instead of being
+    // permanently consumed by a 0-byte orphan.
+    try { await fs.unlink(sanitized.fullPath); } catch { /* ignore */ }
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ error: "write-failed", detail: String(err) }));
@@ -922,7 +937,13 @@ const handleCurrentSave = async (req: IncomingMessage, res: ServerResponse): Pro
     res.end(JSON.stringify({ error: "bad stem" }));
     return;
   }
-  await fs.writeFile(CURRENT_PROJECT_FILE, `${stem}\n`);
+  // Atomic write via tmp + rename. The CLI's mv:switch and this handler
+  // both write .current-project; without atomicity, a third process
+  // (mv:current, mv:render, an external Claude session) could read a
+  // partially-written file and get a truncated stem.
+  const tmpCurrent = `${CURRENT_PROJECT_FILE}.tmp.${process.pid}.${Date.now()}`;
+  await fs.writeFile(tmpCurrent, `${stem}\n`);
+  await fs.rename(tmpCurrent, CURRENT_PROJECT_FILE);
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({ ok: true, stem }));
 };

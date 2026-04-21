@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { stemFromAudioSrc } from "../utils/url";
 import { useEditorStore } from "../store";
 import {
   applyMutations,
@@ -35,35 +34,55 @@ export type ChatMessage = {
 
 const newId = () => `msg-${Math.random().toString(36).slice(2, 9)}`;
 
-// localStorage persistence: chat history survives tab close + dev-server
-// reload. User clears explicitly via the Clear button in ChatPane. Per-
-// session-only state (streaming flag, tool-call partial results) is not
-// persisted — only finalized turn content.
+// localStorage persistence: one global chat thread per browser. Earlier
+// we tried per-stem keying, but switching tracks made past conversations
+// vanish (unintended) and the legacy-key migration sometimes moved
+// history to the wrong stem. The fix is to keep chat as ONE continuous
+// conversation and inject per-project context (stem, custom elements,
+// notes.md) into the system prompt on every turn — that gives the
+// agent track awareness without losing conversation history.
 //
-// PER-PROJECT: key is scoped to the active stem (track). Switching tracks
-// gives you that track's chat history — previously the key was global
-// and every project saw the same conversation, which meant asking about
-// "this track" referenced the wrong song. Migration: when we encounter
-// the old unscoped key at boot we rename it to the currently-active
-// stem's key so nothing is lost.
-const STORAGE_KEY_PREFIX = "music-video-editor-chat";
-const LEGACY_KEY = "music-video-editor-chat";
+// Legacy per-stem keys are detected at boot and their contents merged
+// back into the global key (one-time, max 500 messages) so nothing the
+// earlier scheme stored is orphaned.
+const STORAGE_KEY = "music-video-editor-chat";
+const LEGACY_STEM_KEY_PREFIX = "music-video-editor-chat:";
 
-const storageKeyForStem = (stem: string | null): string =>
-  stem ? `${STORAGE_KEY_PREFIX}:${stem}` : `${STORAGE_KEY_PREFIX}:_unassigned`;
-
-const loadMessages = (stem: string | null): ChatMessage[] => {
+const migrateLegacyStemKeys = (): void => {
   try {
-    const key = storageKeyForStem(stem);
-    // Migrate legacy global history to the current stem on first load.
-    if (stem && !localStorage.getItem(key)) {
-      const legacy = localStorage.getItem(LEGACY_KEY);
-      if (legacy) {
-        localStorage.setItem(key, legacy);
-        localStorage.removeItem(LEGACY_KEY);
+    // Only run if the global key is empty — otherwise we already have
+    // a canonical thread and merging random per-stem history would
+    // pollute it.
+    if (localStorage.getItem(STORAGE_KEY)) return;
+    const collected: ChatMessage[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(LEGACY_STEM_KEY_PREFIX)) continue;
+      try {
+        const raw = localStorage.getItem(k);
+        if (!raw) continue;
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) collected.push(...(arr as ChatMessage[]));
+      } catch {
+        /* skip corrupt */
       }
     }
-    const raw = localStorage.getItem(key);
+    if (collected.length > 0) {
+      const sorted = collected
+        .filter((m): m is ChatMessage => !!m && typeof m === "object" && typeof m.id === "string")
+        .slice(-500);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted));
+    }
+    // Leave the old per-stem keys alone; user can clear them later.
+  } catch {
+    /* quota / parse errors are non-fatal */
+  }
+};
+
+const loadMessages = (): ChatMessage[] => {
+  try {
+    migrateLegacyStemKeys();
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -81,9 +100,9 @@ const loadMessages = (stem: string | null): ChatMessage[] => {
   }
 };
 
-const saveMessages = (stem: string | null, messages: ChatMessage[]): void => {
+const saveMessages = (messages: ChatMessage[]): void => {
   try {
-    localStorage.setItem(storageKeyForStem(stem), JSON.stringify(messages));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
   } catch {
     // Quota errors are non-fatal — just skip persist this turn.
   }
@@ -137,37 +156,23 @@ const parseRetryAfter = (header: string | null, body: string): number => {
 };
 
 export const useChat = () => {
-  // Subscribe to audioSrc → stem so when the user switches tracks the
-  // chat state rehydrates from THAT track's stored history.
-  const audioSrc = useEditorStore((s) => s.audioSrc);
-  const stem = stemFromAudioSrc(audioSrc);
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(stem));
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState<Cooldown | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // Debounced save-to-disk timer. localStorage writes are synchronous
-  // every change; disk POST is debounced at 800 ms so a flurry of
-  // streaming message updates coalesces into one HTTP request.
   const diskSaveTimerRef = useRef<number | null>(null);
-  // Guard: don't overwrite disk with a load that came FROM disk.
   const hydratedFromDiskRef = useRef<string | null>(null);
 
-  // Rehydrate when the stem changes. Two-phase: (1) instantly render
-  // from localStorage (fast, same browser), (2) fetch chat.json from
-  // disk and replace if it's newer (cross-browser / cross-machine).
+  // Hydrate from disk once at mount. localStorage is the instant cache
+  // (renders immediately). Disk copy lives at projects/_chat.json (no
+  // stem — chat is global) and wins only if it has MORE messages than
+  // what's in cache (cross-browser resume; conservative on conflicts).
   useEffect(() => {
-    // Phase 1: localStorage instant.
-    const cached = loadMessages(stem);
-    setMessages(cached);
-    hydratedFromDiskRef.current = null;
-
-    // Phase 2: async disk fetch, only if we have a stem.
-    if (!stem) return;
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(`/api/chat-history/${encodeURIComponent(stem)}`);
+        const r = await fetch("/api/chat-global");
         if (!r.ok) return;
         const data = await r.json();
         const diskMessages: unknown = data?.messages;
@@ -183,47 +188,39 @@ export const useChat = () => {
               (m as { role?: unknown }).role === "system"),
         );
         if (cancelled) return;
-        // Adopt disk copy if it has strictly MORE messages OR if we had
-        // nothing cached. If localStorage is ahead (user typed offline
-        // in another tab, say), keep the cache — next save pushes it
-        // back to disk. Conservative: prefer "more is more."
+        const cached = loadMessages();
         if (valid.length > cached.length) {
           setMessages(valid);
           hydratedFromDiskRef.current = JSON.stringify(valid);
         }
       } catch {
-        /* offline or sidecar down — cached localStorage is enough */
+        /* offline is fine; cache is enough */
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [stem]);
+  }, []);
 
-  // Dual-target persist on every message change:
-  //   1. localStorage immediately — instant same-browser reload
-  //   2. disk via POST /api/chat-history/save, debounced 800 ms —
-  //      survives cross-browser / cross-machine
+  // Dual-target persist:
+  //   1. localStorage immediately (instant same-browser reload)
+  //   2. disk POST debounced 800ms (cross-browser / cross-machine)
   useEffect(() => {
-    saveMessages(stem, messages);
-    if (!stem) return;
+    saveMessages(messages);
     if (diskSaveTimerRef.current) window.clearTimeout(diskSaveTimerRef.current);
     diskSaveTimerRef.current = window.setTimeout(() => {
-      // Skip the write if we just hydrated from disk and nothing changed.
       const json = JSON.stringify(messages);
       if (hydratedFromDiskRef.current === json) return;
-      void fetch("/api/chat-history/save", {
+      void fetch("/api/chat-global/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stem, messages }),
-      }).catch(() => {
-        /* sidecar offline is fine; localStorage is the hot cache */
-      });
+        body: JSON.stringify({ messages }),
+      }).catch(() => { /* offline ok */ });
     }, 800);
     return () => {
       if (diskSaveTimerRef.current) window.clearTimeout(diskSaveTimerRef.current);
     };
-  }, [stem, messages]);
+  }, [messages]);
 
   // Gap D — tick the cooldown countdown once per second until it expires.
   useEffect(() => {
@@ -421,7 +418,7 @@ export const useChat = () => {
     setMessages([]);
     setError(null);
     try {
-      localStorage.removeItem(storageKeyForStem(stem));
+      localStorage.removeItem(STORAGE_KEY);
     } catch {
       /* quota/private-mode */
     }

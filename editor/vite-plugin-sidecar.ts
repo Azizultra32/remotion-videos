@@ -1004,8 +1004,57 @@ const handleTimelineSave = async (req: IncomingMessage, res: ServerResponse): Pr
 };
 
 // ---------------------------------------------------------------------------
-// /api/chat-history/:stem   (GET + POST — per-project chat transcript)
+// /api/chat-global            (GET + POST — global chat transcript)
+// /api/chat-history/:stem     (GET + POST — per-project chat transcript)
 // ---------------------------------------------------------------------------
+
+const GLOBAL_CHAT_PATH = path.join(OUT_DIR, "chat.json");
+const CHAT_LOCK_GLOBAL_KEY = "_global";
+
+const handleChatGlobalGet = async (_req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  try {
+    const content = await fs.readFile(GLOBAL_CHAT_PATH, "utf8");
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "no-store");
+    res.end(content);
+  } catch {
+    // No chat yet — empty array is valid.
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "no-store");
+    res.end(JSON.stringify({ messages: [] }));
+  }
+};
+
+const handleChatGlobalSave = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const body = await readJsonBody(req);
+  const messages = body?.messages;
+  if (!Array.isArray(messages)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.messages must be an array" }));
+    return;
+  }
+  const MAX = 500;
+  const trimmed = messages.length > MAX ? messages.slice(-MAX) : messages;
+  const prev = CHAT_LOCK.get(CHAT_LOCK_GLOBAL_KEY) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    await fs.mkdir(path.dirname(GLOBAL_CHAT_PATH), { recursive: true });
+    const tmp = `${GLOBAL_CHAT_PATH}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify({ version: 1, messages: trimmed }, null, 2));
+    await fs.rename(tmp, GLOBAL_CHAT_PATH);
+  });
+  CHAT_LOCK.set(CHAT_LOCK_GLOBAL_KEY, next.catch(() => { /* surfaced below */ }));
+  try {
+    await next;
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "chat-global-write-failed", detail: String(err) }));
+    return;
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ ok: true, count: trimmed.length }));
+};
 //
 // Mirrors the timeline/events sync model. Chat lives at
 // projects/<stem>/chat.json as an array of {id, role, content, createdAt}.
@@ -2824,9 +2873,11 @@ export const sidecarPlugin = (): Plugin => ({
       next();
     });
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
-    // Per-project chat transcript. Save must be registered before the
-    // catch-all GET so POST requests to /api/chat-history/save don't fall
-    // through to the GET handler below.
+    // Global chat (single continuous conversation across tracks).
+    server.middlewares.use("/api/chat-global/save", wrap("POST", handleChatGlobalSave));
+    server.middlewares.use("/api/chat-global", wrap("GET", handleChatGlobalGet));
+    // Per-project chat (optional — kept for projects that want isolated
+    // conversations). Save must be registered before the catch-all GET.
     server.middlewares.use("/api/chat-history/save", wrap("POST", handleChatHistorySave));
     server.middlewares.use("/api/chat-history/", wrap("GET", handleChatHistoryGet));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));

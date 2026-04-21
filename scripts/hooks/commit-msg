@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#
+# scripts/hooks/commit-msg
+#
+# Visual-verification gate. Any commit whose staged diff touches code
+# affecting rendered pixels must carry a `Visual-Verified:` trailer on its
+# own line in the commit message. The trailer is the agent's written proof
+# that they ran `npm run mv:verify-element` AND multimodal-Read the
+# resulting PNG at /tmp/verify-element-render.png — the only way to force
+# the visual check that a Node-side script can't perform.
+#
+# Why it exists: prior sessions shipped "task complete" claims that fell
+# apart when the user opened the editor. Every one would have been caught
+# if the agent had Read the PNG. The two-step loop was documented as
+# "non-negotiable" but honor-system. This turns honor into enforcement.
+#
+# What the trailer must contain: a short natural-language description of
+# what the agent saw. Not machine-verifiable — agents CAN lie — but forcing
+# them to WRITE something means they had to LOOK. That's the behavioral
+# change this hook enforces.
+#
+# Format (on its own line in the commit message):
+#   Visual-Verified: <one-line description of the rendered frame>
+#
+# Override (use only when the visual check was done elsewhere):
+#   git commit --no-verify
+#
+# Install: `git config core.hooksPath scripts/hooks` (auto-installed by
+# `npm install` via the postinstall script).
+
+set -euo pipefail
+
+MSG_FILE="${1:-}"
+if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
+  # Not invoked as commit-msg hook (e.g. called directly). No-op.
+  exit 0
+fi
+
+# Paths that trigger the gate. Edit this list if you add a new visual
+# surface. Keep it conservative; false positives are cheap, false negatives
+# defeat the point.
+# projects/<stem>/custom-elements/ is gitignored by design — nothing there
+# ever reaches a commit, so it's not included here. The gate is for tracked
+# visual surfaces only.
+VISUAL_PATHS_REGEX='^(src/compositions/|remotion\.config\.ts$|scripts/cli/mv-render\.ts$|scripts/cli/custom-elements-barrel\.ts$|editor/vite-plugin-custom-elements\.ts$)'
+
+# Only gate commits whose staged diff actually touches visual code. A
+# commit to unrelated files shouldn't need a visual trailer.
+TOUCHED="$(git diff --cached --name-only | grep -E "$VISUAL_PATHS_REGEX" || true)"
+if [ -z "$TOUCHED" ]; then
+  exit 0
+fi
+
+# Check for the trailer. A valid trailer is a line of the form
+# `Visual-Verified: <non-empty description>`. Case-sensitive; placement
+# doesn't matter (trailers don't have to be at the end of the message).
+if grep -qE '^Visual-Verified: .+' "$MSG_FILE"; then
+  exit 0
+fi
+
+cat >&2 <<EOF
+[commit-msg] BLOCKED: commit touches visual code but has no Visual-Verified trailer.
+
+Staged paths that trigger this gate:
+$(echo "$TOUCHED" | sed 's/^/  /')
+
+Before committing any change that affects rendered pixels:
+
+  1. npm run mv:verify-element
+     Exits 5/5 PASS and writes /tmp/verify-element-render.png.
+
+  2. Multimodal-Read /tmp/verify-element-render.png and DESCRIBE what you
+     see. Does the rendered frame match your spec? Right color, right
+     position, right size, text not clipped at the edges of the 848x480
+     canvas? Compare to what the commit is supposed to deliver.
+
+  3. Add a trailer to your commit message on its own line:
+
+       Visual-Verified: <one-line description of what the PNG showed>
+
+     Example:
+       Visual-Verified: solid magenta fill, 848x480, no edge clipping
+
+The description isn't machine-verifiable — an agent CAN lie. But forcing
+the trailer means the agent had to produce SOMETHING that only exists if
+they did step 2. Multiple prior sessions shipped "task complete" that
+fell apart under real use; every one would have been caught by step 2.
+
+Override (use only when you explicitly did the check elsewhere):
+  git commit --no-verify
+EOF
+exit 1

@@ -15,6 +15,7 @@ const TRACK_COUNT = 9;
 const TRACK_HEIGHT = 36;
 const RULER_HEIGHT = 22;
 const GUTTER_WIDTH = 96;
+const TOOLBAR_HEIGHT = 31;
 // pxPerSec derived from shared store zoom. 0.025 sec/px = 40 px/sec default
 // (matches the former fixed scale). Inversely tied to secPerPx so the two
 // views stay at the exact same time axis.
@@ -61,9 +62,32 @@ export const Timeline = () => {
 
   useTimelineDeleteKey();
 
+  const getBarsViewportPx = () =>
+    Math.max(1, (scrollRef.current?.clientWidth ?? 1000) - GUTTER_WIDTH);
+
+  const fitToView = () => {
+    const barsPx = getBarsViewportPx();
+    setTimelineView({
+      secPerPx: compositionDuration / barsPx,
+      offsetSec: 0,
+    });
+  };
+
+  const panByFraction = (fraction: number) => {
+    const barsPx = getBarsViewportPx();
+    const visibleSec = barsPx * effectiveSecPerPx;
+    setTimelineView({
+      offsetSec: clampViewport({
+        offsetSec: offsetSec + visibleSec * fraction,
+        secPerPx: effectiveSecPerPx,
+        containerPx: barsPx,
+        totalSec: compositionDuration,
+      }),
+    });
+  };
+
   const zoomByCenter = (zoomFactor: number) => {
-    const scroller = scrollRef.current;
-    const barsPx = Math.max(1, (scroller?.clientWidth ?? 1000) - GUTTER_WIDTH);
+    const barsPx = getBarsViewportPx();
     const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
       currentSecPerPx: effectiveSecPerPx,
       currentOffsetSec: offsetSec,
@@ -90,12 +114,11 @@ export const Timeline = () => {
       { pattern: "=", handler: () => zoomByCenter(1.25) },
       { pattern: "+", handler: () => zoomByCenter(1.25) },
       { pattern: "-", handler: () => zoomByCenter(1 / 1.25) },
-      { pattern: "0", handler: () => setTimelineView({ secPerPx: 0, offsetSec: 0 }) },
+      { pattern: "0", handler: () => fitToView() },
     ],
     // zoomByCenter reads from the store each call; bindings themselves
     // don't need to re-register when zoom/offset change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [compositionDuration, effectiveSecPerPx, offsetSec, setTimelineView],
   );
   useShortcuts("timeline", timelineShortcuts);
   const surfaceHandlers = useShortcutSurface("timeline");
@@ -194,16 +217,27 @@ export const Timeline = () => {
         </button>
         <button
           type="button"
-          onClick={() => {
-            const scroller = scrollRef.current;
-            const barsPx = Math.max(1, (scroller?.clientWidth ?? 1000) - GUTTER_WIDTH);
-            const fit = compositionDuration / barsPx;
-            setTimelineView({ secPerPx: fit, offsetSec: 0 });
-          }}
+          onClick={() => panByFraction(-0.8)}
+          title="Pan left"
+          style={tbBtn}
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          onClick={() => fitToView()}
           title="Fit whole composition in view (0)"
           style={tbBtn}
         >
           ⊡ FIT
+        </button>
+        <button
+          type="button"
+          onClick={() => panByFraction(0.8)}
+          title="Pan right"
+          style={tbBtn}
+        >
+          →
         </button>
         <button
           type="button"
@@ -234,7 +268,13 @@ export const Timeline = () => {
       <div style={{ position: "relative", width: GUTTER_WIDTH + widthPx, minHeight: "100%" }}>
         {/* Ruler row — sticky left corner + scrolling ticks */}
         <div
-          style={{ display: "flex", height: RULER_HEIGHT, position: "sticky", top: 0, zIndex: 3 }}
+          style={{
+            display: "flex",
+            height: RULER_HEIGHT,
+            position: "sticky",
+            top: TOOLBAR_HEIGHT,
+            zIndex: 3,
+          }}
         >
           <div
             style={{
@@ -249,12 +289,63 @@ export const Timeline = () => {
               zIndex: 4,
             }}
           />
-          <TimelineRuler
-            compositionDuration={compositionDuration}
-            pxPerSec={pxPerSec}
-            beatData={beatData}
-            height={RULER_HEIGHT}
-          />
+          <div
+            // Ruler click = NAVIGATE, NOT seek. Click at time T → pan the
+            // bars view so T is centered in the viewport. Crucially, we
+            // never call setCurrentTime here — the playhead stays where
+            // it was. This is the whole point: ruler is navigation, bars
+            // body is playhead seek. The two intents finally have two
+            // distinct surfaces.
+            //
+            // Also: this wrapper now carries the SAME translateX(-panPx)
+            // as the bars container, so ruler ticks line up with element
+            // positions when the view is panned. Previously the ruler
+            // rendered at natural position while bars panned, causing
+            // labels to drift away from the content they were marking.
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              // rect.left is post-CSS-transform. Children inside the
+              // ruler (ticks, labels) are at absolute left=s*pxPerSec
+              // without their own transform, so (e.clientX - rect.left)
+              // is already data-space pixels.
+              const dataPx = e.clientX - rect.left;
+              const clickTimeSec = Math.max(
+                0,
+                Math.min(compositionDuration, dataPx * effectiveSecPerPx),
+              );
+              const scroller = scrollRef.current;
+              const barsPx = Math.max(
+                1,
+                (scroller?.clientWidth ?? 1000) - GUTTER_WIDTH,
+              );
+              const visibleSec = barsPx * effectiveSecPerPx;
+              setTimelineView({
+                offsetSec: clampViewport({
+                  offsetSec: Math.max(0, clickTimeSec - visibleSec / 2),
+                  secPerPx: effectiveSecPerPx,
+                  containerPx: barsPx,
+                  totalSec: compositionDuration,
+                }),
+              });
+            }}
+            title="Click to pan the timeline to this area — playhead stays where it is"
+            style={{
+              position: "relative",
+              width: widthPx,
+              height: RULER_HEIGHT,
+              transform: `translateX(${-panPx}px)`,
+              transformOrigin: "0 0",
+              cursor: "crosshair",
+            }}
+          >
+            <TimelineRuler
+              compositionDuration={compositionDuration}
+              pxPerSec={pxPerSec}
+              beatData={beatData}
+              height={RULER_HEIGHT}
+            />
+          </div>
         </div>
 
         {/* Track rows — beat markers + playhead layered on top of the bar lanes */}
@@ -378,29 +469,19 @@ export const Timeline = () => {
               state.selectElement(newEl.id);
             }}
             onWheel={(e) => {
-              // Gesture model (matches DaVinci / Premiere muscle memory
-              // and Scrubber.tsx so both views agree):
-              //   pinch OR cmd/ctrl+wheel  → zoom, anchored at cursor
-              //   shift+wheel              → pan (explicit)
-              //   horizontal trackpad      → pan
-              //   plain vertical wheel     → pan along the time axis too,
-              //                               so the user doesn't have to
-              //                               reach for shift
-              // macOS trackpad pinch arrives with ctrlKey:true — that's
-              // why ctrl is the zoom modifier.
-              const isZoom = e.ctrlKey || e.metaKey;
+              // Mouse wheel should zoom under the cursor. Trackpad-style
+              // horizontal movement (or explicit Shift+wheel) still pans.
+              // This matches the "scroll = zoom, buttons = easy left/right"
+              // interaction model the user asked for.
               e.preventDefault();
               e.stopPropagation();
-              const scroller = scrollRef.current;
-              const barsPx = Math.max(1, (scroller?.clientWidth ?? 1000) - GUTTER_WIDTH);
-              if (!isZoom) {
-                // Pan: deltaX from horizontal trackpad, else deltaY.
-                const rawDelta =
-                  Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-                const deltaSec = rawDelta * effectiveSecPerPx;
+              const barsPx = getBarsViewportPx();
+              const isExplicitPan = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+              if (isExplicitPan) {
+                const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
                 setTimelineView({
                   offsetSec: clampViewport({
-                    offsetSec: offsetSec + deltaSec,
+                    offsetSec: offsetSec + rawDelta * effectiveSecPerPx,
                     secPerPx: effectiveSecPerPx,
                     containerPx: barsPx,
                     totalSec: compositionDuration,
@@ -408,17 +489,12 @@ export const Timeline = () => {
                 });
                 return;
               }
-              // Zoom — anchorPx is the cursor position measured from the
-              // BARS viewport left (NOT from the transformed element's
-              // rect.left, which already includes -panPx). Subtracting
-              // panPx here cancels the transform so anchorPx lines up
-              // with the coordinate system anchoredZoom expects.
               const rect = e.currentTarget.getBoundingClientRect();
               const anchorPx = Math.max(
                 0,
                 Math.min(barsPx, e.clientX - rect.left - panPx),
               );
-              const zoomFactor = Math.exp(-e.deltaY * 0.01);
+              const zoomFactor = 1.1 ** (-e.deltaY / 100);
               const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
                 currentSecPerPx: effectiveSecPerPx,
                 currentOffsetSec: offsetSec,

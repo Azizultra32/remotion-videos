@@ -97,6 +97,12 @@ const buildBarrelBody = (stem: string | null): string => {
 export const customElementsPlugin = (): Plugin => {
   let server: ViteDevServer | null = null;
   let watchedStem: string | null = null;
+  // Content-dedup cache. The editor's SongPicker re-POSTs /api/current-project
+  // frequently (keep-alive, focus, etc.) even when the stem is unchanged. A
+  // chokidar "change" event fires for every write — firing full-reload on
+  // every one made the browser an infinite refresh loop. Cache the last-
+  // seen stem content and bail early if the new write matches.
+  let lastSeenStemContent: string | null = resolveActiveStem();
 
   const reload = (reason: string) => {
     if (!server) return;
@@ -140,6 +146,15 @@ export const customElementsPlugin = (): Plugin => {
       const onChange = (path: string) => {
         const norm = resolve(path);
         if (norm === currentProjectFile) {
+          const newStem = resolveActiveStem();
+          if (newStem === lastSeenStemContent) {
+            // No-op write (same stem). This happens constantly — editor
+            // re-POSTs /api/current-project on focus / save / timer even
+            // when the stem hasn't changed. Reloading on these is what
+            // created the infinite refresh loop.
+            return;
+          }
+          lastSeenStemContent = newStem;
           watchActiveProjectDir();
           reload("active project changed");
           return;

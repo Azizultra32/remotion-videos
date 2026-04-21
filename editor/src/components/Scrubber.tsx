@@ -141,15 +141,16 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (!effectiveSecPerPx || !containerWidth) return;
     // Same gesture model as Timeline.tsx onWheel (they must agree):
-    //   pinch / cmd / ctrl → zoom (anchored at cursor)
-    //   plain wheel        → pan
-    //   shift+wheel        → pan (explicit)
+    //   mouse wheel          → zoom at cursor
+    //   trackpad scroll      → pan
+    //   shift+wheel          → pan (explicit)
     e.preventDefault();
     e.stopPropagation();
 
-    const isZoomGesture = e.ctrlKey || e.metaKey;
-    if (!isZoomGesture) {
-      // Pan — deltaX (horizontal trackpad) or deltaY (wheel/shift-wheel).
+    const isLikelyMouseWheel = e.deltaMode !== 0;
+    const isExplicitPan =
+      e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || !isLikelyMouseWheel;
+    if (isExplicitPan) {
       const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
       const deltaSec = rawDelta * effectiveSecPerPx;
       const next = clampViewport({

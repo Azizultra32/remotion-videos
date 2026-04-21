@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShortcuts, useShortcutSurface } from "../contexts/shortcuts";
 import { useEditorStore } from "../store";
 import type { TimelineElement as TimelineElementType } from "../types";
@@ -56,19 +56,34 @@ export const Timeline = () => {
   const setTimelineView = useEditorStore((s) => s.setTimelineView);
   const inPointSec = useEditorStore((state) => state.inPointSec);
   const outPointSec = useEditorStore((state) => state.outPointSec);
-  const effectiveSecPerPx = secPerPx > 0 ? secPerPx : DEFAULT_SEC_PER_PX;
-  const pxPerSec = 1 / effectiveSecPerPx;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const el = scrollRef.current;
+    const measure = () => setContainerWidth(Math.max(1, el.clientWidth - GUTTER_WIDTH));
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+
+  const naturalSecPerPx =
+    containerWidth > 0 && compositionDuration > 0
+      ? compositionDuration / containerWidth
+      : DEFAULT_SEC_PER_PX;
+  const effectiveSecPerPx = secPerPx > 0 ? secPerPx : naturalSecPerPx;
+  const pxPerSec = 1 / effectiveSecPerPx;
 
   useTimelineDeleteKey();
 
   const getBarsViewportPx = () =>
-    Math.max(1, (scrollRef.current?.clientWidth ?? 1000) - GUTTER_WIDTH);
+    Math.max(1, containerWidth || (scrollRef.current?.clientWidth ?? 1000) - GUTTER_WIDTH);
 
   const fitToView = () => {
-    const barsPx = getBarsViewportPx();
     setTimelineView({
-      secPerPx: compositionDuration / barsPx,
+      secPerPx: 0,
       offsetSec: 0,
     });
   };
@@ -94,7 +109,7 @@ export const Timeline = () => {
       zoomFactor,
       anchorPx: barsPx / 2,
       minSecPerPx: 0.001,
-      maxSecPerPx: 1.0,
+      maxSecPerPx: naturalSecPerPx,
     });
     setTimelineView({
       secPerPx: nextSecPerPx,
@@ -136,7 +151,7 @@ export const Timeline = () => {
       const scroller = scrollRef.current;
       if (!scroller) return;
       const state = useEditorStore.getState();
-      const cur = state.timelineSecPerPx > 0 ? state.timelineSecPerPx : DEFAULT_SEC_PER_PX;
+      const cur = state.timelineSecPerPx > 0 ? state.timelineSecPerPx : naturalSecPerPx;
       const barsPx = Math.max(1, scroller.clientWidth - GUTTER_WIDTH);
       const visibleSec = barsPx * cur;
       const leftTime = state.timelineOffsetSec;
@@ -156,7 +171,7 @@ export const Timeline = () => {
     return useEditorStore.subscribe((state, prev) => {
       if (state.currentTimeSec !== prev.currentTimeSec) follow(state.currentTimeSec);
     });
-  }, []);
+  }, [naturalSecPerPx]);
 
   // Explicit toolbar buttons. Gestures (wheel pan, ctrl-wheel zoom,
   // keyboard +/-/0) are all wired, but users coming from different
@@ -469,14 +484,21 @@ export const Timeline = () => {
               state.selectElement(newEl.id);
             }}
             onWheel={(e) => {
-              // Mouse wheel should zoom under the cursor. Trackpad-style
-              // horizontal movement (or explicit Shift+wheel) still pans.
-              // This matches the "scroll = zoom, buttons = easy left/right"
-              // interaction model the user asked for.
+              // Heuristic:
+              //   mouse wheel (line/page deltas)   → zoom at cursor
+              //   trackpad vertical scroll         → pan
+              //   horizontal trackpad / Shift+wheel → pan
+              // Browser wheel events don't expose a perfect device flag, but
+              // deltaMode is a reliable enough split here: physical wheel mice
+              // usually report line/page deltas, trackpads report pixel deltas.
               e.preventDefault();
               e.stopPropagation();
               const barsPx = getBarsViewportPx();
-              const isExplicitPan = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+              const isLikelyMouseWheel = e.deltaMode !== 0;
+              const isExplicitPan =
+                e.shiftKey ||
+                Math.abs(e.deltaX) > Math.abs(e.deltaY) ||
+                !isLikelyMouseWheel;
               if (isExplicitPan) {
                 const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
                 setTimelineView({
@@ -501,7 +523,7 @@ export const Timeline = () => {
                 zoomFactor,
                 anchorPx,
                 minSecPerPx: 0.001,
-                maxSecPerPx: 1.0,
+                maxSecPerPx: naturalSecPerPx,
               });
               setTimelineView({
                 secPerPx: nextSecPerPx,

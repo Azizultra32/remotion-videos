@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AbsoluteFill, interpolate, staticFile } from "remotion";
 import { Lottie, type LottieAnimationData } from "@remotion/lottie";
 import { z } from "zod";
+import { resolveStatic } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Lottie animation playback (JSON files from After Effects via Bodymovin
@@ -43,9 +44,6 @@ const defaults: Props = {
   fadeOutSec: 0.3,
 };
 
-const resolvePath = (p: string): string =>
-  p.startsWith("http") || p.startsWith("/") ? p : staticFile(p);
-
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { jsonSrc, x, y, widthPct, heightPct, playbackRate, loop, direction, fadeInSec, fadeOutSec } =
     element.props;
@@ -56,7 +54,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   useEffect(() => {
     if (!jsonSrc) return;
     let cancelled = false;
-    const url = resolvePath(jsonSrc);
+    const url = resolveStatic(jsonSrc, staticFile);
     fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);

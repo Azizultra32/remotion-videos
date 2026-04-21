@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useShortcuts, useShortcutSurface } from "../contexts/shortcuts";
 import { useEditorStore } from "../store";
 import type { TimelineElement as TimelineElementType } from "../types";
+import { seededPropsForModuleAsset, type AssetKind } from "../utils/assets";
 import { snapTime } from "../utils/time";
 import { anchoredZoom, clampViewport } from "../utils/timelineScale";
 import { ELEMENT_REGISTRY } from "@compositions/elements/registry";
@@ -13,7 +14,7 @@ import { TimelineRuler } from "./TimelineRuler";
 
 const TRACK_COUNT = 9;
 const TRACK_HEIGHT = 36;
-const RULER_HEIGHT = 22;
+const RULER_HEIGHT = 30;
 const GUTTER_WIDTH = 96;
 const TOOLBAR_HEIGHT = 31;
 // pxPerSec derived from shared store zoom. 0.025 sec/px = 40 px/sec default
@@ -26,9 +27,26 @@ const DEFAULT_SEC_PER_PX = 0.025;
 // module wraps it" question, and they must agree or drop-to-timeline and
 // click-at-playhead produce different element types for the same asset.
 const IMAGE_MODULE_ID_FOR_DROP = "overlay.staticImage";
+const GIF_MODULE_ID_FOR_DROP = "overlay.gif";
 const VIDEO_MODULE_ID_FOR_DROP = "overlay.speedVideo";
 
 const newIdFromDrop = () => `el-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+const resolveDroppedAsset = (asset: { path: string; kind: AssetKind }) => {
+  if (asset.kind === "gif") {
+    return {
+      moduleId: GIF_MODULE_ID_FOR_DROP,
+    };
+  }
+  if (asset.kind === "image") {
+    return {
+      moduleId: IMAGE_MODULE_ID_FOR_DROP,
+    };
+  }
+  return {
+    moduleId: VIDEO_MODULE_ID_FOR_DROP,
+  };
+};
 
 
 // Labels indexed by trackIndex. Matches each element module's defaultTrack:
@@ -101,6 +119,32 @@ export const Timeline = () => {
     });
   };
 
+  const panByWheelDelta = (rawDelta: number) => {
+    const barsPx = getBarsViewportPx();
+    setTimelineView({
+      offsetSec: clampViewport({
+        offsetSec: offsetSec + rawDelta * effectiveSecPerPx,
+        secPerPx: effectiveSecPerPx,
+        containerPx: barsPx,
+        totalSec: compositionDuration,
+      }),
+    });
+  };
+
+  const focusPlayhead = () => {
+    const barsPx = getBarsViewportPx();
+    const visibleSec = barsPx * effectiveSecPerPx;
+    const currentTimeSec = useEditorStore.getState().currentTimeSec;
+    setTimelineView({
+      offsetSec: clampViewport({
+        offsetSec: Math.max(0, currentTimeSec - visibleSec / 2),
+        secPerPx: effectiveSecPerPx,
+        containerPx: barsPx,
+        totalSec: compositionDuration,
+      }),
+    });
+  };
+
   const zoomByCenter = (zoomFactor: number) => {
     const barsPx = getBarsViewportPx();
     const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
@@ -138,46 +182,14 @@ export const Timeline = () => {
   useShortcuts("timeline", timelineShortcuts);
   const surfaceHandlers = useShortcutSurface("timeline");
 
+  const barsViewportPx = getBarsViewportPx();
   const widthPx = compositionDuration * pxPerSec;
   const panPx = offsetSec * pxPerSec;
   const tracksHeight = TRACK_COUNT * TRACK_HEIGHT;
 
-  // Auto-follow the playhead via the SAME pan axis everything else uses
-  // (timelineOffsetSec in the store → transform: translateX on the bars).
-  // Writing to scroller.scrollLeft here would fight the transform and
-  // cause the jerk users noticed when the playhead crosses the edge.
-  useEffect(() => {
-    const follow = (sec: number) => {
-      const scroller = scrollRef.current;
-      if (!scroller) return;
-      const state = useEditorStore.getState();
-      const cur = state.timelineSecPerPx > 0 ? state.timelineSecPerPx : naturalSecPerPx;
-      const barsPx = Math.max(1, scroller.clientWidth - GUTTER_WIDTH);
-      const visibleSec = barsPx * cur;
-      const leftTime = state.timelineOffsetSec;
-      const rightTime = leftTime + visibleSec;
-      const edgePad = visibleSec * 0.08; // keep the playhead 8% inset
-      if (sec < leftTime + edgePad || sec > rightTime - edgePad) {
-        const nextOffset = clampViewport({
-          offsetSec: Math.max(0, sec - visibleSec / 2),
-          secPerPx: cur,
-          containerPx: barsPx,
-          totalSec: state.compositionDuration,
-        });
-        state.setTimelineView({ offsetSec: nextOffset });
-      }
-    };
-    follow(useEditorStore.getState().currentTimeSec);
-    return useEditorStore.subscribe((state, prev) => {
-      if (state.currentTimeSec !== prev.currentTimeSec) follow(state.currentTimeSec);
-    });
-  }, [naturalSecPerPx]);
-
-  // Explicit toolbar buttons. Gestures (wheel pan, ctrl-wheel zoom,
-  // keyboard +/-/0) are all wired, but users coming from different
-  // DAW conventions get confused — buttons always work. Placed as a
-  // sticky strip at the top of the Timeline scroll view so they're
-  // always in reach without looking for shortcuts.
+  // Explicit toolbar buttons. Timeline navigation should remain usable even
+  // while playback runs; we intentionally do NOT auto-follow the playhead.
+  // Use the target button below to jump the viewport back to the live head.
   const tbBtn: React.CSSProperties = {
     padding: "3px 8px",
     background: "#1a1a1a",
@@ -195,6 +207,22 @@ export const Timeline = () => {
       ref={scrollRef}
       className="timeline-scroll"
       style={{ height: "100%", overflowX: "hidden", overflowY: "auto", background: "#0a0a0a" }}
+      onWheelCapture={(e) => {
+        const target = e.target as HTMLElement | null;
+        if (!target) return;
+        // Only three regions are allowed to consume wheel input:
+        //   gutter -> vertical editor scroll
+        //   ruler  -> horizontal pan
+        //   bars   -> zoom / horizontal pan
+        // Everything else inside the timeline shell should ignore wheel
+        // input so the sticky toolbar / corner cannot accidentally move
+        // the editor.
+        const withinGutter = !!target.closest?.('[data-timeline-scroll-gutter="true"]');
+        const withinBars = !!target.closest?.('[data-timeline-bars="true"]');
+        const withinRuler = !!target.closest?.('[data-timeline-ruler-nav="true"]');
+        if (withinGutter || withinBars || withinRuler) return;
+        e.preventDefault();
+      }}
       onPointerEnter={surfaceHandlers.onPointerEnter}
       onPointerLeave={surfaceHandlers.onPointerLeave}
     >
@@ -237,6 +265,14 @@ export const Timeline = () => {
           style={tbBtn}
         >
           ←
+        </button>
+        <button
+          type="button"
+          onClick={() => focusPlayhead()}
+          title="Center the viewport on the playhead"
+          style={tbBtn}
+        >
+          ◎
         </button>
         <button
           type="button"
@@ -305,61 +341,62 @@ export const Timeline = () => {
             }}
           />
           <div
-            // Ruler click = NAVIGATE, NOT seek. Click at time T → pan the
-            // bars view so T is centered in the viewport. Crucially, we
-            // never call setCurrentTime here — the playhead stays where
-            // it was. This is the whole point: ruler is navigation, bars
-            // body is playhead seek. The two intents finally have two
-            // distinct surfaces.
-            //
-            // Also: this wrapper now carries the SAME translateX(-panPx)
-            // as the bars container, so ruler ticks line up with element
-            // positions when the view is panned. Previously the ruler
-            // rendered at natural position while bars panned, causing
-            // labels to drift away from the content they were marking.
+            // The visible ruler viewport owns navigation input. The drawn
+            // ticks are translated inside it, but click/wheel hit-testing
+            // is done against the viewport itself so hover works wherever
+            // the user is actually pointing on the strip.
             onPointerDown={(e) => {
               if (e.button !== 0) return;
               const rect = e.currentTarget.getBoundingClientRect();
-              // rect.left is post-CSS-transform. Children inside the
-              // ruler (ticks, labels) are at absolute left=s*pxPerSec
-              // without their own transform, so (e.clientX - rect.left)
-              // is already data-space pixels.
-              const dataPx = e.clientX - rect.left;
+              const viewportPx = Math.max(0, Math.min(barsViewportPx, e.clientX - rect.left));
               const clickTimeSec = Math.max(
                 0,
-                Math.min(compositionDuration, dataPx * effectiveSecPerPx),
+                Math.min(compositionDuration, offsetSec + viewportPx * effectiveSecPerPx),
               );
-              const scroller = scrollRef.current;
-              const barsPx = Math.max(
-                1,
-                (scroller?.clientWidth ?? 1000) - GUTTER_WIDTH,
-              );
-              const visibleSec = barsPx * effectiveSecPerPx;
+              const visibleSec = barsViewportPx * effectiveSecPerPx;
               setTimelineView({
                 offsetSec: clampViewport({
                   offsetSec: Math.max(0, clickTimeSec - visibleSec / 2),
                   secPerPx: effectiveSecPerPx,
-                  containerPx: barsPx,
+                  containerPx: barsViewportPx,
                   totalSec: compositionDuration,
                 }),
               });
             }}
+            onWheel={(e) => {
+              // The ruler is a navigation strip, not a zoom strip.
+              // Any wheel movement here pans left/right through time.
+              e.preventDefault();
+              e.stopPropagation();
+              const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+              panByWheelDelta(rawDelta);
+            }}
             title="Click to pan the timeline to this area — playhead stays where it is"
+            data-timeline-ruler-nav="true"
             style={{
               position: "relative",
-              width: widthPx,
+              width: barsViewportPx,
               height: RULER_HEIGHT,
-              transform: `translateX(${-panPx}px)`,
-              transformOrigin: "0 0",
+              overflow: "hidden",
               cursor: "crosshair",
             }}
           >
-            <TimelineRuler
-              compositionDuration={compositionDuration}
-              pxPerSec={pxPerSec}
-              beatData={beatData}
-              height={RULER_HEIGHT}
-            />
+            <div
+              style={{
+                position: "relative",
+                width: widthPx,
+                height: RULER_HEIGHT,
+                transform: `translateX(${-panPx}px)`,
+                transformOrigin: "0 0",
+              }}
+            >
+              <TimelineRuler
+                compositionDuration={compositionDuration}
+                pxPerSec={pxPerSec}
+                beatData={beatData}
+                height={RULER_HEIGHT}
+              />
+            </div>
           </div>
         </div>
 
@@ -367,6 +404,15 @@ export const Timeline = () => {
         <div style={{ display: "flex", position: "relative" }}>
           {/* Left column placeholder (keeps bar lanes aligned with ruler) */}
           <div
+            onWheel={(e) => {
+              // Vertical editor scrolling is only allowed from the label gutter.
+              const scroller = scrollRef.current;
+              if (!scroller) return;
+              e.preventDefault();
+              e.stopPropagation();
+              scroller.scrollTop += e.deltaY;
+            }}
+            data-timeline-scroll-gutter="true"
             style={{
               position: "sticky",
               left: 0,
@@ -403,6 +449,7 @@ export const Timeline = () => {
           {/* Bar lanes — single relative container for all tracks so
               beat-markers + playhead can span the whole height */}
           <div
+            data-timeline-bars="true"
             onPointerDown={(e) => {
               // Click-to-seek on the timeline. Fires on any empty spot —
               // container, track row, beat markers, etc. Bails only when
@@ -440,7 +487,7 @@ export const Timeline = () => {
               const payload = e.dataTransfer.getData("application/x-mv-asset");
               if (!payload) return;
               e.preventDefault();
-              let asset: { path: string; kind: "image" | "video" };
+              let asset: { path: string; kind: AssetKind };
               try { asset = JSON.parse(payload); }
               catch { return; }
 
@@ -463,13 +510,10 @@ export const Timeline = () => {
               const state = useEditorStore.getState();
               const snappedSec = snapTime(rawSec, state.snapMode, state.beatData, e.shiftKey);
 
-              const modId = asset.kind === "image" ? IMAGE_MODULE_ID_FOR_DROP : VIDEO_MODULE_ID_FOR_DROP;
+              const insertion = resolveDroppedAsset(asset);
+              const modId = insertion.moduleId;
               const mod = ELEMENT_REGISTRY[modId];
               if (!mod) return;
-              const seededProps =
-                asset.kind === "image"
-                  ? { ...mod.defaults, imageSrc: asset.path }
-                  : { ...mod.defaults, videoSrc: asset.path };
 
               const newEl: TimelineElementType = {
                 id: newIdFromDrop(),
@@ -478,27 +522,20 @@ export const Timeline = () => {
                 trackIndex: dropTrack,
                 startSec: snappedSec,
                 durationSec: mod.defaultDurationSec,
-                props: seededProps,
+                props: seededPropsForModuleAsset(mod, asset.kind, asset.path),
               };
               state.addElement(newEl);
               state.selectElement(newEl.id);
             }}
             onWheel={(e) => {
-              // Heuristic:
-              //   mouse wheel (line/page deltas)   → zoom at cursor
-              //   trackpad vertical scroll         → pan
-              //   horizontal trackpad / Shift+wheel → pan
-              // Browser wheel events don't expose a perfect device flag, but
-              // deltaMode is a reliable enough split here: physical wheel mice
-              // usually report line/page deltas, trackpads report pixel deltas.
+              // Timeline interaction model:
+              //   vertical wheel           → zoom at cursor, keeping the
+              //                              hovered time locked under the pointer
+              //   Shift+wheel / horizontal → pan left/right
               e.preventDefault();
               e.stopPropagation();
               const barsPx = getBarsViewportPx();
-              const isLikelyMouseWheel = e.deltaMode !== 0;
-              const isExplicitPan =
-                e.shiftKey ||
-                Math.abs(e.deltaX) > Math.abs(e.deltaY) ||
-                !isLikelyMouseWheel;
+              const isExplicitPan = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
               if (isExplicitPan) {
                 const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
                 setTimelineView({

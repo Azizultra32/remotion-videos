@@ -112,5 +112,6 @@ export const BeatVideoCycleModule: ElementModule<Props> = {
   defaultTrack: 8,
   schema,
   defaults,
+  mediaFields: [{ name: "videos", kind: "video", multi: true }],
   Renderer,
 };

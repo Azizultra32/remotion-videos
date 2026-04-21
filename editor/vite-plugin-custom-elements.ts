@@ -112,6 +112,13 @@ export const customElementsPlugin = (): Plugin => {
     server.ws.send({ type: "full-reload", path: "*" });
   };
 
+  const invalidateBarrel = (reason: string) => {
+    if (!server) return;
+    server.config.logger.info(`[mv-custom-elements] ${reason} — invalidate barrel only`);
+    const mod = server.moduleGraph.getModuleById(barrelAbsPath);
+    if (mod) server.moduleGraph.invalidateModule(mod);
+  };
+
   const watchActiveProjectDir = () => {
     if (!server) return;
     const stem = resolveActiveStem();
@@ -156,7 +163,12 @@ export const customElementsPlugin = (): Plugin => {
           }
           lastSeenStemContent = newStem;
           watchActiveProjectDir();
-          reload("active project changed");
+          // A hard page reload here makes tunneled dev sessions feel broken:
+          // the editor itself already reacts to track switches through store
+          // state and API fetches. We only need the virtual custom-elements
+          // barrel invalidated so the NEXT import reflects the new stem.
+          // Actual custom-element file edits still full-reload below.
+          invalidateBarrel("active project changed");
           return;
         }
         const stem = resolveActiveStem();

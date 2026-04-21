@@ -1,7 +1,7 @@
 import type React from "react";
 import { OffthreadVideo, staticFile } from "remotion";
 import { z } from "zod";
-import { expDecay } from "../_helpers";
+import { expDecay, resolveStatic } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
@@ -40,8 +40,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     muted,
   } = element.props;
   if (!videoSrc) return null;
-  const resolved =
-    videoSrc.startsWith("http") || videoSrc.startsWith("/") ? videoSrc : staticFile(videoSrc);
+  const resolved = resolveStatic(videoSrc, staticFile);
 
   let brightness = 1;
   if (beatBrightnessBoost > 0) {
@@ -82,5 +81,6 @@ export const VideoClipModule: ElementModule<Props> = {
   defaultTrack: 8,
   schema,
   defaults,
+  mediaFields: [{ name: "videoSrc", kind: "video" }],
   Renderer,
 };

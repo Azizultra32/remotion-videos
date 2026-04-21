@@ -26,7 +26,9 @@ const legacyColors: Record<string, string> = {
   "beat-flash": "#E91E63",
 };
 
-const HANDLE_W = 6;
+const HANDLE_W = 8;
+const MIN_BODY_W = 18;
+const MIN_VISIBLE_BAR_W = HANDLE_W * 2 + MIN_BODY_W;
 
 export const TimelineElement = ({ element, pxPerSec, height }: Props) => {
   const drag = useElementDrag(element.id, pxPerSec);
@@ -42,7 +44,7 @@ export const TimelineElement = ({ element, pxPerSec, height }: Props) => {
     : (legacyColors[element.type] ?? "#666");
 
   const leftPx = element.startSec * pxPerSec;
-  const widthPx = Math.max(HANDLE_W * 2 + 4, element.durationSec * pxPerSec);
+  const widthPx = Math.max(MIN_VISIBLE_BAR_W, element.durationSec * pxPerSec);
 
   return (
     <div

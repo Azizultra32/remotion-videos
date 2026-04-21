@@ -12,8 +12,10 @@
 //   wrapper._def.innerType        is the wrapped schema (optional/default/nullable)
 
 import { EASING_NAMES } from "@utils/easing";
+import type { MediaFieldDefinition } from "@compositions/elements/types";
 import { useEffect, useMemo, useState } from "react";
 import type { z } from "zod";
+import { assetKindLabel, detectAssetKindFromFieldName, type AssetKind } from "../utils/assets";
 import { isEasingField } from "../utils/schemaFields";
 import { AssetPicker } from "./AssetPicker";
 import { ColorField } from "./ColorField";
@@ -21,17 +23,8 @@ import { EasingCurvePreview } from "./EasingCurvePreview";
 import { SharedNumericControl, extractZodConstraints, guessConstraints } from "./SharedNumericControl";
 import { Vector2Field } from "./Vector2Field";
 
-// Detect asset fields by name so we can render a "Pick" button next to the
-// input. Returns the asset kind (image/video) or null if the field is not
-// an asset. Matches:
-//   images, imageSrc, imagePath, backgroundImage
-//   videos, videoSrc, videoPath, backgroundVideo
-const detectAssetKind = (name: string): "image" | "video" | null => {
-  const n = name.toLowerCase();
-  if (/(^|_)(image|img)s?$|image(src|path|url)$|backgroundimage$/.test(n)) return "image";
-  if (/(^|_)(video|clip)s?$|video(src|path|url)$|backgroundvideo$/.test(n)) return "video";
-  return null;
-};
+// Asset-field detection is shared in ../utils/assets so SchemaEditor and the
+// picker stay aligned on image/video/GIF field names.
 
 const fieldStyle: React.CSSProperties = {
   padding: "6px 8px",
@@ -74,6 +67,7 @@ type FieldProps = {
   name: string;
   schema: any;
   value: unknown;
+  mediaFields?: readonly MediaFieldDefinition[];
   // Optional schema default, threaded into numeric controls for the ↺
   // reset affordance. Undefined for fields where the element module
   // didn't supply a default (e.g. string fields, unset props).
@@ -83,7 +77,7 @@ type FieldProps = {
 
 type AssetFieldProps = {
   label: string;
-  kind: "image" | "video";
+  kind: AssetKind;
   multi: boolean;
   value: unknown;
   onChange: (v: unknown) => void;
@@ -95,8 +89,8 @@ const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onCh
     ? Array.isArray(value) ? (value as string[]) : []
     : typeof value === "string" && value ? [value] : [];
   const summary = multi
-    ? `${current.length} ${kind}${current.length === 1 ? "" : "s"} selected`
-    : current[0] ?? `(no ${kind} chosen)`;
+    ? `${current.length} ${assetKindLabel(kind)}${current.length === 1 ? "" : "s"} selected`
+    : current[0] ?? `(no ${assetKindLabel(kind)} chosen)`;
   return (
     <Row label={label}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -129,7 +123,7 @@ const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onCh
             whiteSpace: "nowrap",
           }}
         >
-          Pick {kind}{multi ? "s" : ""}
+          Pick {assetKindLabel(kind)}{multi ? "s" : ""}
         </button>
       </div>
       {multi && current.length > 0 && (
@@ -155,18 +149,20 @@ const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onCh
   );
 };
 
-const Field: React.FC<FieldProps> = ({ name, schema, value, defaultValue, onChange }) => {
+const Field: React.FC<FieldProps> = ({ name, schema, value, mediaFields, defaultValue, onChange }) => {
   const inner = unwrap(schema);
   const tn = defType(inner);
   const prettyName = name.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
 
-  const assetKind = detectAssetKind(name);
-  if (assetKind && tn === "string") {
+  const declaredMediaField = mediaFields?.find((field) => field.name === name) ?? null;
+  const assetKind = declaredMediaField?.kind ?? detectAssetKindFromFieldName(name);
+  const multi = declaredMediaField?.multi ?? false;
+  if (assetKind && tn === "string" && !multi) {
     return (
       <AssetField label={prettyName} kind={assetKind} multi={false} value={value} onChange={onChange} />
     );
   }
-  if (assetKind && tn === "array") {
+  if (assetKind && tn === "array" && (multi || !declaredMediaField)) {
     const innerElt = unwrap(inner._def?.element);
     if (defType(innerElt) === "string") {
       return (
@@ -346,6 +342,7 @@ type Props = {
   schema: z.ZodType<any>;
   value: Record<string, unknown>;
   onChange: (patch: Record<string, unknown>) => void;
+  mediaFields?: readonly MediaFieldDefinition[];
   /**
    * Field names to skip rendering. Used by ElementDetail when a richer
    * control (e.g. SpringCurveVisualizer) has already taken ownership of
@@ -538,6 +535,7 @@ export const SchemaEditor: React.FC<Props> = ({
   schema,
   value,
   onChange,
+  mediaFields,
   hiddenFields,
   defaults,
   persistKey,
@@ -617,6 +615,7 @@ export const SchemaEditor: React.FC<Props> = ({
         name={k}
         schema={shape[k]}
         value={value[k]}
+        mediaFields={mediaFields}
         defaultValue={defaults?.[k]}
         onChange={(v) => onChange({ [k]: v })}
       />

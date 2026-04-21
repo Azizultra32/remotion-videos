@@ -1,6 +1,7 @@
 import type React from "react";
 import { OffthreadVideo, staticFile } from "remotion";
 import { z } from "zod";
+import { resolveStatic } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Speed-adjustable video. A single clip with playbackRate + startFromSec +
@@ -41,15 +42,12 @@ const defaults: Props = {
   volume: 0,
 };
 
-const resolvePath = (p: string): string =>
-  p.startsWith("http") || p.startsWith("/") ? p : staticFile(p);
-
-const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
+const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { videoSrc, playbackRate, startFromSec, fit, x, y, widthPct, heightPct, muted, volume } =
     element.props;
 
   if (!videoSrc) return null;
-  const src = resolvePath(videoSrc);
+  const src = resolveStatic(videoSrc, staticFile);
 
   const wrap: React.CSSProperties = {
     position: "absolute",
@@ -68,7 +66,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
         muted={muted}
         volume={muted ? 0 : volume}
         playbackRate={Math.max(0.001, playbackRate)}
-        startFrom={Math.max(0, Math.round(startFromSec * 30))}
+        startFrom={Math.max(0, Math.round(startFromSec * ctx.fps))}
         style={{ width: "100%", height: "100%", objectFit: fit }}
       />
     </div>
@@ -84,5 +82,6 @@ export const SpeedVideoModule: ElementModule<Props> = {
   defaultTrack: 8,
   schema,
   defaults,
+  mediaFields: [{ name: "videoSrc", kind: "video" }],
   Renderer,
 };

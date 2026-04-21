@@ -1,6 +1,7 @@
 import type React from "react";
 import { AbsoluteFill, Img, interpolate, useCurrentFrame, useVideoConfig, staticFile } from "remotion";
 import { z } from "zod";
+import { resolveStatic } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Static image overlay. A single image, positioned on the composition with
@@ -39,9 +40,6 @@ const defaults: Props = {
   opacity: 1,
 };
 
-const resolvePath = (p: string): string =>
-  p.startsWith("http") || p.startsWith("/") ? p : staticFile(p);
-
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
   const { imageSrc, fit, x, y, widthPct, heightPct, fadeInSec, fadeOutSec, opacity } =
     element.props;
@@ -52,7 +50,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
   const elementDurationSec = durationInFrames / fps;
 
   if (!imageSrc) return null;
-  const resolved = resolvePath(imageSrc);
+  const resolved = resolveStatic(imageSrc, staticFile);
 
   // Fade in: 0 -> 1 over fadeInSec starting at t=0.
   const fadeInOpacity = interpolate(elementLocalSec, [0, Math.max(0.0001, fadeInSec)], [0, 1], {
@@ -106,5 +104,6 @@ export const StaticImageModule: ElementModule<Props> = {
   defaultTrack: 7,
   schema,
   defaults,
+  mediaFields: [{ name: "imageSrc", kind: "image" }],
   Renderer,
 };

@@ -111,5 +111,6 @@ export const BeatImageCycleModule: ElementModule<Props> = {
   defaultTrack: 8,
   schema,
   defaults,
+  mediaFields: [{ name: "images", kind: "image", multi: true }],
   Renderer,
 };

@@ -48,6 +48,15 @@ export type ElementControlsProps<P = Record<string, unknown>> = {
   updateProps: (partial: Partial<P>) => void;
 };
 
+export type MediaFieldKind = "image" | "video" | "gif";
+
+export type MediaFieldDefinition = {
+  name: string;
+  kind: MediaFieldKind;
+  multi?: boolean;
+  label?: string;
+};
+
 export type ElementModule<P = Record<string, unknown>> = {
   id: string;
   category: ElementCategory;
@@ -57,6 +66,7 @@ export type ElementModule<P = Record<string, unknown>> = {
   defaultTrack: number;
   schema: z.ZodType<P>;
   defaults: P;
+  mediaFields?: MediaFieldDefinition[];
   Renderer: FC<ElementRendererProps<P>>;
   Controls?: FC<ElementControlsProps<P>>;
 };

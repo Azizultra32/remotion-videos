@@ -1,26 +1,33 @@
 // editor/src/components/AssetPicker.tsx
 //
-// Modal for browsing engine-level + per-project image/video assets. Opens
-// from SchemaEditor when editing a field that holds image or video paths
+// Modal for browsing engine-level + per-project image/video/GIF assets. Opens
+// from SchemaEditor when editing a field that holds media paths
 // (see SchemaEditor integration). Returns selected paths to the caller.
 
 import { useEffect, useMemo, useState } from "react";
+import { assetKindLabel, type AssetKind, type EditorAssetEntry as AssetEntry } from "../utils/assets";
 
-export type AssetEntry = {
-  path: string;
-  scope: "global" | "project";
-  stem: string | null;
-  kind: "image" | "video";
-  size: number;
-  mtime: number;
-};
+export type AssetPickerKind = AssetKind;
 
 type Props = {
-  kind: "image" | "video";
+  kind: AssetPickerKind;
   multi: boolean;
   initial: string[];
   onCommit: (paths: string[]) => void;
   onCancel: () => void;
+};
+
+const mediaLabel = (kind: AssetPickerKind, count = 1): string =>
+  `${assetKindLabel(kind)}${count === 1 ? "" : "s"}`;
+
+const mediaHint = (kind: AssetPickerKind): string => {
+  if (kind === "video") {
+    return "Drop files into public/assets/videos/ or projects/<stem>/videos/.";
+  }
+  if (kind === "gif") {
+    return "Drop files into public/assets/gifs/ or projects/<stem>/gifs/.";
+  }
+  return "Drop files into public/assets/images/ or projects/<stem>/images/.";
 };
 
 export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props) => {
@@ -98,7 +105,7 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
       >
         <div style={{ padding: "12px 14px", borderBottom: "1px solid #333", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "#888" }}>
-            Pick {kind}{multi ? "s" : ""}
+            Pick {mediaLabel(kind, multi ? 2 : 1)}
           </span>
           <span style={{ color: "#666", fontSize: 10 }}>
             {filtered.length} available · {selected.length} selected
@@ -127,11 +134,7 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
           {!entries && !error && <div style={{ color: "#888" }}>Loading…</div>}
           {entries && filtered.length === 0 && (
             <div style={{ color: "#888", fontStyle: "italic", padding: 20 }}>
-              No {kind}s found.{" "}
-              {kind === "image"
-                ? "Drop files into public/assets/images/ or projects/<stem>/images/"
-                : "Drop files into public/assets/videos/ or projects/<stem>/videos/"}
-              .
+              No {mediaLabel(kind, 2)} found. {mediaHint(kind)}
             </div>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8 }}>
@@ -155,11 +158,36 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                   }}
                 >
                   <div style={{ background: "#000", borderRadius: 2, aspectRatio: "16/9", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {e.kind === "image" ? (
-                      <img src={urlFor(e)} alt={e.path} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
+                    {e.kind === "video" ? (
                       <video src={urlFor(e)} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} preload="metadata" />
+                    ) : (
+                      <img src={urlFor(e)} alt={e.path} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     )}
+                  </div>
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      padding: "2px 5px",
+                      borderRadius: 999,
+                      background:
+                        e.kind === "video"
+                          ? "rgba(20, 20, 20, 0.82)"
+                          : e.kind === "gif"
+                            ? "rgba(30, 70, 120, 0.88)"
+                            : "rgba(20, 20, 20, 0.82)",
+                      border:
+                        e.kind === "gif"
+                          ? "1px solid rgba(110, 180, 255, 0.9)"
+                          : "1px solid rgba(255,255,255,0.15)",
+                      color: e.kind === "gif" ? "#d7ecff" : "#ddd",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    {e.kind === "gif" ? "GIF" : e.kind.toUpperCase()}
                   </div>
                   <div style={{ fontSize: 10, color: "#ddd", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {e.path.split("/").pop()}
@@ -202,7 +230,7 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
             }}
             title="⌘↩ also commits"
           >
-            {multi ? `Use ${selected.length} selected` : "Use this file"}
+            {multi ? `Use ${selected.length} selected` : `Use this ${mediaLabel(kind).toLowerCase()}`}
           </button>
         </div>
       </div>

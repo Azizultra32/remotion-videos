@@ -2,6 +2,7 @@ import type React from "react";
 import { AbsoluteFill, interpolate, staticFile } from "remotion";
 import { Gif } from "@remotion/gif";
 import { z } from "zod";
+import { resolveStatic } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Animated GIF playback. Uses @remotion/gif which decodes frames ahead
@@ -37,9 +38,6 @@ const defaults: Props = {
   fadeOutSec: 0.2,
 };
 
-const resolvePath = (p: string): string =>
-  p.startsWith("http") || p.startsWith("/") ? p : staticFile(p);
-
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { gifSrc, x, y, widthPct, heightPct, fit, playbackRate, loopBehavior, fadeInSec, fadeOutSec } =
     element.props;
@@ -65,7 +63,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
         }}
       >
         <Gif
-          src={resolvePath(gifSrc)}
+          src={resolveStatic(gifSrc, staticFile)}
           fit={fit}
           playbackRate={playbackRate}
           loopBehavior={loopBehavior}
@@ -85,6 +83,7 @@ const GifClipModule: ElementModule<Props> = {
   defaultTrack: 6,
   schema,
   defaults,
+  mediaFields: [{ name: "gifSrc", kind: "gif" }],
   Renderer,
 };
 

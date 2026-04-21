@@ -32,6 +32,7 @@ import {
   resolveProjectsDir,
   syncStaticProjectsSymlink,
 } from "../scripts/cli/paths";
+import type { AssetEntry, AssetKind } from "./src/types/assets";
 import { parseEventsFile, serializeEventsFile } from "./src/utils/eventsFile";
 import { stemFromAudioSrc } from "./src/utils/url";
 
@@ -309,15 +310,35 @@ const handleProjectFile = async (req: IncomingMessage, res: ServerResponse): Pro
         ? "audio/wav"
         : ext === ".m4a"
           ? "audio/mp4"
+          : ext === ".mp4"
+            ? "video/mp4"
+            : ext === ".webm"
+              ? "video/webm"
+              : ext === ".mov"
+                ? "video/quicktime"
+                : ext === ".mkv"
+                  ? "video/x-matroska"
+                  : ext === ".avi"
+                    ? "video/x-msvideo"
           : ext === ".json"
             ? "application/json"
             : ext === ".png"
               ? "image/png"
               : ext === ".jpg" || ext === ".jpeg"
                 ? "image/jpeg"
-                : ext === ".md"
-                  ? "text/markdown; charset=utf-8"
-                  : ext === ".txt"
+                : ext === ".gif"
+                  ? "image/gif"
+                  : ext === ".webp"
+                    ? "image/webp"
+                    : ext === ".svg"
+                      ? "image/svg+xml"
+                      : ext === ".avif"
+                        ? "image/avif"
+                        : ext === ".bmp"
+                          ? "image/bmp"
+                  : ext === ".md"
+                    ? "text/markdown; charset=utf-8"
+                    : ext === ".txt"
                     ? "text/plain; charset=utf-8"
                     : "application/octet-stream";
   res.setHeader("Content-Type", mime);
@@ -386,24 +407,46 @@ const handleTimelineGet = async (req: IncomingMessage, res: ServerResponse): Pro
 // ---------------------------------------------------------------------------
 //
 // Scans two roots for browsable media:
-//   1. public/assets/{images,videos}/** — engine-level, available to any project
-//   2. projects/<stem>/{images,videos}/** — per-project
+//   1. public/assets/{images,gifs,videos}/** — engine-level, available to any project
+//   2. projects/<stem>/{images,gifs,videos}/** — per-project
 //
 // Returns items usable in staticFile() paths so BeatImageCycle / BeatVideoCycle
 // / SpeedVideo / etc. can reference them by dropping the result path straight
 // into their schema. Used by the AssetPicker UI in ElementDetail.
+//
+// GIFs are exposed as their own kind for consumers that want to create
+// `overlay.gif` instead of treating them like generic still images. New GIF
+// uploads land in dedicated gifs/ dirs, but list-scanning also classifies
+// legacy .gif files found under images/ as kind:"gif" for backwards compat.
 
-type AssetEntry = {
-  path: string;          // e.g. "assets/images/logo.png" or "projects/love-in-traffic/clips/a.mp4"
-  scope: "global" | "project";
-  stem: string | null;    // null for global
-  kind: "image" | "video";
-  size: number;
-  mtime: number;
+const GIF_EXT = /\.gif$/i;
+const IMG_EXT = /\.(png|jpe?g|webp|avif|bmp|svg)$/i;
+const VID_EXT = /\.(mp4|webm|mov|mkv|avi)$/i;
+
+const kindFromFilename = (name: string): AssetKind | null => {
+  if (GIF_EXT.test(name)) return "gif";
+  if (IMG_EXT.test(name)) return "image";
+  if (VID_EXT.test(name)) return "video";
+  return null;
 };
 
-const IMG_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i;
-const VID_EXT = /\.(mp4|webm|mov|mkv|avi)$/i;
+const kindFromMime = (mime: string): AssetKind | null => {
+  if (mime === "image/gif") return "gif";
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  return null;
+};
+
+const assetDirForKind = (kind: AssetKind): "images" | "gifs" | "videos" => {
+  switch (kind) {
+    case "image":
+      return "images";
+    case "gif":
+      return "gifs";
+    case "video":
+      return "videos";
+  }
+};
 
 const handleAssetsList = async (
   _req: IncomingMessage,
@@ -441,14 +484,13 @@ const handleAssetsList = async (
         continue;
       }
       if (!lst.isFile()) continue;
-      const isImg = IMG_EXT.test(d.name);
-      const isVid = VID_EXT.test(d.name);
-      if (!isImg && !isVid) continue;
+      const kind = kindFromFilename(d.name);
+      if (!kind) continue;
       entries.push({
         path: rel.replace(/^\/+/, ""),
         scope,
         stem,
-        kind: isImg ? "image" : "video",
+        kind,
         size: lst.size,
         mtime: lst.mtimeMs,
       });
@@ -457,6 +499,7 @@ const handleAssetsList = async (
 
   // Engine-level
   await walk(path.join(_PUBLIC_DIR, "assets", "images"), "global", null, "assets/images");
+  await walk(path.join(_PUBLIC_DIR, "assets", "gifs"), "global", null, "assets/gifs");
   await walk(path.join(_PUBLIC_DIR, "assets", "videos"), "global", null, "assets/videos");
 
   // Per-project
@@ -466,6 +509,7 @@ const handleAssetsList = async (
       if (!d.isDirectory()) continue;
       if (d.name.startsWith(".") || d.name.startsWith("_")) continue;
       await walk(path.join(PROJECTS_DIR, d.name, "images"), "project", d.name, `projects/${d.name}/images`);
+      await walk(path.join(PROJECTS_DIR, d.name, "gifs"), "project", d.name, `projects/${d.name}/gifs`);
       await walk(path.join(PROJECTS_DIR, d.name, "videos"), "project", d.name, `projects/${d.name}/videos`);
       // Many tracks keep clips loose in the project root too — scan top-level
       // for media files and flag them as project-scope.
@@ -474,16 +518,15 @@ const handleAssetsList = async (
         for (const f of loose) {
           if (!f.isFile()) continue;
           if (f.name.startsWith(".")) continue;
-          const isImg = IMG_EXT.test(f.name);
-          const isVid = VID_EXT.test(f.name);
-          if (!isImg && !isVid) continue;
+          const kind = kindFromFilename(f.name);
+          if (!kind) continue;
           try {
             const st = await fs.stat(path.join(PROJECTS_DIR, d.name, f.name));
             entries.push({
               path: `projects/${d.name}/${f.name}`,
               scope: "project",
               stem: d.name,
-              kind: isImg ? "image" : "video",
+              kind,
               size: st.size,
               mtime: st.mtimeMs,
             });
@@ -495,7 +538,10 @@ const handleAssetsList = async (
 
   entries.sort((a, b) => {
     if (a.scope !== b.scope) return a.scope === "global" ? -1 : 1;
-    if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+    if (a.kind !== b.kind) {
+      const order: Record<AssetKind, number> = { image: 0, gif: 1, video: 2 };
+      return order[a.kind] - order[b.kind];
+    }
     return a.path.localeCompare(b.path);
   });
 
@@ -506,14 +552,16 @@ const handleAssetsList = async (
 
 
 // ---------------------------------------------------------------------------
-// /api/assets/upload  (POST — multipart upload to the engine-level library)
+// /api/assets/upload  (POST — multipart upload to the shared/project library)
 // ---------------------------------------------------------------------------
 //
-// Accepts a single multipart/form-data file upload and writes it under
-// public/assets/{images,videos}/<sanitized-filename>. MIME prefix decides
-// which directory. Paired with the AssetLibrary panel's dropzone so users
-// can drag files from the OS directly into the editor instead of dropping
-// them into a Finder window.
+// Accepts a single multipart/form-data file upload and writes it under either
+// the shared library or the current project's media folders:
+//   * scope=global  -> public/assets/{images,gifs,videos}/<filename>
+//   * scope=project -> projects/<stem>/{images,gifs,videos}/<filename>
+// MIME + extension decide the logical kind. Scope/stem travel in the query
+// string so the editor can offer "Library vs Project" import without making
+// the tiny multipart parser below more complex.
 //
 // Hardening:
 //   * 50 MB hard size cap, enforced mid-stream so a malicious 10GB upload
@@ -618,6 +666,17 @@ const handleAssetsUpload = async (
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const scopeParam = url.searchParams.get("scope");
+  const stemParam = url.searchParams.get("stem");
+  const scope: "global" | "project" = scopeParam === "project" ? "project" : "global";
+  if (scope === "project" && (!stemParam || !STEM_RE.test(stemParam))) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad-project-stem" }));
+    return;
+  }
+
   let upload: { filename: string; contentType: string; body: Buffer };
   try {
     upload = await parseSingleFileUpload(req, 50 * 1024 * 1024);
@@ -629,21 +688,21 @@ const handleAssetsUpload = async (
     return;
   }
 
-  let targetDir: string;
-  let kind: "image" | "video";
   const mime = upload.contentType.toLowerCase();
-  if (mime.startsWith("image/")) {
-    targetDir = path.join(_PUBLIC_DIR, "assets", "images");
-    kind = "image";
-  } else if (mime.startsWith("video/")) {
-    targetDir = path.join(_PUBLIC_DIR, "assets", "videos");
-    kind = "video";
-  } else {
+  const mimeKind = kindFromMime(mime);
+  const extKind = kindFromFilename(upload.filename);
+  let kind: AssetKind | null = mimeKind ?? extKind;
+  if (kind === "image" && extKind === "gif") kind = "gif";
+  if (!kind) {
     res.statusCode = 415;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ error: "unsupported-media-type", contentType: mime }));
     return;
   }
+  const targetDir =
+    scope === "project" && stemParam
+      ? path.join(PROJECTS_DIR, stemParam, assetDirForKind(kind))
+      : path.join(_PUBLIC_DIR, "assets", assetDirForKind(kind));
 
   try {
     await fs.mkdir(targetDir, { recursive: true });
@@ -662,10 +721,10 @@ const handleAssetsUpload = async (
     return;
   }
 
-  // Boundary: the resolved path must still live under public/assets/.
-  const assetsRoot = path.resolve(path.join(_PUBLIC_DIR, "assets")) + path.sep;
+  // Boundary: the resolved path must still live under the selected asset root.
+  const assetsRoot = path.resolve(targetDir) + path.sep;
   const resolved = path.resolve(sanitized.fullPath);
-  if (!resolved.startsWith(assetsRoot)) {
+  if (resolved !== path.resolve(targetDir, sanitized.filename) || !resolved.startsWith(assetsRoot)) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ error: "path-traversal-rejected" }));
@@ -691,9 +750,12 @@ const handleAssetsUpload = async (
   }
 
   const entry: AssetEntry = {
-    path: `assets/${kind}s/${sanitized.filename}`,
-    scope: "global",
-    stem: null,
+    path:
+      scope === "project" && stemParam
+        ? `projects/${stemParam}/${assetDirForKind(kind)}/${sanitized.filename}`
+        : `assets/${assetDirForKind(kind)}/${sanitized.filename}`,
+    scope,
+    stem: scope === "project" ? stemParam ?? null : null,
     kind,
     size: upload.body.length,
     mtime: Date.now(),

@@ -372,6 +372,7 @@ export const ElementDetail = () => {
               // Thread defaults so per-prop ↺ reset can light up when the
               // current value differs from the module's canonical default.
               defaults={mod.defaults as Record<string, unknown>}
+              mediaFields={mod.mediaFields}
               // Scope group collapse state per element type so each
               // element type's ergonomic layout is independent.
               persistKey={mod.id}

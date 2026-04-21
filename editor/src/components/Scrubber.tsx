@@ -7,9 +7,7 @@
 // per the MC deep-dive §3 lift — AudioContext.decodeAudioData + extractPeaks
 // produces the bucket array, a 2D canvas draws it.
 import { useEffect, useRef, useState } from "react";
-import { useShortcutSurface, useShortcuts } from "../contexts/shortcuts";
 import { useEditorStore } from "../store";
-import { anchoredZoom, clampViewport } from "../utils/timelineScale";
 import { CanvasWaveform } from "./CanvasWaveform";
 import { NamedEventPills } from "./NamedEventPills";
 
@@ -18,9 +16,14 @@ type Props = {
   height?: number;
 };
 
+// Mirrors Timeline.tsx. The scrubber stays fixed-width, but this lets the
+// overview show which portion of the lower editor is currently in view.
+const TIMELINE_GUTTER_WIDTH = 96;
+
 export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   const [ready, setReady] = useState(false);
   const [duration, setDuration] = useState(0);
+  const [overviewWidth, setOverviewWidth] = useState(0);
   // Live-preview state during event-marker drag. Holds the in-flight sec value
   // so the yellow line renders at the drag position (not the stored position)
   // until release, when the POST completes and SSE refreshes beatData. Without
@@ -42,7 +45,10 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
   const beatData = useEditorStore((s) => s.beatData);
   const compositionDuration = useEditorStore((s) => s.compositionDuration);
   const audioSrc = useEditorStore((s) => s.audioSrc);
+  const timelineSecPerPx = useEditorStore((s) => s.timelineSecPerPx);
+  const timelineOffsetSec = useEditorStore((s) => s.timelineOffsetSec);
   const playheadRef = useRef<HTMLDivElement>(null);
+  const overviewRef = useRef<HTMLDivElement>(null);
 
   // Clear dragState once the beatData events array reflects our drag target.
   // This is the coordination point between "pointer released" and "server
@@ -99,136 +105,33 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
     });
   }, [ready, duration]);
 
+  useEffect(() => {
+    if (!overviewRef.current) return;
+    const el = overviewRef.current;
+    const measure = () => setOverviewWidth(el.clientWidth);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+
   // Probe for confirmed-full PNGs produced by the waveform-analysis
   // pipeline. Prefer phase-2 (has all confirmed events merged); fall
   // back to phase-1 (Phase 2 not run yet); null if neither exists.
   // HEAD request is cheap; the sidecar's /api/projects/* handler
   const totalSec = duration || compositionDuration || 1;
-
-  // Point-anchored zoom + pan state (MC deep-dive §2). Persisted per-project
-  // via useStorage so track-specific zoom survives reloads and project
-  // switches. secPerPx = 0 is a sentinel meaning "natural fit" — used on
-  // first mount before we know containerWidth.
   const stem = audioSrc ? audioSrc.replace(/^.*\//, "").replace(/\.[^.]+$/, "") : null;
-  // Shared with Timeline via store. secPerPx = 0 is still a sentinel meaning
-  // "natural fit" on first mount; anchoredZoom writes the resolved value.
-  const secPerPx = useEditorStore((s) => s.timelineSecPerPx);
-  const offsetSec = useEditorStore((s) => s.timelineOffsetSec);
-  const setTimelineView = useEditorStore((s) => s.setTimelineView);
-  const setSecPerPx = (v: number) => setTimelineView({ secPerPx: v });
-  const setOffsetSec = (v: number) => setTimelineView({ offsetSec: v });
-
-  const scrollPortRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
-
-  useEffect(() => {
-    if (!scrollPortRef.current) return;
-    const el = scrollPortRef.current;
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (typeof w === "number") setContainerWidth(w);
-    });
-    ro.observe(el);
-    setContainerWidth(el.clientWidth);
-    return () => ro.disconnect();
-  }, []);
-
-  const naturalSecPerPx = containerWidth > 0 && totalSec > 0 ? totalSec / containerWidth : 0;
-  const effectiveSecPerPx = secPerPx > 0 ? secPerPx : naturalSecPerPx;
-  const innerWidthPx = effectiveSecPerPx > 0 ? totalSec / effectiveSecPerPx : 0;
-  const panPx = effectiveSecPerPx > 0 ? offsetSec / effectiveSecPerPx : 0;
-
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (!effectiveSecPerPx || !containerWidth) return;
-    // Same gesture model as Timeline.tsx onWheel (they must agree):
-    //   mouse wheel          → zoom at cursor
-    //   trackpad scroll      → pan
-    //   shift+wheel          → pan (explicit)
-    e.preventDefault();
-    e.stopPropagation();
-
-    const isLikelyMouseWheel = e.deltaMode !== 0;
-    const isExplicitPan =
-      e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || !isLikelyMouseWheel;
-    if (isExplicitPan) {
-      const rawDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-      const deltaSec = rawDelta * effectiveSecPerPx;
-      const next = clampViewport({
-        offsetSec: offsetSec + deltaSec,
-        secPerPx: effectiveSecPerPx,
-        containerPx: containerWidth,
-        totalSec,
-      });
-      setOffsetSec(next);
-      return;
-    }
-
-    // Zoom anchored at cursor
-    const rect = scrollPortRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const cursorPxInView = Math.max(0, Math.min(containerWidth, e.clientX - rect.left));
-    const zoomFactor = 1.1 ** (-e.deltaY / 100);
-    const maxSecPerPx = naturalSecPerPx || effectiveSecPerPx; // cap zoom-out at fit-to-view
-    const minSecPerPx = (naturalSecPerPx || effectiveSecPerPx) / 100; // cap zoom-in at 100x
-    const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
-      currentSecPerPx: effectiveSecPerPx,
-      currentOffsetSec: offsetSec,
-      zoomFactor,
-      anchorPx: cursorPxInView,
-      minSecPerPx,
-      maxSecPerPx,
-    });
-    setSecPerPx(nextSecPerPx);
-    setOffsetSec(
-      clampViewport({
-        offsetSec: nextOffset,
-        secPerPx: nextSecPerPx,
-        containerPx: containerWidth,
-        totalSec,
-      }),
-    );
-  };
-
-  // Center-anchored zoom (for keyboard shortcuts). Same math as handleWheel
-  // but anchor = containerWidth/2 instead of the mouse position.
-  const zoomBy = (zoomFactor: number) => {
-    if (!effectiveSecPerPx || !containerWidth) return;
-    const maxSecPerPx = naturalSecPerPx || effectiveSecPerPx;
-    const minSecPerPx = (naturalSecPerPx || effectiveSecPerPx) / 100;
-    const { secPerPx: nextSecPerPx, offsetSec: nextOffset } = anchoredZoom({
-      currentSecPerPx: effectiveSecPerPx,
-      currentOffsetSec: offsetSec,
-      zoomFactor,
-      anchorPx: containerWidth / 2,
-      minSecPerPx,
-      maxSecPerPx,
-    });
-    setSecPerPx(nextSecPerPx);
-    setOffsetSec(
-      clampViewport({
-        offsetSec: nextOffset,
-        secPerPx: nextSecPerPx,
-        containerPx: containerWidth,
-        totalSec,
-      }),
-    );
-  };
-
-  // Per-surface shortcuts: +/- zoom, 0 resets. Only fire when the pointer
-  // is over the Scrubber (see scrollPortRef's pointer handlers below).
-  const surfaceHandlers = useShortcutSurface("scrubber");
-  useShortcuts("scrubber", [
-    { pattern: "=", handler: () => zoomBy(1.2) }, // "+" without shift
-    { pattern: "+", handler: () => zoomBy(1.2) },
-    { pattern: "-", handler: () => zoomBy(1 / 1.2) },
-    {
-      pattern: "0",
-      handler: () => {
-        setSecPerPx(0);
-        setOffsetSec(0);
-      },
-    },
-  ]);
+  const lowerTimelineViewportPx = Math.max(1, overviewWidth - TIMELINE_GUTTER_WIDTH);
+  const naturalTimelineSecPerPx =
+    lowerTimelineViewportPx > 0 && totalSec > 0 ? totalSec / lowerTimelineViewportPx : 0;
+  const effectiveTimelineSecPerPx =
+    timelineSecPerPx > 0 ? timelineSecPerPx : naturalTimelineSecPerPx;
+  const visibleTimelineSec =
+    effectiveTimelineSecPerPx > 0
+      ? Math.min(totalSec, lowerTimelineViewportPx * effectiveTimelineSecPerPx)
+      : totalSec;
+  const viewportLeftPct = totalSec > 0 ? (timelineOffsetSec / totalSec) * 100 : 0;
+  const viewportWidthPct = totalSec > 0 ? (visibleTimelineSec / totalSec) * 100 : 100;
 
   return (
     <div
@@ -250,31 +153,6 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
       >
         <span style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
           Waveform{trackName ? ` - ${trackName}` : ""}
-          {naturalSecPerPx > 0 &&
-            effectiveSecPerPx > 0 &&
-            effectiveSecPerPx < naturalSecPerPx * 0.98 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSecPerPx(0);
-                  setOffsetSec(0);
-                }}
-                title="Reset waveform zoom to fit"
-                style={{
-                  marginLeft: 10,
-                  padding: "1px 6px",
-                  fontSize: 9,
-                  background: "#1a2a3a",
-                  border: "1px solid #368",
-                  borderRadius: 3,
-                  color: "#8cf",
-                  cursor: "pointer",
-                  textTransform: "none",
-                }}
-              >
-                {(naturalSecPerPx / effectiveSecPerPx).toFixed(1)}× · reset
-              </button>
-            )}
         </span>
         <span>
           {(() => {
@@ -293,10 +171,6 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
       </div>
 
       <div
-        ref={scrollPortRef}
-        onWheel={handleWheel}
-        onPointerEnter={surfaceHandlers.onPointerEnter}
-        onPointerLeave={surfaceHandlers.onPointerLeave}
         style={{
           position: "relative",
           width: "100%",
@@ -307,22 +181,19 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
         {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate */}
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate */}
         <div
+          ref={overviewRef}
           style={{
             position: "relative",
-            width: innerWidthPx > 0 ? `${innerWidthPx}px` : "100%",
+            width: "100%",
             height,
-            transform: `translateX(${-panPx}px)`,
-            transformOrigin: "0 0",
-            willChange: "transform",
           }}
           onClick={(e) => {
             // Shift-click on waveform adds an event at the click's time.
             // Plain click falls through to CanvasWaveform's own seek handler.
             if (!e.shiftKey) {
-              // Plain click -> seek. CanvasWaveform doesn't own clicks (we do),
-              // so map x to time here. currentTarget is the inner timeline div,
-              // so its rect reflects the zoomed/panned width and click math
-              // works at any zoom level.
+              // Plain click -> seek within the full-track overview.
+              // The scrubber is intentionally fixed-width now; only the lower
+              // timeline owns zoom/pan.
               if (totalSec > 0) {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const x = e.clientX - rect.left;
@@ -351,6 +222,21 @@ export const Scrubber = ({ audioUrl, height = 180 }: Props) => {
           }}
         >
           <CanvasWaveform audioUrl={audioUrl} height={height} onReady={onWaveformReady} />
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: `${viewportLeftPct}%`,
+              width: `${Math.max(0, Math.min(100, viewportWidthPct))}%`,
+              border: "1px solid rgba(120, 200, 255, 0.75)",
+              background: "rgba(120, 200, 255, 0.08)",
+              boxShadow: "inset 0 0 0 1px rgba(120, 200, 255, 0.18)",
+              pointerEvents: "none",
+              zIndex: 1,
+            }}
+          />
 
           {/* Event lines + breakdown regions + drop markers. SVG is
             pointer-events:auto but individual decoration elements are

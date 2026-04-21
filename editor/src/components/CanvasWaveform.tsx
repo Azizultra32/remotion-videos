@@ -3,8 +3,8 @@
 // lifted from motion-canvas packages/core/src/media/AudioResourceManager.ts
 // (decode via AudioContext, extract peaks, draw to <canvas>).
 //
-// v1 scope: full-track waveform, click-to-seek, device-pixel-ratio aware.
-// Zoom (§2) comes in a follow-up that threads startSec/endSec props.
+// v1 scope: full-track waveform overview, click-to-seek, device-pixel-ratio
+// aware. The editor timeline below owns zoom/pan; this canvas stays fixed.
 
 import { useEffect, useRef, useState } from "react";
 import { extractPeaks, normalizePeaks } from "../utils/audioPeaks";

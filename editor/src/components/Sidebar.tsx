@@ -1,5 +1,20 @@
 // src/components/Sidebar.tsx
+//
+// Compact element palette: ONE category visible at a time via tabs.
+// Showing all ~28 engine elements simultaneously made the palette
+// several viewports tall; the user had to scroll past Text to find
+// Audio/Shape/Overlay/Video. Tabs keep it bounded to ~8 items visible.
+//
+// Per-project custom elements (id prefix "custom.") are NOT surfaced
+// in this palette by design. AHURA is a specific instance, not a
+// reusable primitive — re-adding it from the palette makes no sense.
+// Per-project primitives that truly are reusable still register with
+// the engine and can be referenced from timeline.json / chat; they
+// just don't clutter the "+ add new element" UI. If a project genuinely
+// needs a palette entry for one, it should be promoted to an engine
+// element via src/compositions/elements/.
 
+import { useState } from "react";
 import { ELEMENT_MODULES, listByCategory } from "@compositions/elements/registry";
 import { useEditorStore } from "../store";
 import type { TimelineElement } from "../types";
@@ -7,26 +22,21 @@ import type { TimelineElement } from "../types";
 const newId = () => `el-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
 const CATEGORY_LABELS: Record<string, string> = {
-  text: "TEXT",
-  audio: "AUDIO REACTIVE",
-  shape: "SHAPES",
-  overlay: "OVERLAYS",
-  video: "VIDEO",
+  text: "Text",
+  audio: "Audio",
+  shape: "Shape",
+  overlay: "Overlay",
+  video: "Video",
 };
 
 const CATEGORY_ORDER = ["text", "audio", "shape", "overlay", "video"];
 
-// Per-project custom elements (id prefix "custom.") live in a dedicated
-// PROJECT section so they don't clutter the engine palette. AHURA and
-// any other bespoke-per-track element thus show up ONLY in the project
-// section where they belong — not mixed in with TEXT/OVERLAYS alongside
-// reusable primitives. See projects/<stem>/custom-elements/*.tsx.
 const isProjectElement = (id: string): boolean => id.startsWith("custom.");
 
 export const Sidebar = () => {
   const { addElement, currentTimeSec, selectElement } = useEditorStore();
   const byCategory = listByCategory();
-  const projectElements = ELEMENT_MODULES.filter((m) => isProjectElement(m.id));
+  const [activeCat, setActiveCat] = useState<string>("text");
 
   const handleAdd = (moduleId: string) => {
     const mod = ELEMENT_MODULES.find((m) => m.id === moduleId);
@@ -44,108 +54,86 @@ export const Sidebar = () => {
     selectElement(el.id);
   };
 
+  const visibleCats = CATEGORY_ORDER.filter(
+    (c) => (byCategory[c] ?? []).filter((m) => !isProjectElement(m.id)).length > 0,
+  );
+  const activeMods = (byCategory[activeCat] ?? []).filter((m) => !isProjectElement(m.id));
+
   return (
     <div
       style={{
-        borderRight: "1px solid #333",
         background: "#0a0a0a",
-        padding: 12,
+        padding: 8,
         overflowY: "auto",
+        height: "100%",
+        boxSizing: "border-box",
       }}
     >
-      {/* Per-project custom elements first — they're the active creative
-          surface for the loaded track. Rendered under a single PROJECT
-          header (not sub-categorized) with a distinctive amber accent so
-          they're visually distinct from the reusable engine primitives
-          below. Section is hidden entirely when no project elements exist. */}
-      {projectElements.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <h3
-            style={{
-              margin: "0 0 8px 0",
-              fontSize: 10,
-              fontWeight: 700,
-              color: "#d4a017",
-              letterSpacing: "0.1em",
-            }}
-          >
-            PROJECT
-          </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {projectElements.map((mod) => (
-              <button
-                type="button"
-                key={mod.id}
-                onClick={() => handleAdd(mod.id)}
-                title={mod.description}
-                style={{
-                  padding: "6px 8px",
-                  background: "#1a1205",
-                  border: "1px solid #4a3510",
-                  borderRadius: 4,
-                  color: "#fff",
-                  fontSize: 11,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 2,
-                }}
-              >
-                <span style={{ fontWeight: 600 }}>+ {mod.label}</span>
-                <span style={{ fontSize: 9, color: "#988" }}>{mod.description}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Category tabs — one row, one click switches the visible list. */}
+      <div
+        style={{
+          display: "flex",
+          gap: 2,
+          marginBottom: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        {visibleCats.map((cat) => {
+          const active = cat === activeCat;
+          return (
+            <button
+              type="button"
+              key={cat}
+              onClick={() => setActiveCat(cat)}
+              style={{
+                padding: "4px 8px",
+                background: active ? "#2a4a7a" : "#1a1a1a",
+                border: `1px solid ${active ? "#3a6aaa" : "#333"}`,
+                borderRadius: 3,
+                color: active ? "#fff" : "#aaa",
+                fontSize: 10,
+                fontWeight: active ? 700 : 500,
+                cursor: "pointer",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {CATEGORY_LABELS[cat] ?? cat}
+            </button>
+          );
+        })}
+      </div>
 
-      {CATEGORY_ORDER.filter(
-        (c) => (byCategory[c] ?? []).filter((m) => !isProjectElement(m.id)).length > 0,
-      ).map((cat) => (
-        <div key={cat} style={{ marginBottom: 16 }}>
-          <h3
+      {/* Element list for the active category. Compact single-line rows —
+          description is in the title attribute for hover-tooltip. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {activeMods.map((mod) => (
+          <button
+            type="button"
+            key={mod.id}
+            onClick={() => handleAdd(mod.id)}
+            title={mod.description}
             style={{
-              margin: "0 0 8px 0",
-              fontSize: 10,
-              fontWeight: 700,
-              color: "#666",
-              letterSpacing: "0.1em",
+              padding: "6px 8px",
+              background: "#161616",
+              border: "1px solid #2a2a2a",
+              borderRadius: 3,
+              color: "#ddd",
+              fontSize: 11,
+              cursor: "pointer",
+              textAlign: "left",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            {CATEGORY_LABELS[cat] ?? cat.toUpperCase()}
-          </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {byCategory[cat].filter((m) => !isProjectElement(m.id)).map((mod) => (
-              <button
-                type="button"
-                key={mod.id}
-                onClick={() => handleAdd(mod.id)}
-                title={mod.description}
-                style={{
-                  padding: "6px 8px",
-                  background: "#1a1a1a",
-                  border: "1px solid #333",
-                  borderRadius: 4,
-                  color: "#fff",
-                  fontSize: 11,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 2,
-                }}
-              >
-                <span style={{ fontWeight: 600 }}>+ {mod.label}</span>
-                <span style={{ fontSize: 9, color: "#777" }}>{mod.description}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-      <div style={{ fontSize: 10, color: "#666", lineHeight: 1.4, marginTop: 8 }}>
-        Click to add at the current playhead. Drag on the timeline to move. Configure in the right
-        panel.
+            <span style={{ color: "#4a9", fontSize: 10 }}>+</span>
+            <span>{mod.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ fontSize: 9, color: "#555", marginTop: 10, lineHeight: 1.5 }}>
+        Click to add at playhead. Hover for description. Drag on the timeline to move.
       </div>
     </div>
   );

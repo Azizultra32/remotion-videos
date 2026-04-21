@@ -1004,6 +1004,97 @@ const handleTimelineSave = async (req: IncomingMessage, res: ServerResponse): Pr
 };
 
 // ---------------------------------------------------------------------------
+// /api/chat-history/:stem   (GET + POST — per-project chat transcript)
+// ---------------------------------------------------------------------------
+//
+// Mirrors the timeline/events sync model. Chat lives at
+// projects/<stem>/chat.json as an array of {id, role, content, createdAt}.
+// localStorage in the browser is still there as an instant-render cache;
+// disk is the durable copy that survives across browsers/machines.
+// Atomic write via tmp + rename. Per-stem in-process lock.
+
+const CHAT_LOCK = new Map<string, Promise<void>>();
+
+const handleChatHistoryGet = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  const full = path.join(PROJECTS_DIR, stem, "chat.json");
+  let content: string;
+  try {
+    content = await fs.readFile(full, "utf8");
+  } catch {
+    // No chat yet is a valid state — return empty array, not 404.
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "no-store");
+    res.end(JSON.stringify({ messages: [] }));
+    return;
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(content);
+};
+
+const handleChatHistorySave = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const body = await readJsonBody(req);
+  const stem = String(body?.stem ?? "");
+  const messages = body?.messages;
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "bad stem" }));
+    return;
+  }
+  if (!Array.isArray(messages)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "body.messages must be an array" }));
+    return;
+  }
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a directory");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project not found", stem }));
+    return;
+  }
+
+  // Cap history on disk at 500 messages — long enough for a real session,
+  // short enough that the file stays small. Oldest entries drop off.
+  const MAX_CHAT_ON_DISK = 500;
+  const trimmed =
+    messages.length > MAX_CHAT_ON_DISK ? messages.slice(-MAX_CHAT_ON_DISK) : messages;
+
+  const payload = { version: 1, stem, messages: trimmed };
+  const prev = CHAT_LOCK.get(stem) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    const dest = path.join(projectDir, "chat.json");
+    const tmp = `${dest}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(payload, null, 2));
+    await fs.rename(tmp, dest);
+  });
+  CHAT_LOCK.set(stem, next.catch(() => { /* surfaced below */ }));
+  try {
+    await next;
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "chat-write-failed", detail: String(err) }));
+    return;
+  }
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify({ ok: true, count: trimmed.length }));
+};
+
+// ---------------------------------------------------------------------------
 // /api/events/:stem   (GET + POST — named time-event markers)
 // ---------------------------------------------------------------------------
 //
@@ -2733,6 +2824,11 @@ export const sidecarPlugin = (): Plugin => ({
       next();
     });
     server.middlewares.use("/api/timeline/save", wrap("POST", handleTimelineSave));
+    // Per-project chat transcript. Save must be registered before the
+    // catch-all GET so POST requests to /api/chat-history/save don't fall
+    // through to the GET handler below.
+    server.middlewares.use("/api/chat-history/save", wrap("POST", handleChatHistorySave));
+    server.middlewares.use("/api/chat-history/", wrap("GET", handleChatHistoryGet));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/assets/list", wrap("GET", handleAssetsList));
     server.middlewares.use("/api/assets/upload", wrap("POST", handleAssetsUpload));

@@ -146,15 +146,83 @@ export const useChat = () => {
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState<Cooldown | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Debounced save-to-disk timer. localStorage writes are synchronous
+  // every change; disk POST is debounced at 800 ms so a flurry of
+  // streaming message updates coalesces into one HTTP request.
+  const diskSaveTimerRef = useRef<number | null>(null);
+  // Guard: don't overwrite disk with a load that came FROM disk.
+  const hydratedFromDiskRef = useRef<string | null>(null);
 
-  // Rehydrate when the stem changes — swap to the new project's chat.
+  // Rehydrate when the stem changes. Two-phase: (1) instantly render
+  // from localStorage (fast, same browser), (2) fetch chat.json from
+  // disk and replace if it's newer (cross-browser / cross-machine).
   useEffect(() => {
-    setMessages(loadMessages(stem));
+    // Phase 1: localStorage instant.
+    const cached = loadMessages(stem);
+    setMessages(cached);
+    hydratedFromDiskRef.current = null;
+
+    // Phase 2: async disk fetch, only if we have a stem.
+    if (!stem) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/chat-history/${encodeURIComponent(stem)}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        const diskMessages: unknown = data?.messages;
+        if (!Array.isArray(diskMessages)) return;
+        const valid = (diskMessages as unknown[]).filter(
+          (m): m is ChatMessage =>
+            !!m &&
+            typeof m === "object" &&
+            typeof (m as { id?: unknown }).id === "string" &&
+            typeof (m as { content?: unknown }).content === "string" &&
+            ((m as { role?: unknown }).role === "user" ||
+              (m as { role?: unknown }).role === "assistant" ||
+              (m as { role?: unknown }).role === "system"),
+        );
+        if (cancelled) return;
+        // Adopt disk copy if it has strictly MORE messages OR if we had
+        // nothing cached. If localStorage is ahead (user typed offline
+        // in another tab, say), keep the cache — next save pushes it
+        // back to disk. Conservative: prefer "more is more."
+        if (valid.length > cached.length) {
+          setMessages(valid);
+          hydratedFromDiskRef.current = JSON.stringify(valid);
+        }
+      } catch {
+        /* offline or sidecar down — cached localStorage is enough */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [stem]);
 
-  // Persist messages on every change, keyed by the current stem.
+  // Dual-target persist on every message change:
+  //   1. localStorage immediately — instant same-browser reload
+  //   2. disk via POST /api/chat-history/save, debounced 800 ms —
+  //      survives cross-browser / cross-machine
   useEffect(() => {
     saveMessages(stem, messages);
+    if (!stem) return;
+    if (diskSaveTimerRef.current) window.clearTimeout(diskSaveTimerRef.current);
+    diskSaveTimerRef.current = window.setTimeout(() => {
+      // Skip the write if we just hydrated from disk and nothing changed.
+      const json = JSON.stringify(messages);
+      if (hydratedFromDiskRef.current === json) return;
+      void fetch("/api/chat-history/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stem, messages }),
+      }).catch(() => {
+        /* sidecar offline is fine; localStorage is the hot cache */
+      });
+    }, 800);
+    return () => {
+      if (diskSaveTimerRef.current) window.clearTimeout(diskSaveTimerRef.current);
+    };
   }, [stem, messages]);
 
   // Gap D — tick the cooldown countdown once per second until it expires.

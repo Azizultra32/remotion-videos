@@ -28,10 +28,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { parseFileArg, sanitizeEditorPath } from "../scripts/cli/editorPath";
 import {
   ensureProjectsDir,
+  resolveProjectDir,
   resolveProjectsDir,
   syncStaticProjectsSymlink,
 } from "../scripts/cli/paths";
 import { parseEventsFile, serializeEventsFile } from "./src/utils/eventsFile";
+import { stemFromAudioSrc } from "./src/utils/url";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(REPO_ROOT, "out");
@@ -2210,6 +2212,60 @@ const handleAnalyzeEventsUpdate = async (
   res.end(JSON.stringify({ stem, events: deduped }));
 };
 
+// Gather per-project context the chat assistant needs: the active project's
+// custom-elements/*.tsx list (so the assistant knows 'custom.<stem>.*' ids
+// exist beyond the engine palette), notes.md if present, and a short
+// structural digest. This is injected into the user prompt at request time
+// rather than baked into CHAT_SYSTEM because it's project-specific.
+const gatherProjectContext = async (stem: string | null): Promise<string> => {
+  if (!stem) return "(no active project)";
+  const projectDir = resolveProjectDir(REPO_ROOT, stem);
+  const parts: string[] = [`stem: ${stem}`, `projectDir: projects/${stem}/`];
+
+  // List per-project custom elements so the assistant can reference
+  // custom.<stem>.* ids directly. Without this the assistant only knows
+  // the 28 engine elements listed in CHAT_SYSTEM and will fall back to
+  // buggy engine defaults (e.g. text.bellCurve for AHURA).
+  try {
+    const customDir = path.join(projectDir, "custom-elements");
+    const entries = await fs.readdir(customDir);
+    const tsxFiles = entries.filter((f) => f.endsWith(".tsx") && !f.startsWith("."));
+    if (tsxFiles.length > 0) {
+      parts.push(`\nper-project custom elements (USE THESE over engine primitives when they fit the user's intent):`);
+      for (const file of tsxFiles) {
+        try {
+          const src = await fs.readFile(path.join(customDir, file), "utf8");
+          // Extract id + label + description from the exported module.
+          const idMatch = src.match(/id:\s*["']([^"']+)["']/);
+          const labelMatch = src.match(/label:\s*["']([^"']+)["']/);
+          const descMatch = src.match(/description:\s*["']([^"']+)["']/);
+          if (idMatch) {
+            parts.push(
+              `  - ${idMatch[1]} (${labelMatch?.[1] ?? file}): ${descMatch?.[1] ?? "no description"}`,
+            );
+          }
+        } catch {
+          /* skip unreadable file */
+        }
+      }
+    }
+  } catch {
+    /* no custom-elements dir; fine */
+  }
+
+  // Load project notes so the assistant remembers track-specific direction.
+  try {
+    const notes = await fs.readFile(path.join(projectDir, "notes.md"), "utf8");
+    if (notes.trim()) {
+      parts.push(`\nproject notes (notes.md):\n${notes.trim()}`);
+    }
+  } catch {
+    /* no notes; fine */
+  }
+
+  return parts.join("\n");
+};
+
 const handleChat = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
   const body = await readJsonBody(req);
   const message: string = String(body?.message ?? "").slice(0, 4000);
@@ -2219,6 +2275,9 @@ const handleChat = async (req: IncomingMessage, res: ServerResponse): Promise<vo
     res.end(JSON.stringify({ error: "body.message required" }));
     return;
   }
+
+  const stem = typeof state.audioSrc === "string" ? stemFromAudioSrc(state.audioSrc) : null;
+  const projectContext = await gatherProjectContext(stem);
 
   const userPrompt = `Current editor state (for your reference):\n${JSON.stringify(
     {
@@ -2231,7 +2290,7 @@ const handleChat = async (req: IncomingMessage, res: ServerResponse): Promise<vo
     },
     null,
     2,
-  )}\n\nUser request:\n${message}\n\nInvestigate with tools as needed, then end with the <final>{...}</final> block.`;
+  )}\n\nProject context:\n${projectContext}\n\nYou have full Claude Code tool access (Read/Bash/Glob/Grep/Edit/Write/WebFetch). The mutation list above is the quickest path for common element edits, but you can also write code: per-project custom elements under projects/${stem ?? "<stem>"}/custom-elements/*.tsx are free-write; src/compositions/** is free-write; other engine paths need ENGINE_UNLOCK=1. You are NOT limited to what appears in the sidebar — if the user asks for something the widgets don't expose (a shader, a new prop, a Remotion-feature not currently wired), investigate and implement it.\n\nUser request:\n${message}\n\nInvestigate with tools as needed, then end with the <final>{...}</final> block.`;
 
   const args = [
     "-p",
@@ -2377,6 +2436,9 @@ const handleChatStream = async (req: IncomingMessage, res: ServerResponse): Prom
         .join("\n")
     : "";
 
+  const streamStem = typeof state.audioSrc === "string" ? stemFromAudioSrc(state.audioSrc) : null;
+  const streamProjectContext = await gatherProjectContext(streamStem);
+
   const userPrompt = `Current editor state (for your reference):\n${JSON.stringify(
     {
       currentTimeSec: state.currentTimeSec,
@@ -2388,7 +2450,7 @@ const handleChatStream = async (req: IncomingMessage, res: ServerResponse): Prom
     },
     null,
     2,
-  )}${historyBlock}\n\nUser request:\n${message}\n\nInvestigate with tools as needed, then end with the <final>{...}</final> block.`;
+  )}\n\nProject context:\n${streamProjectContext}\n\nYou have full Claude Code tool access (Read/Bash/Glob/Grep/Edit/Write/WebFetch). Mutations are the quick path for element edits, but you can also write code: per-project custom elements under projects/${streamStem ?? "<stem>"}/custom-elements/*.tsx are free-write, src/compositions/** is free-write, other engine paths need ENGINE_UNLOCK=1. You are NOT limited to what appears in the sidebar — if the user wants something the widgets don't expose (a shader, a new prop, a Remotion feature not yet wired), investigate and implement it.${historyBlock}\n\nUser request:\n${message}\n\nInvestigate with tools as needed, then end with the <final>{...}</final> block.`;
 
   res.writeHead(200, {
     "Content-Type": "application/x-ndjson",

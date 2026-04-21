@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { stemFromAudioSrc } from "../utils/url";
 import { useEditorStore } from "../store";
 import {
   applyMutations,
@@ -38,11 +39,31 @@ const newId = () => `msg-${Math.random().toString(36).slice(2, 9)}`;
 // reload. User clears explicitly via the Clear button in ChatPane. Per-
 // session-only state (streaming flag, tool-call partial results) is not
 // persisted — only finalized turn content.
-const STORAGE_KEY = "music-video-editor-chat";
+//
+// PER-PROJECT: key is scoped to the active stem (track). Switching tracks
+// gives you that track's chat history — previously the key was global
+// and every project saw the same conversation, which meant asking about
+// "this track" referenced the wrong song. Migration: when we encounter
+// the old unscoped key at boot we rename it to the currently-active
+// stem's key so nothing is lost.
+const STORAGE_KEY_PREFIX = "music-video-editor-chat";
+const LEGACY_KEY = "music-video-editor-chat";
 
-const loadMessages = (): ChatMessage[] => {
+const storageKeyForStem = (stem: string | null): string =>
+  stem ? `${STORAGE_KEY_PREFIX}:${stem}` : `${STORAGE_KEY_PREFIX}:_unassigned`;
+
+const loadMessages = (stem: string | null): ChatMessage[] => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = storageKeyForStem(stem);
+    // Migrate legacy global history to the current stem on first load.
+    if (stem && !localStorage.getItem(key)) {
+      const legacy = localStorage.getItem(LEGACY_KEY);
+      if (legacy) {
+        localStorage.setItem(key, legacy);
+        localStorage.removeItem(LEGACY_KEY);
+      }
+    }
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -60,9 +81,9 @@ const loadMessages = (): ChatMessage[] => {
   }
 };
 
-const saveMessages = (messages: ChatMessage[]): void => {
+const saveMessages = (stem: string | null, messages: ChatMessage[]): void => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    localStorage.setItem(storageKeyForStem(stem), JSON.stringify(messages));
   } catch {
     // Quota errors are non-fatal — just skip persist this turn.
   }
@@ -116,16 +137,25 @@ const parseRetryAfter = (header: string | null, body: string): number => {
 };
 
 export const useChat = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages());
+  // Subscribe to audioSrc → stem so when the user switches tracks the
+  // chat state rehydrates from THAT track's stored history.
+  const audioSrc = useEditorStore((s) => s.audioSrc);
+  const stem = stemFromAudioSrc(audioSrc);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(stem));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState<Cooldown | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Gap C — persist messages on every change.
+  // Rehydrate when the stem changes — swap to the new project's chat.
   useEffect(() => {
-    saveMessages(messages);
-  }, [messages]);
+    setMessages(loadMessages(stem));
+  }, [stem]);
+
+  // Persist messages on every change, keyed by the current stem.
+  useEffect(() => {
+    saveMessages(stem, messages);
+  }, [stem, messages]);
 
   // Gap D — tick the cooldown countdown once per second until it expires.
   useEffect(() => {
@@ -323,7 +353,7 @@ export const useChat = () => {
     setMessages([]);
     setError(null);
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(storageKeyForStem(stem));
     } catch {
       /* quota/private-mode */
     }

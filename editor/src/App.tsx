@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { AssetLibrary } from "./components/AssetLibrary";
-import { SIDEBAR_COL_WIDTH, CHAT_COL_WIDTH } from "./constants/layout";
+import { SIDEBAR_COL_WIDTH, DETAIL_COL_WIDTH, CHAT_COL_WIDTH } from "./constants/layout";
 import { ChatPane } from "./components/ChatPane";
 import { ElementDetail } from "./components/ElementDetail";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -91,7 +91,13 @@ export const App = () => {
         }}
         style={{
           display: "grid",
-          gridTemplateColumns: `${SIDEBAR_COL_WIDTH}px minmax(0, 1fr) ${CHAT_COL_WIDTH}px`,
+          // Four columns now: palette | selected-item details | preview/timeline | chat.
+          // The detail column (col 2) is the master-detail split the user
+          // asked for — selecting an element shows its properties RIGHT of
+          // the palette list, not stacked below. Previously everything in
+          // the left stack (Sidebar + AssetLibrary + ElementDetail)
+          // fought the same 240px of vertical space and crushed each other.
+          gridTemplateColumns: `${SIDEBAR_COL_WIDTH}px ${DETAIL_COL_WIDTH}px minmax(0, 1fr) ${CHAT_COL_WIDTH}px`,
           gridTemplateRows: "auto auto minmax(0, 1fr) 360px",
           height: "100vh",
           width: "100vw",
@@ -103,11 +109,9 @@ export const App = () => {
           touchAction: "none",
         }}
       >
-        {/* Left column: header on top, then three independently-scrolling
-            panels (Sidebar / AssetLibrary / ElementDetail) laid out as a
-            flex column so AssetLibrary is ALWAYS visible — previously the
-            whole column was a single scroll view and AssetLibrary lived
-            below-fold behind a long Sidebar. */}
+        {/* Col 1 — palette: Header, Sidebar (element buttons), AssetLibrary.
+            ElementDetail moved to col 2. Palette column narrowed from 240
+            to 210 since it no longer needs to hold the long prop form. */}
         <div
           style={{
             gridRow: "1/5",
@@ -124,33 +128,45 @@ export const App = () => {
               <SongPicker />
             </ErrorBoundary>
           </div>
-          <div style={{ flex: "1 1 40%", minHeight: 0, overflowY: "auto", borderBottom: "1px solid #333" }}>
+          <div style={{ flex: "1 1 60%", minHeight: 0, overflowY: "auto", borderBottom: "1px solid #333" }}>
             <ErrorBoundary name="Sidebar">
               <Sidebar />
             </ErrorBoundary>
           </div>
-          <div style={{ flex: "1 1 30%", minHeight: 0, overflowY: "auto", borderBottom: "1px solid #333", background: "#0a0a0a" }}>
+          <div style={{ flex: "1 1 40%", minHeight: 0, overflowY: "auto", background: "#0a0a0a" }}>
             <ErrorBoundary name="Asset Library">
               <AssetLibrary />
             </ErrorBoundary>
           </div>
-          <div style={{ flex: "1 1 30%", minHeight: 0, overflowY: "auto" }}>
-            <ErrorBoundary name="Element Detail">
-              <ElementDetail />
-            </ErrorBoundary>
-          </div>
         </div>
 
-        {/* Transport Controls — pinned to row 1 col 2 (above Scrubber). */}
-        <div style={{ gridRow: 1, gridColumn: 2, minWidth: 0 }}>
+        {/* Col 2 — details: ElementDetail for the selected element. Own
+            scroll, full height. Placeholder shown when nothing selected
+            (ElementDetail already handles that branch internally). */}
+        <div
+          style={{
+            gridRow: "1/5",
+            gridColumn: 2,
+            borderRight: "1px solid #333",
+            minWidth: 0,
+            minHeight: 0,
+            overflowY: "auto",
+            background: "#0c0c0c",
+          }}
+        >
+          <ErrorBoundary name="Element Detail">
+            <ElementDetail />
+          </ErrorBoundary>
+        </div>
+
+        {/* Col 3 — preview + timeline stack (was col 2). */}
+        <div style={{ gridRow: 1, gridColumn: 3, minWidth: 0 }}>
           <ErrorBoundary name="Transport Controls">
             <TransportControls />
           </ErrorBoundary>
         </div>
 
-        {/* Scrubber — row 2 col 2. Click-to-seek waveform with drop markers
-          and playhead. */}
-        <div style={{ gridRow: 2, gridColumn: 2, minWidth: 0 }}>
+        <div style={{ gridRow: 2, gridColumn: 3, minWidth: 0 }}>
           <ErrorBoundary name="Scrubber">
             {audioUrl ? (
               <Scrubber audioUrl={audioUrl} />
@@ -160,11 +176,10 @@ export const App = () => {
           </ErrorBoundary>
         </div>
 
-        {/* Preview — row 3 col 2 (flexible middle section). */}
         <div
           style={{
             gridRow: 3,
-            gridColumn: 2,
+            gridColumn: 3,
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
@@ -178,11 +193,10 @@ export const App = () => {
           </ErrorBoundary>
         </div>
 
-        {/* Timeline — row 4 col 2 (fixed-height bottom). */}
         <div
           style={{
             gridRow: 4,
-            gridColumn: 2,
+            gridColumn: 3,
             borderTop: "1px solid #333",
             minWidth: 0,
             overflow: "hidden",
@@ -193,11 +207,11 @@ export const App = () => {
           </ErrorBoundary>
         </div>
 
-        {/* Chat pane — natural-language mutations via /api/chat sidecar */}
+        {/* Col 4 — chat (was col 3). */}
         <div
           style={{
             gridRow: "1/5",
-            gridColumn: 3,
+            gridColumn: 4,
             borderLeft: "1px solid #333",
             minHeight: 0,
             display: "flex",

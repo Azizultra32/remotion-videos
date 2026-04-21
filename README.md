@@ -21,6 +21,12 @@ npm run mv:analyze  -- --project <stem>     # 5-10 min, runs full pipeline
 
 …or drop the mp3 onto the **+ New** button in the editor — same effect, no terminal.
 
+## Adding creative elements
+
+The engine ships a 28-element library (text, audio-reactive, shapes, overlays, video). To add a NEW visual for one specific track, drop a `.tsx` file at `projects/<stem>/custom-elements/` — NOT under `src/compositions/elements/`. The renderer and editor both pick it up automatically via a generated barrel. Engine stays small; per-track creative work stays per-track.
+
+See **`projects/_plans/HOW-TO-ADD-AN-ELEMENT.md`** for the authoring contract and **`npm run mv:verify-element`** for the self-check loop.
+
 ## Linting
 
 `npm run lint` runs [Biome](https://biomejs.dev/) (`npx @biomejs/biome check .`) against the engine — it covers both linter + formatter + import-sort in a single pass, replacing ESLint and Prettier with one zero-config tool. Use `npm run lint:fix` to auto-apply safe and unsafe fixes (the `--unsafe` flag lets Biome rewrite things like `forEach` → `for…of` that ESLint would leave alone). Config lives in `biome.json` at the repo root; `node_modules`, `editor/dist`, `out/`, and `projects/` are ignored so only engine source is checked. Biome is not yet in `devDependencies`, so the first run downloads it via `npx` — add `@biomejs/biome` to `devDependencies` if you want it cached locally.

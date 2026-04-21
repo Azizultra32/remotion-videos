@@ -35,7 +35,7 @@ npm run mv:scaffold -- --audio /path/to/track.mp3 --stem my-song
 # activate the template
 mv projects/my-song/custom-elements/ExampleElement.tsx{.example,}
 
-# editor picks it up on next reload (or restart `npm run dev` in editor/)
+# editor's Vite plugin auto-reloads on file add — no restart needed
 # add to timeline via the sidebar, or write into timeline.json manually:
 #   { "type": "custom.mysong.example", "id": "...", "startSec": 0, ... }
 

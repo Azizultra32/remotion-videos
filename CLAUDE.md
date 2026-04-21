@@ -61,7 +61,7 @@ When a track needs a new visual effect, write it at `projects/<stem>/custom-elem
 - The engine never grows when you add a new creative idea for one track.
 - Your project can override an engine element for its own render by reusing the same `id` (intentional — a track can retune a primitive without forking the engine).
 - `mv:scaffold` seeds `custom-elements/` with a working `ExampleElement.tsx.example` — rename to `.tsx` to activate.
-- Restart the editor (or change the active project) to pick up new `.tsx` files.
+- The editor's Vite plugin watches `custom-elements/` and triggers a full reload automatically on add/edit/remove — no manual restart needed. Switching projects via `mv:switch` or the editor's SongPicker also reloads.
 - Contract: default-export an `ElementModule<P>` whose `id` is unique. See `src/compositions/elements/types.ts` for the type and any built-in element (e.g. `src/compositions/elements/overlays/StaticImage.tsx`) for a worked example.
 
 Engine commits become rare by design — they're reserved for truly reusable infrastructure (new hooks, new analysis, engine-level fixes), not per-track creative content.

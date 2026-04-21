@@ -1,6 +1,6 @@
 import type React from "react";
 import { Trail } from "@remotion/motion-blur";
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, interpolate, spring } from "remotion";
 import { z } from "zod";
 import type { ElementModule, ElementRendererProps } from "../types";
 
@@ -56,7 +56,7 @@ const defaults: Props = {
   mass: 1,
 };
 
-const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
+const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const {
     text,
     fontSize,
@@ -76,17 +76,19 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
     mass,
   } = element.props;
 
-  const frame = useCurrentFrame();
-  const { fps, durationInFrames } = useVideoConfig();
-
+  // Element-local values from RenderCtx (MusicVideo doesn't wrap in
+  // <Sequence>, so useCurrentFrame() would give composition-absolute).
+  const fps = ctx.fps;
+  const elementFrames = Math.max(1, Math.round(element.durationSec * fps));
+  const frame = Math.max(0, Math.min(elementFrames - 1, Math.round(ctx.elementLocalSec * fps)));
   const progress = useSpring
     ? spring({
         frame,
         fps,
         config: { damping, stiffness, mass },
-        durationInFrames,
+        durationInFrames: elementFrames,
       })
-    : interpolate(frame, [0, durationInFrames], [0, 1], {
+    : interpolate(frame, [0, elementFrames], [0, 1], {
         extrapolateRight: "clamp",
       });
 

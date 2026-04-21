@@ -1,6 +1,6 @@
 import type React from "react";
 import { Circle, Rect, Star, Triangle } from "@remotion/shapes";
-import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, interpolate } from "remotion";
 import { z } from "zod";
 import type { ElementModule, ElementRendererProps } from "../types";
 
@@ -47,7 +47,7 @@ const defaults: Props = {
   rotationsPerSec: 0,
 };
 
-const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
+const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const {
     shape,
     fillColor,
@@ -63,18 +63,31 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
     rotationsPerSec,
   } = element.props;
 
-  const frame = useCurrentFrame();
-  const { fps, durationInFrames } = useVideoConfig();
-  const localSec = frame / fps;
-  const durationSec = durationInFrames / fps;
+  // Element-local time — MusicVideo does NOT wrap elements in <Sequence>,
+  // so useCurrentFrame() returns the composition-absolute frame and
+  // useVideoConfig().durationInFrames is the whole composition's duration.
+  // The RenderCtx provides the correct element-local values already.
+  const localSec = ctx.elementLocalSec;
+  const durationSec = element.durationSec;
 
-  const fadeIn = interpolate(localSec, [0, Math.max(0.001, fadeInSec)], [0, 1], {
-    extrapolateRight: "clamp",
-  });
-  const fadeOutStart = Math.max(fadeInSec, durationSec - fadeOutSec);
-  const fadeOut = interpolate(localSec, [fadeOutStart, durationSec], [1, 0], {
-    extrapolateRight: "clamp",
-  });
+  // Guard against fadeIn/fadeOut === 0: interpolate throws on
+  // zero-length input ranges, and a 0-sec fade means "no fade" anyway.
+  const fadeIn =
+    fadeInSec <= 0
+      ? 1
+      : interpolate(localSec, [0, fadeInSec], [0, 1], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
+  const fadeOut =
+    fadeOutSec <= 0
+      ? 1
+      : interpolate(
+          localSec,
+          [Math.max(0, durationSec - fadeOutSec), durationSec],
+          [1, 0],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+        );
   const opacity = fadeIn * fadeOut;
 
   const rotationDeg = rotationsPerSec * 360 * localSec;

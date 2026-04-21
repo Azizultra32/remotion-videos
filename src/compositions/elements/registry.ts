@@ -17,6 +17,7 @@ import { GlitchShockModule } from "./overlays/GlitchShock";
 import { PlasmaBackdropModule } from "./overlays/PlasmaBackdrop";
 import { ShaderPulseModule } from "./overlays/ShaderPulse";
 import { MotionBlurTextModule } from "./overlays/MotionBlurText";
+import { SceneTransitionModule } from "./overlays/SceneTransition";
 import { VideoClipModule } from "./overlays/VideoClip";
 import { WatermarkMaskModule } from "./overlays/WatermarkMask";
 import { NeonStrokeStackModule } from "./shapes/NeonStrokeStack";
@@ -68,6 +69,7 @@ const ENGINE_ELEMENT_MODULES: ElementModule<any>[] = [
   PlasmaBackdropModule,
   SpectrumWaterfallModule,
   MotionBlurTextModule,
+  SceneTransitionModule,
   ShapeClipModule,
 ];
 
@@ -117,6 +119,7 @@ export const ELEMENT_SOURCE_PATHS: Record<string, string> = {
   "text.sliding": "src/compositions/elements/text/SlidingText.tsx",
   "text.typing": "src/compositions/elements/text/TypingText.tsx",
   "overlay.motionBlurText": "src/compositions/elements/overlays/MotionBlurText.tsx",
+  "overlay.sceneTransition": "src/compositions/elements/overlays/SceneTransition.tsx",
   "shape.shapeClip": "src/compositions/elements/shapes/ShapeClip.tsx",
 };
 

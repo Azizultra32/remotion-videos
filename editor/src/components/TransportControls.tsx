@@ -1,6 +1,7 @@
 // src/components/TransportControls.tsx
 import { useEditorStore } from "../store";
 import type { SnapMode } from "../types";
+import { redo, undo, useUndoRedoState } from "../utils/undoRedo";
 import { EventCycler } from "./EventCycler";
 import { ProjectActions } from "./ProjectActions";
 import { StageStrip } from "./StageStrip";
@@ -45,6 +46,8 @@ export const TransportControls = () => {
   const beatData = useEditorStore((s) => s.beatData);
   const snapMode = useEditorStore((s) => s.snapMode);
   const setSnapMode = useEditorStore((s) => s.setSnapMode);
+
+  const undoState = useUndoRedoState();
 
   const cycleSnapMode = () => {
     const i = SNAP_CYCLE.indexOf(snapMode);
@@ -117,6 +120,48 @@ export const TransportControls = () => {
           }}
         >
           HOME
+        </button>
+
+        {/* Undo / Redo. Keyboard equivalents: Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z.
+            Disabled state reflects the stacks; useUndoRedoState subscribes
+            to stack changes so this re-renders on push/pop. Element-level
+            history — covers adds, removes, drags, prop edits from any
+            entry point (UI, chat, CLI). */}
+        <button
+          type="button"
+          onClick={() => undo()}
+          disabled={!undoState.canUndo}
+          title="Undo (Cmd+Z) — last 50 element mutations"
+          style={{
+            padding: "4px 8px",
+            background: undoState.canUndo ? "#1a1a1a" : "#111",
+            border: `1px solid ${undoState.canUndo ? "#333" : "#222"}`,
+            borderRadius: 4,
+            color: undoState.canUndo ? "#ddd" : "#555",
+            fontSize: 11,
+            cursor: undoState.canUndo ? "pointer" : "not-allowed",
+            fontFamily: "monospace",
+          }}
+        >
+          ↶ Undo
+        </button>
+        <button
+          type="button"
+          onClick={() => redo()}
+          disabled={!undoState.canRedo}
+          title="Redo (Cmd+Shift+Z)"
+          style={{
+            padding: "4px 8px",
+            background: undoState.canRedo ? "#1a1a1a" : "#111",
+            border: `1px solid ${undoState.canRedo ? "#333" : "#222"}`,
+            borderRadius: 4,
+            color: undoState.canRedo ? "#ddd" : "#555",
+            fontSize: 11,
+            cursor: undoState.canRedo ? "pointer" : "not-allowed",
+            fontFamily: "monospace",
+          }}
+        >
+          ↷ Redo
         </button>
 
         {jumpButton("-5s", -5, "Shift+Left · jump back 5s")}

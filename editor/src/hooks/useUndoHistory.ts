@@ -20,10 +20,14 @@
 
 import { useEffect, useRef } from "react";
 import { useEditorStore } from "../store";
-import type { TimelineElement } from "../types";
 import { stemFromAudioSrc } from "../utils/url";
-
-const MAX_HISTORY = 50;
+import {
+  clearHistory,
+  isApplyingUndoRedo,
+  recordChange,
+  redo,
+  undo,
+} from "../utils/undoRedo";
 
 const isEditable = (el: EventTarget | null): boolean => {
   if (!(el instanceof HTMLElement)) return false;
@@ -33,21 +37,13 @@ const isEditable = (el: EventTarget | null): boolean => {
 };
 
 export const useUndoHistory = () => {
-  // Two stacks of element-array snapshots. Each entry is a full snapshot of
-  // store.elements at a moment in time. References are shared with the
-  // store so memory footprint is small unless elements change structurally.
-  const undoStackRef = useRef<TimelineElement[][]>([]);
-  const redoStackRef = useRef<TimelineElement[][]>([]);
-  // True while we're applying an undo/redo — skip recording so we don't
-  // treat the restore itself as a new forward action.
-  const applyingRef = useRef(false);
   const currentStemRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Record: on every elements change that isn't caused by our own undo/redo,
     // push the PREVIOUS elements onto the undo stack. Clear redo.
     const unsubRecord = useEditorStore.subscribe((state, prev) => {
-      if (applyingRef.current) return;
+      if (isApplyingUndoRedo()) return;
       if (state.elements === prev.elements) return;
       // Skip ref-different-but-content-equal setState calls. These come from
       // useTimelineSync.hydrate() echoing our own autosave back to the store
@@ -57,11 +53,7 @@ export const useUndoHistory = () => {
       // is a no-op and redo is lost. Verified via browser verification on
       // 2026-04-18.
       if (JSON.stringify(state.elements) === JSON.stringify(prev.elements)) return;
-      undoStackRef.current.push(prev.elements);
-      if (undoStackRef.current.length > MAX_HISTORY) {
-        undoStackRef.current.shift();
-      }
-      redoStackRef.current = [];
+      recordChange(prev.elements);
     });
 
     // Reset stacks on project switch.
@@ -70,8 +62,7 @@ export const useUndoHistory = () => {
       const prevStem = stemFromAudioSrc(prev.audioSrc);
       if (nextStem !== prevStem) {
         currentStemRef.current = nextStem;
-        undoStackRef.current = [];
-        redoStackRef.current = [];
+        clearHistory();
       }
     });
 
@@ -84,36 +75,6 @@ export const useUndoHistory = () => {
   }, []);
 
   useEffect(() => {
-    const applyUndo = () => {
-      const prev = undoStackRef.current.pop();
-      if (!prev) return;
-      redoStackRef.current.push(useEditorStore.getState().elements);
-      if (redoStackRef.current.length > MAX_HISTORY) {
-        redoStackRef.current.shift();
-      }
-      applyingRef.current = true;
-      try {
-        useEditorStore.setState({ elements: prev });
-      } finally {
-        applyingRef.current = false;
-      }
-    };
-
-    const applyRedo = () => {
-      const next = redoStackRef.current.pop();
-      if (!next) return;
-      undoStackRef.current.push(useEditorStore.getState().elements);
-      if (undoStackRef.current.length > MAX_HISTORY) {
-        undoStackRef.current.shift();
-      }
-      applyingRef.current = true;
-      try {
-        useEditorStore.setState({ elements: next });
-      } finally {
-        applyingRef.current = false;
-      }
-    };
-
     const onKey = (e: KeyboardEvent) => {
       if (isEditable(e.target)) return;
       const mod = e.metaKey || e.ctrlKey;
@@ -121,10 +82,10 @@ export const useUndoHistory = () => {
       const key = e.key.toLowerCase();
       if (key === "z" && !e.shiftKey) {
         e.preventDefault();
-        applyUndo();
+        undo();
       } else if ((key === "z" && e.shiftKey) || key === "y") {
         e.preventDefault();
-        applyRedo();
+        redo();
       }
     };
     window.addEventListener("keydown", onKey);

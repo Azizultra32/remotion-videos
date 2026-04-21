@@ -1,9 +1,11 @@
 // src/components/ElementDetail.tsx
 
-import { getElementModule } from "@compositions/elements/registry";
+import { getElementModule, getElementSourcePath } from "@compositions/elements/registry";
 import { useEditorStore } from "../store";
+import { stemFromAudioSrc } from "../utils/url";
 import { SchemaEditor } from "./SchemaEditor";
 import { FadeEnvelopeVisualizer } from "./FadeEnvelopeVisualizer";
+import { RawPropsEditor } from "./RawPropsEditor";
 import { SpringCurveVisualizer } from "./SpringCurveVisualizer";
 
 const fieldStyle: React.CSSProperties = {
@@ -380,6 +382,48 @@ export const ElementDetail = () => {
             />
           );
         })()}
+
+      {/*
+        Programmatic escape hatch. Shows the element's full props as JSON,
+        split into schema-managed (read-only mirror) and extra (editable).
+        Users can set props the widget panel doesn't expose by typing them
+        here — the Renderer receives them via element.props. For per-project
+        custom elements, an "Edit source" button opens the .tsx so the user
+        can promote an extra prop to a schema-backed widget.
+      */}
+      {mod && (
+        <RawPropsEditor
+          value={element.props as Record<string, unknown>}
+          schemaKeys={new Set(Object.keys(((mod.schema as unknown as { shape: Record<string, unknown> }).shape) ?? {}))}
+          elementType={element.type}
+          sourcePath={(() => {
+            // Engine elements have known paths in the registry.
+            const enginePath = getElementSourcePath(element.type);
+            if (enginePath) return enginePath;
+            // Per-project custom elements live at projects/<stem>/custom-elements/<Name>.tsx.
+            // We can't know the exact filename from the id alone, but id is
+            // conventionally `custom.<stem>.<name>` and file-stems often
+            // track the label. Best-effort guess.
+            if (element.type.startsWith("custom.")) {
+              const state = useEditorStore.getState();
+              const stem = stemFromAudioSrc(state.audioSrc);
+              if (stem) {
+                // Label → PascalCase .tsx name (scaffold convention)
+                const name = (mod.label || element.type.split(".").pop() || "Element")
+                  .replace(/[^a-zA-Z0-9]+/g, " ")
+                  .replace(/\s+/g, " ")
+                  .trim()
+                  .split(" ")
+                  .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                  .join("");
+                return `projects/${stem}/custom-elements/${name}.tsx`;
+              }
+            }
+            return null;
+          })()}
+          onChange={(next) => updateElement(element.id, { props: next })}
+        />
+      )}
     </div>
   );
 };

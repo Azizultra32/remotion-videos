@@ -66,6 +66,12 @@ When a track needs a new visual effect, write it at `projects/<stem>/custom-elem
 
 Engine commits become rare by design — they're reserved for truly reusable infrastructure (new hooks, new analysis, engine-level fixes), not per-track creative content.
 
+**One-time setup on any fresh clone (run once per clone):**
+```bash
+git config core.hooksPath scripts/hooks
+```
+This installs the barrel-pollution pre-commit guard — it rejects any commit that stages `src/compositions/elements/_generated-custom-elements.ts` with `_proj_*` identifiers (which would mean a kill-9'd `mv:render` leaked per-project imports into the engine). Without this, a naive `git add .` after a SIGKILL'd render would commit project paths into `main`. Signal handlers catch SIGINT/SIGTERM; only SIGKILL escapes them — this hook is the belt-and-braces.
+
 **Verifying element renders (two-step loop — non-negotiable for visual changes):**
 Any change that touches the elements pipeline (a new custom element, a registry edit, a barrel-generator change, an alias tweak, an editor Vite-plugin change) must end with this loop before the task is reported complete:
 

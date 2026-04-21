@@ -21,30 +21,48 @@ type SafeRenderProps = {
 };
 class SafeElement extends React.Component<
   SafeRenderProps,
-  { hasError: boolean; lastSig: string }
+  { hasError: boolean; lastSig: string; errorFrame: number }
 > {
-  // hasError is reset whenever the element identity or its prop snapshot
-  // changes. Without this, a transient throw at frame N (e.g. audio data
-  // not yet loaded) latches the element to "render null" for the rest of
-  // its active window. Resetting on prop-sig change lets the next frame
-  // try again — the worst case is repeated throws, which is what the
-  // user wanted anyway: see the actual breakage, not a quiet black box.
-  state = { hasError: false, lastSig: "" };
+  // hasError resets on TWO triggers so transient failures self-heal:
+  //   (1) element identity or prop snapshot changes → definite new input
+  //   (2) enough frames have passed since the last throw (~1s at fps) →
+  //       the throw might have been a ctx timing issue (beats not yet
+  //       loaded, audio decoder warming up, useFFT first-frame race).
+  //
+  // We don't include ctx.frame in the sig because ctx changes every
+  // frame, which would pop hasError immediately — defeats the boundary.
+  // We don't include all of ctx's audio-data fields either: beats[] only
+  // populates after an async fetch, so "beats unavailable" is the most
+  // common transient. The 1-second retry window is the right grain.
+  state = { hasError: false, lastSig: "", errorFrame: -1 };
   static getDerivedStateFromError() {
     return { hasError: true };
   }
   static getDerivedStateFromProps(
     props: SafeRenderProps,
-    state: { hasError: boolean; lastSig: string },
+    state: { hasError: boolean; lastSig: string; errorFrame: number },
   ) {
     const sig = `${props.elementId}|${JSON.stringify(props.element.props)}`;
-    if (sig !== state.lastSig) return { hasError: false, lastSig: sig };
+    if (sig !== state.lastSig) {
+      return { hasError: false, lastSig: sig, errorFrame: -1 };
+    }
+    if (state.hasError && state.errorFrame >= 0) {
+      const framesSinceError = props.ctx.frame - state.errorFrame;
+      const retryWindow = Math.max(1, Math.round(props.ctx.fps));
+      if (framesSinceError >= retryWindow) {
+        return { hasError: false, lastSig: state.lastSig, errorFrame: -1 };
+      }
+    }
     return null;
   }
   componentDidCatch(err: Error) {
+    // Record the frame we caught on so the retry window starts here
+    // rather than at frame 0. setState is safe inside componentDidCatch
+    // even after getDerivedStateFromError has already fired.
+    this.setState({ errorFrame: this.props.ctx.frame });
     // eslint-disable-next-line no-console
     console.warn(
-      `[MusicVideo] element ${this.props.elementId} (${this.props.elementType}) threw: ${err.message}`,
+      `[MusicVideo] element ${this.props.elementId} (${this.props.elementType}) threw at frame ${this.props.ctx.frame}: ${err.message}`,
     );
   }
   render() {

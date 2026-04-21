@@ -52,7 +52,7 @@ const TEST_STEM = process.env.MV_VERIFY_STEM || "dubfire-short";
 const TEST_ELEMENT_FILE = "VerifyElementRender.tsx";
 const TEST_ELEMENT_ID = "custom.verify.element.render";
 const STILL_OUT = "/tmp/verify-element-render.png";
-const STILL_MIN_BYTES = 2000; // black 848x480 PNG ≈ 1.1KB; magenta one ≈ 8KB
+const STILL_MIN_BYTES = 3000; // black 848x480 PNG ≈ 1.1KB; magenta observed ≈ 8KB. 3KB leaves margin for libpng/OS drift (agent review 2026-04-20).
 
 const fail = (msg: string): never => {
   console.error(`FAIL: ${msg}`);
@@ -204,10 +204,17 @@ const main = (): void => {
   ok("barrel reset to empty stub");
 
   // --- Step 5: tracked stub on disk matches the generator's reset output ---
+  // Hard-fail if HEAD lacks the barrel file. Previously this path silently
+  // passed when `git show HEAD:<barrel>` returned non-zero (pre-commit
+  // repo, renamed file, filter drift). Agent review 2026-04-20 flagged
+  // "sometimes doesn't actually assert anything" — now it does.
   const headOutput = spawnSync("git", ["show", `HEAD:${BARREL_PATH_FROM_REPO_ROOT}`], {
     cwd: REPO, encoding: "utf8",
   });
-  if (headOutput.status === 0 && headOutput.stdout !== afterReset) {
+  if (headOutput.status !== 0) {
+    fail(`git show HEAD:${BARREL_PATH_FROM_REPO_ROOT} returned ${headOutput.status} — barrel not in HEAD; cannot verify tracked-stub identity`);
+  }
+  if (headOutput.stdout !== afterReset) {
     fail(`tracked stub != generator's reset output → every render leaves working tree dirty`);
   }
   ok("tracked stub matches generator output (clean git status after render)");

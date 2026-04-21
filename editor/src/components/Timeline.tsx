@@ -135,6 +135,23 @@ export const Timeline = () => {
     });
   }, []);
 
+  // Explicit toolbar buttons. Gestures (wheel pan, ctrl-wheel zoom,
+  // keyboard +/-/0) are all wired, but users coming from different
+  // DAW conventions get confused — buttons always work. Placed as a
+  // sticky strip at the top of the Timeline scroll view so they're
+  // always in reach without looking for shortcuts.
+  const tbBtn: React.CSSProperties = {
+    padding: "3px 8px",
+    background: "#1a1a1a",
+    border: "1px solid #333",
+    borderRadius: 3,
+    color: "#ddd",
+    fontSize: 10,
+    cursor: "pointer",
+    fontFamily: "monospace",
+    minWidth: 36,
+  };
+
   return (
     <div
       ref={scrollRef}
@@ -143,6 +160,77 @@ export const Timeline = () => {
       onPointerEnter={surfaceHandlers.onPointerEnter}
       onPointerLeave={surfaceHandlers.onPointerLeave}
     >
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          left: 0,
+          zIndex: 5,
+          display: "flex",
+          gap: 4,
+          padding: "4px 8px",
+          background: "#101010",
+          borderBottom: "1px solid #222",
+          fontFamily: "monospace",
+          fontSize: 10,
+          color: "#aaa",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setTimelineView({ offsetSec: 0 })}
+          title="Pan view to 0:00"
+          style={tbBtn}
+        >
+          ⏮ START
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomByCenter(1 / 1.5)}
+          title="Zoom out (−)"
+          style={tbBtn}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const scroller = scrollRef.current;
+            const barsPx = Math.max(1, (scroller?.clientWidth ?? 1000) - GUTTER_WIDTH);
+            const fit = compositionDuration / barsPx;
+            setTimelineView({ secPerPx: fit, offsetSec: 0 });
+          }}
+          title="Fit whole composition in view (0)"
+          style={tbBtn}
+        >
+          ⊡ FIT
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomByCenter(1.5)}
+          title="Zoom in (+)"
+          style={tbBtn}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const scroller = scrollRef.current;
+            const barsPx = Math.max(1, (scroller?.clientWidth ?? 1000) - GUTTER_WIDTH);
+            const viewSec = barsPx * effectiveSecPerPx;
+            setTimelineView({ offsetSec: Math.max(0, compositionDuration - viewSec) });
+          }}
+          title="Pan view to end"
+          style={tbBtn}
+        >
+          END ⏭
+        </button>
+        <div style={{ flex: 1 }} />
+        <span style={{ alignSelf: "center" }}>
+          offset {offsetSec.toFixed(1)}s · {pxPerSec.toFixed(0)} px/s
+        </span>
+      </div>
       <div style={{ position: "relative", width: GUTTER_WIDTH + widthPx, minHeight: "100%" }}>
         {/* Ruler row — sticky left corner + scrolling ticks */}
         <div

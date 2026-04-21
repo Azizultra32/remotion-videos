@@ -9,6 +9,7 @@
 // Lives inside editor/ but shells out from the repo root.
 
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   createWriteStream,
   type FSWatcher,
@@ -32,12 +33,19 @@ import {
   resolveProjectsDir,
   syncStaticProjectsSymlink,
 } from "../scripts/cli/paths";
-import type { AssetEntry, AssetKind } from "./src/types/assets";
+import type {
+  AssetDeleteRequest,
+  AssetDeleteResponse,
+  AssetEntry,
+  AssetFolderDescriptor,
+  AssetKind,
+} from "./src/types/assets";
 import { parseEventsFile, serializeEventsFile } from "./src/utils/eventsFile";
 import { stemFromAudioSrc } from "./src/utils/url";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(REPO_ROOT, "out");
+const ASSET_THUMB_DIR = path.join(OUT_DIR, "asset-thumbs");
 // PROJECTS_DIR honours process.env.MV_PROJECTS_DIR (expanded and absolute-
 // resolved); falls back to <engine>/projects for the default experience.
 // The engine repo no longer tracks project content, so on fresh clones
@@ -448,6 +456,270 @@ const assetDirForKind = (kind: AssetKind): "images" | "gifs" | "videos" => {
   }
 };
 
+const assetIdForPath = (assetPath: string): string =>
+  createHash("sha1").update(assetPath).digest("hex").slice(0, 16);
+
+const assetOriginalUrlForPath = (assetPath: string): string =>
+  assetPath.startsWith("assets/")
+    ? `/${assetPath}`
+    : `/api/projects/${assetPath.replace(/^projects\//, "")}`;
+
+const assetThumbnailUrlForPath = (assetPath: string, kind: AssetKind): string | null =>
+  kind === "gif" ? `/api/assets/thumb?path=${encodeURIComponent(assetPath)}` : null;
+
+const buildAssetFolderDescriptor = (directory: string): AssetFolderDescriptor => {
+  const normalizedDirectory = directory === "." ? "" : directory.replace(/^\/+/, "");
+  const segments = normalizedDirectory ? normalizedDirectory.split("/") : [];
+  return {
+    id: assetIdForPath(`folder:${normalizedDirectory}`),
+    path: normalizedDirectory,
+    name: segments[segments.length - 1] ?? "",
+    segments,
+  };
+};
+
+const buildAssetEntry = (params: {
+  path: string;
+  scope: "global" | "project";
+  stem: string | null;
+  kind: AssetKind;
+  size: number;
+  mtime: number;
+}): AssetEntry => {
+  const normalizedPath = params.path.replace(/^\/+/, "");
+  const filename = path.posix.basename(normalizedPath);
+  const extension = path.posix.extname(filename).toLowerCase();
+  const basename = extension ? filename.slice(0, -extension.length) : filename;
+  const directory = path.posix.dirname(normalizedPath);
+  const originalUrl = assetOriginalUrlForPath(normalizedPath);
+  const thumbnailUrl = assetThumbnailUrlForPath(normalizedPath, params.kind);
+  return {
+    id: assetIdForPath(normalizedPath),
+    path: normalizedPath,
+    filename,
+    label: filename,
+    basename,
+    extension,
+    directory,
+    folder: buildAssetFolderDescriptor(directory),
+    scope: params.scope,
+    stem: params.stem,
+    kind: params.kind,
+    size: params.size,
+    mtime: params.mtime,
+    urls: {
+      original: originalUrl,
+      preview: thumbnailUrl ?? originalUrl,
+      thumbnail: thumbnailUrl,
+    },
+    capabilities: {
+      canDelete: true,
+      canPreview: true,
+      canReferenceByPath: true,
+    },
+  };
+};
+
+const isPathWithinRoot = (candidatePath: string, rootPath: string): boolean => {
+  const rel = path.relative(rootPath, candidatePath);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+};
+
+const resolveAssetFsTarget = (
+  assetPath: string,
+): { rel: string; fullPath: string; boundaryRoot: string } | null => {
+  const rel = assetPath.replace(/^\/+/, "");
+  if (
+    !rel ||
+    rel.includes("\0") ||
+    rel.includes("\\") ||
+    rel.split("/").some((seg) => seg === "" || seg === "." || seg === "..")
+  ) {
+    return null;
+  }
+
+  if (rel.startsWith("assets/")) {
+    const boundaryRoot = path.resolve(_PUBLIC_DIR, "assets");
+    const fullPath = path.resolve(boundaryRoot, rel.slice("assets/".length));
+    return isPathWithinRoot(fullPath, boundaryRoot) ? { rel, fullPath, boundaryRoot } : null;
+  }
+
+  if (rel.startsWith("projects/")) {
+    const boundaryRoot = path.resolve(PROJECTS_DIR);
+    const fullPath = path.resolve(boundaryRoot, rel.slice("projects/".length));
+    return isPathWithinRoot(fullPath, boundaryRoot) ? { rel, fullPath, boundaryRoot } : null;
+  }
+
+  return null;
+};
+
+const readRegularFile = async (fullPath: string): Promise<Buffer | null> => {
+  let st: import("node:fs").Stats;
+  try {
+    st = await fs.lstat(fullPath);
+  } catch {
+    return null;
+  }
+  if (st.isSymbolicLink() || !st.isFile()) return null;
+  try {
+    return await fs.readFile(fullPath);
+  } catch {
+    return null;
+  }
+};
+
+const hasSymlinkWithinRoot = async (fullPath: string, boundaryRoot: string): Promise<boolean> => {
+  const rel = path.relative(boundaryRoot, fullPath);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return true;
+
+  let cursor = boundaryRoot;
+  for (const segment of rel.split(path.sep)) {
+    cursor = path.join(cursor, segment);
+    let st: import("node:fs").Stats;
+    try {
+      st = await fs.lstat(cursor);
+    } catch {
+      return true;
+    }
+    if (st.isSymbolicLink()) return true;
+  }
+
+  return false;
+};
+
+const resolveAssetFileFromEditorPath = async (
+  assetPath: string,
+): Promise<{ fullPath: string; kind: AssetKind; mtimeMs: number } | null> => {
+  const target = resolveAssetFsTarget(assetPath);
+  if (!target) return null;
+
+  const kind = kindFromFilename(target.rel.split("/").pop() ?? "");
+  if (!kind) return null;
+
+  let realBoundaryRoot: string;
+  try {
+    realBoundaryRoot = await fs.realpath(target.boundaryRoot);
+  } catch {
+    return null;
+  }
+
+  // Reject symlinks at the leaf and any symlinked parent path that resolves
+  // outside the allowed boundary. lstat() only protects the final path
+  // component, so we also realpath() the parent/file to catch traversal via
+  // directories such as public/assets/foo -> /etc.
+  let st: import("node:fs").Stats;
+  try {
+    st = await fs.lstat(target.fullPath);
+  } catch {
+    return null;
+  }
+  if (st.isSymbolicLink()) return null;
+  if (!st.isFile()) return null;
+  if (await hasSymlinkWithinRoot(target.fullPath, target.boundaryRoot)) return null;
+
+  const realParentPath = await fs.realpath(path.dirname(target.fullPath)).catch(() => null);
+  if (!realParentPath || !isPathWithinRoot(realParentPath, realBoundaryRoot)) return null;
+
+  const realFullPath = await fs.realpath(target.fullPath).catch(() => null);
+  if (!realFullPath || !isPathWithinRoot(realFullPath, realBoundaryRoot)) return null;
+
+  return { fullPath: target.fullPath, kind, mtimeMs: st.mtimeMs };
+};
+
+const sendGifThumbnailFallback = async (
+  res: ServerResponse,
+  fullPath: string,
+): Promise<void> => {
+  const gif = await readRegularFile(fullPath);
+  if (!gif) {
+    res.statusCode = 404;
+    res.end("not found");
+    return;
+  }
+
+  res.setHeader("Content-Type", "image/gif");
+  res.setHeader("Content-Length", String(gif.length));
+  res.setHeader("Cache-Control", "private, max-age=60");
+  res.setHeader("X-Asset-Thumb-Fallback", "original-gif");
+  res.end(gif);
+};
+
+const handleAssetThumb = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const assetPath = url.searchParams.get("path") ?? "";
+  const resolved = await resolveAssetFileFromEditorPath(assetPath);
+  if (!resolved) {
+    res.statusCode = 404;
+    res.end("not found");
+    return;
+  }
+  if (resolved.kind !== "gif") {
+    res.statusCode = 400;
+    res.end("thumbnail only supported for gif assets");
+    return;
+  }
+
+  const cacheKey = createHash("sha1")
+    .update(`${assetPath}:${resolved.mtimeMs}`)
+    .digest("hex");
+  const cacheFile = path.join(ASSET_THUMB_DIR, `${cacheKey}.png`);
+
+  let png = await readRegularFile(cacheFile);
+  try {
+    await fs.mkdir(ASSET_THUMB_DIR, { recursive: true });
+  } catch {
+    // Fall back to the original GIF when we cannot create/read the cache dir.
+    await sendGifThumbnailFallback(res, resolved.fullPath);
+    return;
+  }
+
+  if (!png) {
+    const tmpFile = `${cacheFile}.tmp-${process.pid}-${Date.now()}.png`;
+    const ff = spawnSync(
+      "ffmpeg",
+      [
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        resolved.fullPath,
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=320:-1:force_original_aspect_ratio=decrease",
+        tmpFile,
+      ],
+      {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      },
+    );
+
+    if (ff.status !== 0) {
+      await fs.unlink(tmpFile).catch(() => {});
+      await sendGifThumbnailFallback(res, resolved.fullPath);
+      return;
+    }
+
+    try {
+      await fs.rename(tmpFile, cacheFile);
+    } catch {
+      await fs.unlink(tmpFile).catch(() => {});
+    }
+
+    png = await readRegularFile(cacheFile);
+    if (!png) {
+      await sendGifThumbnailFallback(res, resolved.fullPath);
+      return;
+    }
+  }
+
+  res.setHeader("Content-Type", "image/png");
+  res.setHeader("Content-Length", String(png.length));
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.end(png);
+};
+
 const handleAssetsList = async (
   _req: IncomingMessage,
   res: ServerResponse,
@@ -486,14 +758,15 @@ const handleAssetsList = async (
       if (!lst.isFile()) continue;
       const kind = kindFromFilename(d.name);
       if (!kind) continue;
-      entries.push({
-        path: rel.replace(/^\/+/, ""),
+      const normalizedRel = rel.replace(/^\/+/, "");
+      entries.push(buildAssetEntry({
+        path: normalizedRel,
         scope,
         stem,
         kind,
         size: lst.size,
         mtime: lst.mtimeMs,
-      });
+      }));
     }
   };
 
@@ -522,21 +795,40 @@ const handleAssetsList = async (
           if (!kind) continue;
           try {
             const st = await fs.stat(path.join(PROJECTS_DIR, d.name, f.name));
-            entries.push({
-              path: `projects/${d.name}/${f.name}`,
+            const loosePath = `projects/${d.name}/${f.name}`;
+            entries.push(buildAssetEntry({
+              path: loosePath,
               scope: "project",
               stem: d.name,
               kind,
               size: st.size,
               mtime: st.mtimeMs,
-            });
+            }));
           } catch { /* skip */ }
         }
       } catch { /* no project dir */ }
     }
   } catch { /* no projects dir */ }
 
-  entries.sort((a, b) => {
+  const dedupedEntries = new Map<string, AssetEntry>();
+  for (const entry of entries) {
+    const dedupeKey =
+      entry.kind === "gif" ? entry.path.replace(/\/images\//, "/gifs/") : entry.path;
+    const existing = dedupedEntries.get(dedupeKey);
+    if (!existing) {
+      dedupedEntries.set(dedupeKey, entry);
+      continue;
+    }
+    const entryCanonicalGif = entry.kind === "gif" && /\/gifs\//.test(entry.path);
+    const existingCanonicalGif = existing.kind === "gif" && /\/gifs\//.test(existing.path);
+    if (entryCanonicalGif && !existingCanonicalGif) {
+      dedupedEntries.set(dedupeKey, entry);
+    }
+  }
+
+  const finalEntries = Array.from(dedupedEntries.values());
+
+  finalEntries.sort((a, b) => {
     if (a.scope !== b.scope) return a.scope === "global" ? -1 : 1;
     if (a.kind !== b.kind) {
       const order: Record<AssetKind, number> = { image: 0, gif: 1, video: 2 };
@@ -547,7 +839,7 @@ const handleAssetsList = async (
 
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
-  res.end(JSON.stringify(entries));
+  res.end(JSON.stringify(finalEntries));
 };
 
 
@@ -749,7 +1041,7 @@ const handleAssetsUpload = async (
     return;
   }
 
-  const entry: AssetEntry = {
+  const entry = buildAssetEntry({
     path:
       scope === "project" && stemParam
         ? `projects/${stemParam}/${assetDirForKind(kind)}/${sanitized.filename}`
@@ -759,10 +1051,51 @@ const handleAssetsUpload = async (
     kind,
     size: upload.body.length,
     mtime: Date.now(),
-  };
+  });
   res.statusCode = 201;
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify(entry));
+};
+
+const handleAssetsDelete = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const body = (await readJsonBody(req).catch(() => null)) as AssetDeleteRequest | null;
+  const assetPath = typeof body?.path === "string" ? body.path : "";
+  if (!assetPath) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "missing-path" }));
+    return;
+  }
+
+  const resolved = await resolveAssetFileFromEditorPath(assetPath);
+  if (!resolved) {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "asset-not-found", path: assetPath }));
+    return;
+  }
+
+  try {
+    await fs.unlink(resolved.fullPath);
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "delete-failed", detail: String(err), path: assetPath }));
+    return;
+  }
+
+  res.setHeader("Content-Type", "application/json");
+  const normalizedPath = assetPath.replace(/^\/+/, "");
+  const response: AssetDeleteResponse = {
+    ok: true,
+    id: assetIdForPath(normalizedPath),
+    path: normalizedPath,
+    deletedAt: Date.now(),
+  };
+  res.end(JSON.stringify(response));
 };
 
 // ---------------------------------------------------------------------------
@@ -2944,7 +3277,9 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/chat-history/", wrap("GET", handleChatHistoryGet));
     server.middlewares.use("/api/timeline/watch/", wrap("GET", handleTimelineWatch));
     server.middlewares.use("/api/assets/list", wrap("GET", handleAssetsList));
+    server.middlewares.use("/api/assets/thumb", wrap("GET", handleAssetThumb));
     server.middlewares.use("/api/assets/upload", wrap("POST", handleAssetsUpload));
+    server.middlewares.use("/api/assets/delete", wrap("POST", handleAssetsDelete));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
     server.middlewares.use("/api/storyboard/save", wrap("POST", handleStoryboardSave));
     server.middlewares.use("/api/storyboard/", wrap("GET", handleStoryboardGet));

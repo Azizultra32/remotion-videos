@@ -13,12 +13,25 @@
 // is false. The wire value stays scope: "global" (truthful — visible to
 // every project); the UI label is "Library".
 
-import { ELEMENT_REGISTRY } from "@compositions/elements/registry";
+import { ELEMENT_MODULES, ELEMENT_REGISTRY } from "@compositions/elements/registry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEditorStore } from "../store";
 import {
+  applyAssetToModuleProps,
+  assetKindLabel,
+  assetPreviewUrlFor,
+  assetScopeLabel,
+  assetUrlFor,
+  describeMediaFieldAction,
+  filterAndSortAssets,
+  findMediaFieldsForKind,
+  formatAssetBytes,
+  formatAssetDuration,
+  mediaFieldLabel,
+  moduleIdForAssetKind,
   seededPropsForModuleAsset,
   type AssetKind,
+  type AssetSortMode,
   type EditorAssetEntry as AssetEntry,
 } from "../utils/assets";
 import type { TimelineElement } from "../types";
@@ -36,25 +49,361 @@ const VIDEO_MODULE_ID = "overlay.speedVideo";
 
 const newId = () => `el-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-const urlFor = (e: AssetEntry): string =>
-  e.path.startsWith("assets/") ? `/${e.path}` : `/api/projects/${e.path.replace(/^projects\//, "")}`;
-
-const kbLabel = (bytes: number): string =>
-  bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(0)} KB`;
-
-const durationLabel = (sec: number): string => {
-  if (!Number.isFinite(sec) || sec <= 0) return "";
-  if (sec < 10) return `${sec.toFixed(1)}s`;
-  if (sec < 60) return `${Math.round(sec)}s`;
-  const mins = Math.floor(sec / 60);
-  const rem = Math.round(sec % 60).toString().padStart(2, "0");
-  return `${mins}:${rem}`;
+const countAssetReferences = (
+  elements: readonly TimelineElement[],
+  assetPath: string,
+): number => {
+  let count = 0;
+  for (const element of elements) {
+    for (const value of Object.values(element.props ?? {})) {
+      if (value === assetPath) {
+        count += 1;
+        continue;
+      }
+      if (Array.isArray(value) && value.includes(assetPath)) {
+        count += 1;
+      }
+    }
+  }
+  return count;
 };
 
 type AssetPreviewMeta = {
   width?: number;
   height?: number;
   durationSec?: number;
+};
+
+type AssetModuleAction = {
+  moduleId: string;
+  label: string;
+  description: string;
+  multi: boolean;
+};
+
+type SelectedElementAssetTarget = {
+  name: string;
+  fieldName: string;
+  label: string;
+  multi: boolean;
+  alreadyHasAsset: boolean;
+};
+
+const compatibleModulesByKind: Record<AssetKind, AssetModuleAction[]> = (() => {
+  const out: Record<AssetKind, AssetModuleAction[]> = {
+    image: [],
+    gif: [],
+    video: [],
+  };
+
+  for (const mod of ELEMENT_MODULES) {
+    const seenKinds = new Set<AssetKind>();
+    for (const field of mod.mediaFields ?? []) {
+      const kind = field.kind as AssetKind;
+      if (seenKinds.has(kind)) continue;
+      seenKinds.add(kind);
+      out[kind].push({
+        moduleId: mod.id,
+        label: mod.label,
+        description: mod.description,
+        multi: Boolean(field.multi),
+      });
+    }
+  }
+
+  for (const kind of Object.keys(out) as AssetKind[]) {
+    const defaultModuleId = moduleIdForAssetKind(kind);
+    out[kind].sort((a, b) => {
+      if (a.moduleId === defaultModuleId && b.moduleId !== defaultModuleId) return -1;
+      if (b.moduleId === defaultModuleId && a.moduleId !== defaultModuleId) return 1;
+      if (a.multi !== b.multi) return a.multi ? 1 : -1;
+      return a.label.localeCompare(b.label);
+    });
+  }
+
+  return out;
+})();
+
+const AssetUseModal = ({
+  asset,
+  modules,
+  usageCount,
+  selectedElementLabel,
+  selectedElementTargets,
+  onAddModule,
+  onApplySelected,
+  onCopyPath,
+  onDeleteAsset,
+  onClose,
+}: {
+  asset: AssetEntry;
+  modules: readonly AssetModuleAction[];
+  usageCount: number;
+  selectedElementLabel: string | null;
+  selectedElementTargets: readonly SelectedElementAssetTarget[];
+  onAddModule: (moduleId: string) => void;
+  onApplySelected: (fieldName: string) => void;
+  onCopyPath: () => void;
+  onDeleteAsset: () => void;
+  onClose: () => void;
+}) => {
+  const previewUrl = assetPreviewUrlFor(asset);
+  const hasSelectedElementTargets = selectedElementTargets.length > 0;
+
+  return (
+    <div
+      onClick={(ev) => {
+        if (ev.target === ev.currentTarget) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.78)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 600,
+      }}
+    >
+      <div
+        style={{
+          width: "min(760px, 94vw)",
+          maxHeight: "88vh",
+          overflowY: "auto",
+          background: "#0f1013",
+          border: "1px solid #2b3340",
+          borderRadius: 8,
+          boxShadow: "0 22px 80px rgba(0,0,0,0.55)",
+        }}
+      >
+        <div
+          style={{
+            padding: "12px 14px",
+            borderBottom: "1px solid #252c36",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <div style={{ fontSize: 11, color: "#7f8ba0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            Use {assetKindLabel(asset.kind)}
+          </div>
+          <div style={{ color: "#d8dfeb", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {asset.label}
+          </div>
+          <div style={{ flex: 1 }} />
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: "4px 8px",
+              background: "#1a1d23",
+              border: "1px solid #313846",
+              borderRadius: 4,
+              color: "#d3d9e2",
+              fontSize: 11,
+              cursor: "pointer",
+            }}
+          >
+            Close
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "220px minmax(0, 1fr)",
+            gap: 14,
+            padding: 14,
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div
+              style={{
+                background: "#050608",
+                border: "1px solid #232a34",
+                borderRadius: 8,
+                overflow: "hidden",
+                aspectRatio: "1 / 1",
+              }}
+            >
+              {asset.kind === "video" ? (
+                <video
+                  src={previewUrl}
+                  muted
+                  preload="metadata"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <img
+                  src={previewUrl}
+                  alt={asset.path}
+                  onError={(ev) => {
+                    const img = ev.currentTarget;
+                    if (asset.kind === "gif" && img.src !== assetUrlFor(asset)) {
+                      img.src = assetUrlFor(asset);
+                    }
+                  }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              )}
+            </div>
+            <div
+              style={{
+                background: "#12161c",
+                border: "1px solid #232a34",
+                borderRadius: 6,
+                padding: "9px 10px",
+                fontSize: 10,
+                color: "#94a0b4",
+                lineHeight: 1.5,
+              }}
+            >
+              <div><strong style={{ color: "#eef2f7" }}>Kind:</strong> {assetKindLabel(asset.kind)}</div>
+              <div><strong style={{ color: "#eef2f7" }}>Scope:</strong> {assetScopeLabel(asset.scope, asset.stem)}</div>
+              <div><strong style={{ color: "#eef2f7" }}>Used in timeline:</strong> {usageCount}</div>
+              <div style={{ wordBreak: "break-word" }}>
+                <strong style={{ color: "#eef2f7" }}>Path:</strong> {asset.path}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={onCopyPath}
+                style={{
+                  flex: 1,
+                  padding: "7px 10px",
+                  background: "#1a1d23",
+                  border: "1px solid #2f3948",
+                  borderRadius: 5,
+                  color: "#d7dce6",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                Copy Path
+              </button>
+              <button
+                type="button"
+                onClick={onDeleteAsset}
+                style={{
+                  padding: "7px 10px",
+                  background: "#3a1717",
+                  border: "1px solid #7a3030",
+                  borderRadius: 5,
+                  color: "#ffd7d7",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div
+              style={{
+                background: "#11161d",
+                border: "1px solid #242c37",
+                borderRadius: 8,
+                padding: 12,
+              }}
+            >
+              <div style={{ fontSize: 11, color: "#dce4ef", fontWeight: 700, marginBottom: 8 }}>
+                Selected Element
+              </div>
+              {selectedElementLabel ? (
+                <>
+                  <div style={{ fontSize: 11, color: "#91a0b6", marginBottom: 10 }}>
+                    {selectedElementLabel}
+                  </div>
+                  {hasSelectedElementTargets ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {selectedElementTargets.map((target) => (
+                        <button
+                          key={target.fieldName}
+                          type="button"
+                          onClick={() => onApplySelected(target.fieldName)}
+                          disabled={target.alreadyHasAsset}
+                          style={{
+                            padding: "8px 10px",
+                            background: target.alreadyHasAsset ? "#1b2128" : "#1f4a2b",
+                            border: `1px solid ${target.alreadyHasAsset ? "#313943" : "#2e7b48"}`,
+                            borderRadius: 5,
+                            color: target.alreadyHasAsset ? "#7f8a98" : "#dff7e7",
+                            fontSize: 11,
+                            cursor: target.alreadyHasAsset ? "not-allowed" : "pointer",
+                            textAlign: "left",
+                          }}
+                        >
+                          <div style={{ fontWeight: 700 }}>
+                            {target.alreadyHasAsset ? `${target.label} already contains this asset` : describeMediaFieldAction(target)}
+                          </div>
+                          <div style={{ fontSize: 10, color: target.alreadyHasAsset ? "#6f7b8a" : "#b7d8c2", marginTop: 3 }}>
+                            {target.multi
+                              ? "Adds this asset to the selected element without removing existing media."
+                              : "Replaces the selected element's current media path."}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 10, color: "#728094" }}>
+                      The selected element does not accept {assetKindLabel(asset.kind)} media.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ fontSize: 10, color: "#728094" }}>
+                  No element selected. Choose one on the timeline if you want to replace or append media directly.
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                background: "#11161d",
+                border: "1px solid #242c37",
+                borderRadius: 8,
+                padding: 12,
+              }}
+            >
+              <div style={{ fontSize: 11, color: "#dce4ef", fontWeight: 700, marginBottom: 8 }}>
+                Add New Element
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {modules.map((moduleAction) => (
+                  <button
+                    key={moduleAction.moduleId}
+                    type="button"
+                    onClick={() => onAddModule(moduleAction.moduleId)}
+                    style={{
+                      padding: "9px 10px",
+                      background: "#171d25",
+                      border: "1px solid #2d3643",
+                      borderRadius: 6,
+                      color: "#e7edf6",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <div style={{ fontSize: 11, fontWeight: 700 }}>
+                      Add as {moduleAction.label}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#8e9aaf", marginTop: 3 }}>
+                      {moduleAction.description}
+                      {moduleAction.multi ? " Appends this asset to a list-based media field." : ""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // Cheap content hash over the entries list. We only need to notice when the
@@ -93,7 +442,7 @@ const useAssetPreviewMeta = (entries: AssetEntry[] | null) => {
     let cancelled = false;
     for (const entry of entries) {
       if (metaMap[entry.path]) continue;
-      const src = urlFor(entry);
+      const src = assetUrlFor(entry);
       if (entry.kind === "video") {
         const video = document.createElement("video");
         video.preload = "metadata";
@@ -117,9 +466,9 @@ const useAssetPreviewMeta = (entries: AssetEntry[] | null) => {
           if (cancelled) return;
           setMetaMap((prev) => (prev[entry.path] ? prev : { ...prev, [entry.path]: {} }));
         };
-      } else {
+      } else if (entry.kind === "image" || entry.kind === "gif") {
         const img = new Image();
-        img.src = src;
+        img.src = assetPreviewUrlFor(entry);
         img.onload = () => {
           if (cancelled) return;
           setMetaMap((prev) => (
@@ -155,11 +504,20 @@ export const AssetLibrary = () => {
   const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">("all");
   const [kindFilter, setKindFilter] = useState<"all" | AssetKind>("all");
   const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<AssetSortMode>("recent");
   const [importScope, setImportScope] = useState<"global" | "project">("global");
+  const [actionAsset, setActionAsset] = useState<AssetEntry | null>(null);
   const prevHashRef = useRef<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const currentStem = useEditorStore((s) => stemFromAudioSrc(s.audioSrc));
+  const selectedElementId = useEditorStore((s) => s.selectedElementId);
+  const elements = useEditorStore((s) => s.elements);
   const metaMap = useAssetPreviewMeta(entries);
+  const selectedElement = useMemo(
+    () => elements.find((element) => element.id === selectedElementId) ?? null,
+    [elements, selectedElementId],
+  );
+  const selectedModule = selectedElement ? ELEMENT_REGISTRY[selectedElement.type] ?? null : null;
 
   useEffect(() => {
     if (!currentStem && importScope === "project") setImportScope("global");
@@ -215,14 +573,13 @@ export const AssetLibrary = () => {
 
   const filtered = useMemo(() => {
     if (!entries) return [];
-    const q = search.toLowerCase();
-    return entries.filter((e) => {
-      if (scopeFilter !== "all" && e.scope !== scopeFilter) return false;
-      if (kindFilter !== "all" && e.kind !== kindFilter) return false;
-      if (q && !e.path.toLowerCase().includes(q)) return false;
-      return true;
+    return filterAndSortAssets(entries, {
+      kind: kindFilter,
+      scope: scopeFilter,
+      search,
+      sort: sortMode,
     });
-  }, [entries, scopeFilter, kindFilter, search]);
+  }, [entries, kindFilter, scopeFilter, search, sortMode]);
 
   const counts = useMemo(() => {
     const source = entries ?? [];
@@ -237,6 +594,29 @@ export const AssetLibrary = () => {
     );
   }, [entries]);
 
+  const assetUsageCounts = useMemo(() => {
+    const next: Record<string, number> = {};
+    for (const element of elements) {
+      for (const value of Object.values(element.props ?? {})) {
+        if (typeof value === "string") {
+          next[value] = (next[value] ?? 0) + 1;
+          continue;
+        }
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            if (typeof item === "string") next[item] = (next[item] ?? 0) + 1;
+          }
+        }
+      }
+    }
+    return next;
+  }, [elements]);
+
+  const selectedElementCompatibleKinds = useMemo(
+    () => new Set((selectedModule?.mediaFields ?? []).map((field) => field.kind as AssetKind)),
+    [selectedModule],
+  );
+
   const addElementForAsset = (e: AssetEntry) => {
     const state = useEditorStore.getState();
     const insertion = resolveAssetInsertion(e);
@@ -248,7 +628,7 @@ export const AssetLibrary = () => {
     }
     const el: TimelineElement = {
       id: newId(),
-      label: `${mod.label}: ${e.path.split("/").pop()}`,
+      label: `${mod.label}: ${e.label}`,
       type: mod.id,
       trackIndex: mod.defaultTrack,
       startSec: Math.max(0, state.currentTimeSec),
@@ -267,10 +647,80 @@ export const AssetLibrary = () => {
     }
   };
 
-  const handleTileClick = (e: AssetEntry, shiftKey: boolean) => {
-    if (shiftKey) void copyPath(e);
-    else addElementForAsset(e);
+  const addElementWithModule = (asset: AssetEntry, moduleId: string) => {
+    const state = useEditorStore.getState();
+    const mod = ELEMENT_REGISTRY[moduleId];
+    if (!mod) {
+      setError(`element module ${moduleId} not found`);
+      return;
+    }
+    const el: TimelineElement = {
+      id: newId(),
+      label: `${mod.label}: ${asset.label}`,
+      type: mod.id,
+      trackIndex: mod.defaultTrack,
+      startSec: Math.max(0, state.currentTimeSec),
+      durationSec: mod.defaultDurationSec,
+      props: seededPropsForModuleAsset(mod, asset.kind, asset.path),
+    };
+    state.addElement(el);
+    state.selectElement(el.id);
+    setActionAsset(null);
   };
+
+  const selectedElementTargetsForAsset = useCallback(
+    (asset: AssetEntry | null): SelectedElementAssetTarget[] => {
+      if (!asset || !selectedElement || !selectedModule) return [];
+      return findMediaFieldsForKind(selectedModule.mediaFields, asset.kind).map((field) => {
+        const currentValue = selectedElement.props[field.name];
+        const alreadyHasAsset = field.multi
+          ? Array.isArray(currentValue) && currentValue.includes(asset.path)
+          : currentValue === asset.path;
+        return {
+          name: field.name,
+          fieldName: field.name,
+          label: mediaFieldLabel(field),
+          multi: Boolean(field.multi),
+          alreadyHasAsset,
+        };
+      });
+    },
+    [selectedElement, selectedModule],
+  );
+
+  const applyAssetToSelectedElement = (asset: AssetEntry, fieldName: string) => {
+    if (!selectedElement || !selectedModule) return;
+    const nextProps = applyAssetToModuleProps(
+      selectedModule,
+      selectedElement.props,
+      asset.kind,
+      asset.path,
+      fieldName,
+    );
+    useEditorStore.getState().updateElement(selectedElement.id, { props: nextProps });
+    useEditorStore.getState().selectElement(selectedElement.id);
+    setActionAsset(null);
+  };
+
+  const quickApplyAsset = (asset: AssetEntry) => {
+    const targets = selectedElementTargetsForAsset(asset);
+    const firstTarget = targets.find((target) => !target.alreadyHasAsset) ?? null;
+    if (!firstTarget) {
+      setActionAsset(asset);
+      return;
+    }
+    applyAssetToSelectedElement(asset, firstTarget.fieldName);
+  };
+
+  const selectedElementTargets = useMemo(
+    () => selectedElementTargetsForAsset(actionAsset),
+    [actionAsset, selectedElementTargetsForAsset],
+  );
+
+  const actionAssetUsageCount = useMemo(
+    () => (actionAsset ? assetUsageCounts[actionAsset.path] ?? 0 : 0),
+    [actionAsset, assetUsageCounts],
+  );
 
   const onTileDragStart = (e: AssetEntry, ev: React.DragEvent<HTMLButtonElement>) => {
     ev.dataTransfer.setData(
@@ -355,6 +805,27 @@ export const AssetLibrary = () => {
     const files = Array.from(ev.target.files ?? []);
     ev.currentTarget.value = "";
     await uploadFiles(files);
+  };
+
+  const deleteAsset = async (asset: AssetEntry) => {
+    const usageCount = countAssetReferences(elements, asset.path);
+    const warning =
+      usageCount > 0
+        ? `${asset.label} is currently referenced by ${usageCount} timeline element${usageCount === 1 ? "" : "s"}. Delete it anyway?`
+        : `Delete ${asset.label}?`;
+    if (!window.confirm(warning)) return;
+
+    const r = await fetch("/api/assets/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: asset.path }),
+    });
+    if (!r.ok) {
+      const text = await r.text().catch(() => `HTTP ${r.status}`);
+      throw new Error(text);
+    }
+    await refreshEntries();
+    setActionAsset(null);
   };
 
   const header = (
@@ -539,6 +1010,11 @@ export const AssetLibrary = () => {
             <button type="button" style={segBtn(scopeFilter === "global")} onClick={() => setScopeFilter("global")} title="Library — shared across all projects">Library</button>
             <button type="button" style={segBtn(scopeFilter === "project")} onClick={() => setScopeFilter("project")}>Project</button>
           </div>
+          <div style={{ display: "flex", gap: 3, marginBottom: 6 }}>
+            <button type="button" style={segBtn(sortMode === "recent")} onClick={() => setSortMode("recent")}>Recent</button>
+            <button type="button" style={segBtn(sortMode === "name")} onClick={() => setSortMode("name")}>Name</button>
+            <button type="button" style={segBtn(sortMode === "size")} onClick={() => setSortMode("size")}>Size</button>
+          </div>
           <input
             type="text"
             value={search}
@@ -556,6 +1032,27 @@ export const AssetLibrary = () => {
               boxSizing: "border-box",
             }}
           />
+
+          {selectedElement && (
+            <div
+              style={{
+                marginBottom: 8,
+                padding: "7px 8px",
+                background: "#101620",
+                border: "1px solid #243142",
+                borderRadius: 5,
+                fontSize: 10,
+                color: "#b9c7db",
+                lineHeight: 1.45,
+              }}
+            >
+              <strong style={{ color: "#edf3fb" }}>Selected element:</strong> {selectedElement.label}
+              {" · "}
+              {selectedElementCompatibleKinds.size > 0
+                ? "Use Apply on compatible assets to replace or append media directly."
+                : "This element has no compatible media fields."}
+            </div>
+          )}
 
           {error && (
             <div style={{ color: "#f66", fontSize: 10, marginBottom: 6 }}>
@@ -602,139 +1099,220 @@ export const AssetLibrary = () => {
                 const meta = metaMap[e.path];
                 const dimensionLabel =
                   meta?.width && meta?.height ? `${meta.width}×${meta.height}` : "";
-                const secondaryLabel = [dimensionLabel, e.kind === "video" && meta?.durationSec ? durationLabel(meta.durationSec) : "", kbLabel(e.size)]
+                const usageCount = assetUsageCounts[e.path] ?? 0;
+                const canApplyToSelected = selectedElementCompatibleKinds.has(e.kind);
+                const secondaryLabel = [
+                  dimensionLabel,
+                  e.kind === "video" && meta?.durationSec ? formatAssetDuration(meta.durationSec) : "",
+                  formatAssetBytes(e.size),
+                ]
                   .filter(Boolean)
                   .join(" · ");
                 return (
-                  <button
+                  <div
                     key={e.path}
-                    type="button"
-                    draggable
-                    onClick={(ev) => handleTileClick(e, ev.shiftKey)}
-                    onDragStart={(ev) => onTileDragStart(e, ev)}
-                    title={`${e.path}\n${kbLabel(e.size)} · ${new Date(e.mtime).toLocaleString()}\nClick: add ${insertion.intentLabel} at playhead\nShift+click: copy path\nDrag: drop ${e.kind.toUpperCase()} onto a timeline track`}
                     style={{
                       position: "relative",
                       padding: 0,
                       background: "linear-gradient(180deg, #171a1f 0%, #111318 100%)",
                       border: "1px solid #2f3540",
                       borderRadius: 6,
-                      cursor: "grab",
                       overflow: "hidden",
                       aspectRatio: "1 / 1",
                       display: "flex",
                       flexDirection: "column",
                     }}
                   >
-                    <div
+                    <button
+                      type="button"
+                      draggable
+                      onClick={(ev) => {
+                        if (ev.shiftKey) {
+                          void copyPath(e);
+                          return;
+                        }
+                        addElementForAsset(e);
+                      }}
+                      onDragStart={(ev) => onTileDragStart(e, ev)}
+                      title={`${e.path}\n${formatAssetBytes(e.size)} · ${new Date(e.mtime).toLocaleString()}\nClick: add ${insertion.intentLabel} at playhead\nShift+click: copy path\nDrag: drop ${e.kind.toUpperCase()} onto a timeline track`}
                       style={{
+                        all: "unset",
+                        cursor: "grab",
                         flex: 1,
-                        background: "#000",
                         display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
+                        flexDirection: "column",
                         minHeight: 0,
                       }}
                     >
                       <div
                         style={{
-                          position: "absolute",
-                          top: 4,
-                          left: 4,
+                          flex: 1,
+                          background: "#000",
                           display: "flex",
-                          gap: 4,
-                          zIndex: 1,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minHeight: 0,
                         }}
                       >
-                        <span
+                        <div
                           style={{
-                            fontSize: 8,
-                            lineHeight: 1,
-                            padding: "3px 4px",
-                            borderRadius: 999,
-                            background: "rgba(5, 8, 12, 0.82)",
-                            color: "#f2f5f8",
-                            border: "1px solid rgba(100, 113, 132, 0.45)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em",
+                            position: "absolute",
+                            top: 4,
+                            left: 4,
+                            display: "flex",
+                            gap: 4,
+                            zIndex: 1,
                           }}
                         >
-                          {e.kind}
-                        </span>
+                          <span
+                            style={{
+                              fontSize: 8,
+                              lineHeight: 1,
+                              padding: "3px 4px",
+                              borderRadius: 999,
+                              background: "rgba(5, 8, 12, 0.82)",
+                              color: "#f2f5f8",
+                              border: "1px solid rgba(100, 113, 132, 0.45)",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.06em",
+                            }}
+                          >
+                            {e.kind}
+                          </span>
+                          {usageCount > 0 && (
+                            <span
+                              style={{
+                                fontSize: 8,
+                                lineHeight: 1,
+                                padding: "3px 4px",
+                                borderRadius: 999,
+                                background: "rgba(29, 57, 42, 0.9)",
+                                color: "#dff7e7",
+                                border: "1px solid rgba(78, 151, 108, 0.5)",
+                              }}
+                            >
+                              used {usageCount}
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            zIndex: 1,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 8,
+                              lineHeight: 1,
+                              padding: "3px 4px",
+                              borderRadius: 999,
+                              background: e.scope === "global" ? "rgba(42, 74, 122, 0.88)" : "rgba(32, 98, 74, 0.88)",
+                              color: "#fff",
+                              border: "1px solid rgba(255,255,255,0.15)",
+                              letterSpacing: "0.04em",
+                            }}
+                          >
+                            {e.scope === "global" ? "LIB" : "PROJ"}
+                          </span>
+                        </div>
+                        {e.kind === "video" ? (
+                          <video
+                            src={assetUrlFor(e)}
+                            muted
+                            preload="metadata"
+                            style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
+                          />
+                        ) : (
+                          <img
+                            src={assetPreviewUrlFor(e)}
+                            alt={e.path}
+                            loading="lazy"
+                            draggable={false}
+                            onError={(ev) => {
+                              const img = ev.currentTarget;
+                              if (e.kind === "gif" && img.src !== assetUrlFor(e)) {
+                                img.src = assetUrlFor(e);
+                              }
+                            }}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
+                          />
+                        )}
                       </div>
                       <div
                         style={{
-                          position: "absolute",
-                          top: 4,
-                          right: 4,
-                          zIndex: 1,
+                          padding: "5px 6px",
+                          borderTop: "1px solid #232932",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 2,
+                          textAlign: "left",
                         }}
                       >
                         <span
                           style={{
-                            fontSize: 8,
-                            lineHeight: 1,
-                            padding: "3px 4px",
-                            borderRadius: 999,
-                            background: e.scope === "global" ? "rgba(42, 74, 122, 0.88)" : "rgba(32, 98, 74, 0.88)",
-                            color: "#fff",
-                            border: "1px solid rgba(255,255,255,0.15)",
-                            letterSpacing: "0.04em",
+                            fontSize: 9,
+                            color: "#d7dce6",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
                           }}
                         >
-                          {e.scope === "global" ? "LIB" : "PROJ"}
+                          {e.label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 8,
+                            color: "#697384",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {secondaryLabel || assetScopeLabel(e.scope, e.stem)}
                         </span>
                       </div>
-                      {e.kind === "video" ? (
-                        <video
-                          src={urlFor(e)}
-                          muted
-                          preload="metadata"
-                          style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
-                        />
-                      ) : (
-                        <img
-                          src={urlFor(e)}
-                          alt={e.path}
-                          draggable={false}
-                          style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
-                        />
-                      )}
-                    </div>
+                    </button>
                     <div
                       style={{
-                        padding: "5px 6px",
-                        borderTop: "1px solid #232932",
+                        padding: "0 6px 6px",
                         display: "flex",
-                        flexDirection: "column",
-                        gap: 2,
-                        textAlign: "left",
+                        gap: 4,
                       }}
                     >
-                      <span
+                      <button
+                        type="button"
+                        onClick={() => (canApplyToSelected ? quickApplyAsset(e) : setActionAsset(e))}
                         style={{
-                          fontSize: 9,
-                          color: "#d7dce6",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
+                          ...segBtn(canApplyToSelected),
+                          padding: "4px 6px",
+                          flex: 1,
+                          opacity: canApplyToSelected ? 1 : 0.65,
                         }}
+                        title={canApplyToSelected
+                          ? `Apply ${e.label} to the selected element`
+                          : selectedElement
+                            ? "Selected element cannot use this media kind"
+                            : "Select an element to enable direct apply"}
                       >
-                        {e.path.split("/").pop()}
-                      </span>
-                      <span
+                        Apply
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActionAsset(e)}
                         style={{
-                          fontSize: 8,
-                          color: "#697384",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
+                          ...segBtn(false),
+                          padding: "4px 6px",
+                          flex: 1,
                         }}
+                        title={`Manage ${e.label}`}
                       >
-                        {secondaryLabel || (e.scope === "global" ? "Shared library" : `Project ${e.stem ?? ""}`)}
-                      </span>
+                        Manage
+                      </button>
                     </div>
-                  </button>
+                  </div>
                 );
               })()
             ))}
@@ -742,10 +1320,28 @@ export const AssetLibrary = () => {
 
           {entries && entries.length > 0 && (
             <div style={{ fontSize: 9, color: "#555", marginTop: 8, lineHeight: 1.4 }}>
-              Click to add at the playhead · Shift+click to copy path · Drag onto a timeline track for precise placement.
+              Click a preview to add the default media element at the playhead. Apply updates the selected element when it accepts that media kind. Manage exposes copy, delete, and module-specific insert actions. Shift+click copies the path. Drag onto a timeline track for precise placement.
             </div>
           )}
         </>
+      )}
+      {actionAsset && (
+        <AssetUseModal
+          asset={actionAsset}
+          modules={compatibleModulesByKind[actionAsset.kind]}
+          usageCount={actionAssetUsageCount}
+          selectedElementLabel={selectedElement ? `${selectedElement.label} (${selectedModule?.label ?? selectedElement.type})` : null}
+          selectedElementTargets={selectedElementTargets}
+          onAddModule={(moduleId) => addElementWithModule(actionAsset, moduleId)}
+          onApplySelected={(fieldName) => applyAssetToSelectedElement(actionAsset, fieldName)}
+          onCopyPath={() => void copyPath(actionAsset)}
+          onDeleteAsset={() => {
+            void deleteAsset(actionAsset).catch((err) => {
+              setError(`delete failed: ${String((err as Error)?.message ?? err)}`);
+            });
+          }}
+          onClose={() => setActionAsset(null)}
+        />
       )}
     </div>
   );

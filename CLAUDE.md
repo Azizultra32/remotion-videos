@@ -14,11 +14,18 @@ Create videos by writing React components that render frame-by-frame.
 ## Engine / Project Split (CRITICAL)
 This repo is the **engine** — reusable infrastructure that runs from a fresh clone on any machine. Per-track **project data** (audio, analysis, timelines) is created locally by the user and is NOT tracked in git. Read `OWNERSHIP.md` for the authoritative path tables; `ENGINE.md` for why each engine path is locked.
 
-**TL;DR for agents:**
-- Write freely to: `projects/<stem>/**`, `brands/**`, `out/**`, `.current-project` (all gitignored)
-- Write freely to: `projects/_plans/**` (tracked — shared design docs)
-- Write-LOCKED (require `ENGINE_UNLOCK=1` in shell env): `src/**`, `editor/**`, `scripts/**`, `public/fonts/**`, `.claude/**`, `docs/**`, `package.json`, `tsconfig.json`, `CLAUDE.md`, `ENGINE.md`, `OWNERSHIP.md`, `README.md`, `.gitignore`, `.gitattributes`, `remotion.config.ts`
-- Read + execute engine code is always fine; only writes are blocked.
+**TL;DR for agents — the FREE-WRITE zones come first:**
+- `projects/<stem>/**` — all per-project content: `custom-elements/*.tsx`, `timeline.json`, `notes.md`, `analysis.json`, etc. (gitignored)
+- `brands/**`, `out/**`, `.current-project` (gitignored)
+- `projects/_plans/**` — shared design docs (tracked)
+- **`src/compositions/**` — composition + element authoring library. Adding a new element module is NOT engine work** (tracked, but carved out in `check-ownership.sh`)
+
+**Write-LOCKED engine paths** (require `ENGINE_UNLOCK=1` in shell env):
+`src/hooks/**`, `src/lib/**`, `src/utils/**`, `src/components/**`, `src/Root.tsx`, `editor/**`, `scripts/**`, `public/fonts/**`, `.claude/**`, `docs/**`, `package.json`, `tsconfig.json`, `CLAUDE.md`, `ENGINE.md`, `OWNERSHIP.md`, `README.md`, `.gitignore`, `.gitattributes`, `remotion.config.ts`.
+
+**Read + execute engine code is always fine; only writes are blocked.**
+
+**Before invoking the ENGINE_UNLOCK ceremony, check the path.** If the target is under `projects/<stem>/`, `src/compositions/`, `brands/`, or `out/` → just write. If it's truly engine infrastructure, THEN STOP and tell the user *"this requires `ENGINE_UNLOCK=1` in your shell env before I can proceed"*. Don't recite the ceremony for every file in the repo — the vast majority of creative work (new elements, timeline edits, brand assets, project config) never touches a locked path.
 
 **Where project data lives:**
 Default: `<engineRoot>/projects/<stem>/` (gitignored). Override with the `MV_PROJECTS_DIR` env var — set it to any absolute path (or `~/something`) before launching `npm run dev` / any `mv:*` CLI, and the sidecar + scripts all resolve projects from there. Useful for:

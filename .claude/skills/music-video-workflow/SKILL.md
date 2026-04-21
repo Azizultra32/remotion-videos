@@ -29,7 +29,18 @@ projects/<stem>/
   analysis/          ← pipeline diagnostic artifacts (PNGs, source.json)
 ```
 
-**Agents write freely** to `projects/<stem>/`. Engine paths (`src/`, `editor/`, `scripts/`, `public/fonts/`, `.claude/`, `docs/`, `package.json`, `tsconfig.json`, `CLAUDE.md`, `OWNERSHIP.md`, `ENGINE.md`) are **write-locked**. If you need to change engine code, STOP and tell the user: *"this requires `ENGINE_UNLOCK=1` in your shell env before I can proceed"*.
+**Write-free zones** (NO `ENGINE_UNLOCK=1` needed — just write):
+- `projects/<stem>/**` — everything under any project, including `custom-elements/*.tsx`, `timeline.json`, `notes.md`, `analysis.json`
+- `brands/**` — brand-config.json, logos, photos
+- `src/compositions/**` — composition + element authoring library (adding a new element module is NOT engine work)
+- `out/**`, `.current-project` — gitignored artifacts
+
+**Write-locked engine paths** (require `ENGINE_UNLOCK=1`):
+`src/hooks/**`, `src/lib/**`, `src/utils/**`, `src/components/**`, `src/Root.tsx`, `editor/**`, `scripts/**`, `public/fonts/**`, `.claude/**`, `docs/**`, `package.json`, `tsconfig.json`, `CLAUDE.md`, `OWNERSHIP.md`, `ENGINE.md`.
+
+**Before invoking the ENGINE_UNLOCK ceremony, check the path first.** If the target is under `projects/<stem>/`, `src/compositions/`, `brands/`, or `out/` → just write. No stop, no ask, no unlock. Only if the path is truly engine infrastructure should you STOP and reply: *"this requires `ENGINE_UNLOCK=1` in your shell env before I can proceed"*.
+
+**Common bug to avoid:** a subagent dispatched to render, verify, or iterate on per-project creative work (`projects/<stem>/custom-elements/*.tsx`, `projects/<stem>/timeline.json`, out-of-tree stills, etc.) starts grepping for `ENGINE_UNLOCK` or reciting the unlock ceremony. That's the reflex firing on the wrong paths. Every file in the per-project custom-element flow is free-write — kill the subagent and do the work inline.
 
 ## Finding the active project
 
@@ -65,7 +76,7 @@ Three ways to modify `projects/<stem>/timeline.json`:
 }
 ```
 
-Element `type` must be one of the 16 registered in `src/compositions/elements/registry.ts`. Unknown types are rejected by the chat layer's `applyMutations` and will crash the render.
+Element `type` must be one of (a) a built-in registered in `src/compositions/elements/registry.ts` OR (b) a per-project custom element at `projects/<stem>/custom-elements/<Name>.tsx` — the barrel generator (for `mv:render`) and the editor's Vite plugin (for live preview) both merge per-project modules into the registry. Unknown types (neither built-in nor per-project) are rejected by `applyMutations` and will crash the render. Adding a new custom element does NOT require `ENGINE_UNLOCK=1`.
 
 ## Rendering
 
@@ -113,6 +124,6 @@ Ask the user to pick in the SongPicker dropdown (it updates `.current-project` a
 
 - Don't write to engine paths — see OWNERSHIP.md.
 - Don't re-encode audio when modifying a project; keep `audio.mp3` as-is.
-- Don't invent element `type` strings — they must exist in `src/compositions/elements/registry.ts`.
+- Don't invent element `type` strings — they must exist in `src/compositions/elements/registry.ts` OR as a default-exported `ElementModule` at `projects/<stem>/custom-elements/<Name>.tsx` (free-write, no `ENGINE_UNLOCK`).
 - Don't commit `.current-project` (gitignored by design).
 - Don't manually move files between `projects/<stem>/` and the old `public/*` paths; the migration is complete.

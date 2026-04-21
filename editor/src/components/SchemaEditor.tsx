@@ -17,6 +17,7 @@ import type { z } from "zod";
 import { isEasingField } from "../utils/schemaFields";
 import { AssetPicker } from "./AssetPicker";
 import { EasingCurvePreview } from "./EasingCurvePreview";
+import { SharedNumericControl, extractZodConstraints, guessConstraints } from "./SharedNumericControl";
 
 // Detect asset fields by name so we can render a "Pick" button next to the
 // input. Returns the asset kind (image/video) or null if the field is not
@@ -210,16 +211,26 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
 
   if (tn === "number") {
     const num = typeof value === "number" ? value : 0;
+    // Merge Zod-declared constraints with field-name heuristics. Schema
+    // authors who added .min/.max/.step win; unadorned z.number() falls
+    // back to sensible defaults derived from the field name (opacity →
+    // 0..1, fontSize → 8..400, sigmaSec → 0..20, etc.).
+    const heuristic = guessConstraints(name);
+    const zod = extractZodConstraints(inner);
+    const min = zod.min ?? heuristic.min;
+    const max = zod.max ?? heuristic.max;
+    const step = zod.step ?? heuristic.step;
+    const integer = zod.integer ?? heuristic.integer;
     return (
-      <Row label={`${prettyName} (${num})`}>
-        <input
-          type="number"
-          step="0.01"
-          value={num}
-          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-          style={fieldStyle}
-        />
-      </Row>
+      <SharedNumericControl
+        label={prettyName}
+        value={num}
+        min={min}
+        max={max}
+        step={step}
+        integer={integer}
+        onChange={onChange}
+      />
     );
   }
 
@@ -240,6 +251,42 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
     // deriving from `_def.entries` for exotic schemas.
     const options: string[] =
       (inner.options as string[]) ?? (inner._def?.entries ? Object.values(inner._def.entries) : []);
+    // Segmented control for small enums (≤4 options) — Figma/Framer idiom
+    // gives users a single-tap visible row instead of a dropdown hiding
+    // the options behind a click. Dropdown still used for large sets.
+    if (options.length <= 4) {
+      const current = String(value ?? options[0] ?? "");
+      return (
+        <Row label={prettyName}>
+          <div style={{ display: "flex", gap: 2 }}>
+            {options.map((o) => {
+              const active = o === current;
+              return (
+                <button
+                  type="button"
+                  key={o}
+                  onClick={() => onChange(o)}
+                  style={{
+                    flex: 1,
+                    padding: "4px 6px",
+                    background: active ? "#2a4a7a" : "#1a1a1a",
+                    border: `1px solid ${active ? "#3a6aaa" : "#333"}`,
+                    borderRadius: 3,
+                    color: active ? "#fff" : "#aaa",
+                    fontSize: 10,
+                    fontWeight: active ? 700 : 500,
+                    cursor: "pointer",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {o}
+                </button>
+              );
+            })}
+          </div>
+        </Row>
+      );
+    }
     return (
       <Row label={prettyName}>
         <select

@@ -19,7 +19,8 @@
     "mv:switch": "tsx scripts/cli/mv-switch.ts",
     "mv:project-init-repo": "tsx scripts/cli/mv-project-init-repo.ts",
     "mv:verify-element": "tsx scripts/verify-element-render.ts",
-    "postinstall": "git config core.hooksPath scripts/hooks 2>/dev/null || true"
+    "postinstall": "git config core.hooksPath scripts/hooks 2>/dev/null || true",
+    "mv:tunnel": "bash scripts/mv-tunnel.sh"
   },
   "keywords": [],
   "author": "ali",

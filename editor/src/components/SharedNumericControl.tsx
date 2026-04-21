@@ -80,8 +80,6 @@ const mathEval = (input: string, current: number): number | null => {
   }
 };
 
-const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
-
 // Format the value for display. Avoids "12.0000000001" drift from math.
 const formatValue = (v: number, step: number): string => {
   if (!Number.isFinite(v)) return "0";
@@ -112,13 +110,18 @@ export const SharedNumericControl: React.FC<Props> = ({
     if (!editing) setTextInput(formatValue(value, step));
   }, [value, step, editing]);
 
+  // Soft bounds: the slider RENDERS in [min..max], but the number input
+  // and drag-scrub accept values outside. If a user types 500 in a field
+  // our heuristic declared 0..400, we let it through. The slider just
+  // expands to include the current value. Prevents the regression where
+  // a value of 300 got clamped to 100 on first render and the user
+  // couldn't type it back. Never clip user data.
   const commit = useCallback(
     (v: number) => {
       const snapped = integer ? Math.round(v) : v;
-      const clamped = clamp(snapped, min, max);
-      onChange(clamped);
+      onChange(snapped);
     },
-    [integer, min, max, onChange],
+    [integer, onChange],
   );
 
   const onLabelPointerDown = (e: React.PointerEvent<HTMLSpanElement>) => {
@@ -180,10 +183,13 @@ export const SharedNumericControl: React.FC<Props> = ({
       </span>
       <input
         type="range"
-        min={min}
-        max={max}
+        // Slider bounds expand to cover the current value if it's already
+        // outside the heuristic range. Otherwise dragging a slider whose
+        // max is below the value would jerk the value DOWN on first touch.
+        min={Math.min(min, value)}
+        max={Math.max(max, value)}
         step={step}
-        value={clamp(value, min, max)}
+        value={value}
         onChange={(e) => commit(Number.parseFloat(e.target.value))}
         style={{ width: "100%", accentColor: "#4a9" }}
       />

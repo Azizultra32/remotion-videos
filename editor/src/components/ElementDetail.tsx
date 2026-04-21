@@ -56,8 +56,13 @@ const SPRING_FIELDS: ReadonlySet<string> = new Set([
 
 // Fields owned by FadeEnvelopeVisualizer — hidden from SchemaEditor
 // so the trapezoidal envelope is the sole control (not duplicated
-// under the generic numeric editor below).
-const FADE_FIELDS: ReadonlySet<string> = new Set([
+// under the generic numeric editor below). IMPORTANT: the visualizer
+// only renders when BOTH fadeInSec AND fadeOutSec exist on the
+// element; if only one is present, we must NOT hide it, or the user
+// loses access to it entirely. The gating decision is made at render
+// time below via hasFadeEnvelope; this constant is now just a
+// reference list of the paired field names.
+const FADE_FIELD_NAMES: ReadonlySet<string> = new Set([
   "fadeInSec",
   "fadeOutSec",
 ]);
@@ -320,7 +325,12 @@ export const ElementDetail = () => {
         (() => {
           const hidden = new Set<string>();
           if (hasSpringProps) for (const f of SPRING_FIELDS) hidden.add(f);
-          if (hasFadeEnvelope) for (const f of FADE_FIELDS) hidden.add(f);
+          // Only hide fade fields when BOTH are present (visualizer renders).
+          // If an element has only fadeInSec OR only fadeOutSec, fall
+          // through to the generic numeric editor so the field stays
+          // editable — previously both were hidden unconditionally and
+          // a single-fade element lost its control entirely.
+          if (hasFadeEnvelope) for (const f of FADE_FIELD_NAMES) hidden.add(f);
           return (
             <SchemaEditor
               schema={mod.schema}

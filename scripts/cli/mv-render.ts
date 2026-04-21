@@ -21,13 +21,13 @@ import {
   createHash,
   // keep import shape for node:crypto
 } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import {
   generateCustomElementsBarrel,
   resetCustomElementsBarrel,
 } from "./custom-elements-barrel";
-import { resolveProjectDir } from "./paths";
+import { resolveProjectDir, resolveProjectsDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -83,8 +83,62 @@ const isMusicVideo = composition === "MusicVideo";
 const projectDir = resolveProjectDir(repoRoot, stem);
 if (!existsSync(projectDir)) {
   console.error(`project not found: ${projectDir}`);
+  // Breadcrumbs: show the user how to recover. Available stems + the
+  // MV_PROJECTS_DIR resolution so a typo or unset-env mistake surfaces
+  // immediately instead of at bundle time.
+  try {
+    const projectsDir = resolveProjectsDir(repoRoot);
+    const stems = readdirSync(projectsDir).filter(
+      (d) => !d.startsWith(".") && !d.startsWith("_"),
+    );
+    if (stems.length > 0) {
+      console.error(`  available stems in ${projectsDir}:`);
+      for (const s of stems) console.error(`    - ${s}`);
+    } else {
+      console.error(`  no projects under ${projectsDir}.`);
+      console.error(`  run: npm run mv:scaffold -- --audio <path/to/track.mp3>`);
+    }
+    if (process.env.MV_PROJECTS_DIR) {
+      console.error(`  MV_PROJECTS_DIR=${process.env.MV_PROJECTS_DIR}`);
+    } else {
+      console.error(`  (MV_PROJECTS_DIR not set — using default <repo>/projects/)`);
+    }
+  } catch {
+    // listdir can legitimately fail (projects dir missing) — the primary
+    // error message is enough in that case.
+  }
   process.exit(1);
 }
+
+// Parallel-render lockfile. Two concurrent `mv:render` runs clobber the
+// same barrel file (src/compositions/elements/_generated-custom-elements.ts)
+// mid-flight — one render's Webpack bundle would import the other's
+// project modules. Stale-aware: if the lock exists but its PID is dead,
+// reclaim it. Removed in safeReset() alongside the barrel reset.
+const LOCK_FILE = resolve(repoRoot, ".mv-render.lock");
+const isPidAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+if (existsSync(LOCK_FILE)) {
+  const raw = readFileSync(LOCK_FILE, "utf8").trim();
+  const otherPid = Number.parseInt(raw, 10);
+  if (Number.isFinite(otherPid) && isPidAlive(otherPid)) {
+    console.error(
+      `mv:render already running (PID ${otherPid}, lock at ${LOCK_FILE}). Refusing to race — the barrel file would clobber mid-bundle.`,
+    );
+    console.error("  If you're sure no other render is running, remove the lock manually.");
+    process.exit(1);
+  }
+  // Stale lock from a crashed prior run; reclaim.
+  console.warn(`[mv:render] reclaiming stale lock (PID ${raw} not alive)`);
+  try { unlinkSync(LOCK_FILE); } catch { /* race with another reclaim; fall through */ }
+}
+writeFileSync(LOCK_FILE, String(process.pid));
 
 const timelinePath = resolve(projectDir, "timeline.json");
 const audioPath = resolve(projectDir, "audio.mp3");
@@ -185,6 +239,11 @@ const safeReset = () => {
     resetCustomElementsBarrel(repoRoot);
   } catch {
     // Reset is best-effort during a kill; don't mask the original signal.
+  }
+  try {
+    if (existsSync(LOCK_FILE)) unlinkSync(LOCK_FILE);
+  } catch {
+    // Lock removal best-effort; stale-aware reclaim on next run.
   }
 };
 process.on("SIGINT", () => {

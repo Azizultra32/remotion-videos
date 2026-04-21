@@ -13,7 +13,7 @@
     "types": ["vitest/globals", "node"],
     "baseUrl": ".",
     "paths": {
-      "@engine/*": ["src/compositions/elements/*"]
+      "@engine/types": ["src/compositions/elements/types"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

@@ -19,38 +19,40 @@ type SafeRenderProps = {
   element: ElementRendererProps<any>["element"];
   ctx: RenderCtx;
 };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ElementRef = SafeRenderProps["element"] | null;
 class SafeElement extends React.Component<
   SafeRenderProps,
-  { hasError: boolean; lastSig: string; errorFrame: number }
+  { hasError: boolean; lastElement: ElementRef; errorFrame: number }
 > {
   // hasError resets on TWO triggers so transient failures self-heal:
-  //   (1) element identity or prop snapshot changes → definite new input
-  //   (2) enough frames have passed since the last throw (~1s at fps) →
-  //       the throw might have been a ctx timing issue (beats not yet
-  //       loaded, audio decoder warming up, useFFT first-frame race).
+  //   (1) element REFERENCE changes (store replaces the object on any
+  //       edit, so object identity is a cheap O(1) sig).
+  //   (2) enough frames have passed in EITHER direction since the last
+  //       throw (~1s at fps). abs() covers both forward progression
+  //       (transient ctx state cleared) AND backwards scrubbing in the
+  //       editor's preview (user seeks past a bad frame).
   //
-  // We don't include ctx.frame in the sig because ctx changes every
-  // frame, which would pop hasError immediately — defeats the boundary.
-  // We don't include all of ctx's audio-data fields either: beats[] only
-  // populates after an async fetch, so "beats unavailable" is the most
-  // common transient. The 1-second retry window is the right grain.
-  state = { hasError: false, lastSig: "", errorFrame: -1 };
+  // Prior impl used JSON.stringify(element.props) per frame — hot-path
+  // waste at 24fps × N elements. Reference identity is O(1) and correct
+  // because the editor's Zustand store replaces element objects on every
+  // mutation (see applyMutations); no in-place props patching.
+  state = { hasError: false, lastElement: null as ElementRef, errorFrame: -1 };
   static getDerivedStateFromError() {
     return { hasError: true };
   }
   static getDerivedStateFromProps(
     props: SafeRenderProps,
-    state: { hasError: boolean; lastSig: string; errorFrame: number },
+    state: { hasError: boolean; lastElement: ElementRef; errorFrame: number },
   ) {
-    const sig = `${props.elementId}|${JSON.stringify(props.element.props)}`;
-    if (sig !== state.lastSig) {
-      return { hasError: false, lastSig: sig, errorFrame: -1 };
+    if (props.element !== state.lastElement) {
+      return { hasError: false, lastElement: props.element, errorFrame: -1 };
     }
     if (state.hasError && state.errorFrame >= 0) {
-      const framesSinceError = props.ctx.frame - state.errorFrame;
+      const framesSinceError = Math.abs(props.ctx.frame - state.errorFrame);
       const retryWindow = Math.max(1, Math.round(props.ctx.fps));
       if (framesSinceError >= retryWindow) {
-        return { hasError: false, lastSig: state.lastSig, errorFrame: -1 };
+        return { hasError: false, lastElement: state.lastElement, errorFrame: -1 };
       }
     }
     return null;

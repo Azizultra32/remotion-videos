@@ -56,6 +56,8 @@ export const App = () => {
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);
   const setBeatsSrc = useEditorStore((s) => s.setBeatsSrc);
+  const setTrack = useEditorStore((s) => s.setTrack);
+  const setTrackByStem = useEditorStore((s) => s.setTrackByStem);
 
   // One-shot seed from ?beats=... if the store has no beatsSrc yet. After
   // this the SongPicker / store is the single source of truth.
@@ -68,6 +70,55 @@ export const App = () => {
     // fight the user's later picks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setBeatsSrc, beatsSrc]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const waitForHydration = async () => {
+      if (useEditorStore.persist.hasHydrated()) return;
+      await new Promise<void>((resolve) => {
+        const unsub = useEditorStore.persist.onFinishHydration(() => {
+          unsub();
+          resolve();
+        });
+      });
+    };
+
+    const bootstrapTrack = async () => {
+      await waitForHydration();
+      if (cancelled || useEditorStore.getState().audioSrc) return;
+
+      const currentStem = await fetch("/api/current-project")
+        .then(async (r) => {
+          if (!r.ok) return null;
+          const body = (await r.json()) as { stem?: string | null };
+          return body.stem ?? null;
+        })
+        .catch(() => null);
+      if (cancelled || useEditorStore.getState().audioSrc) return;
+
+      if (currentStem) {
+        const restored = await setTrackByStem(currentStem);
+        if (cancelled || restored || useEditorStore.getState().audioSrc) return;
+      }
+
+      const songs = await fetch("/api/songs")
+        .then(async (r) => {
+          if (!r.ok) return [] as Array<{ audioSrc: string; beatsSrc: string }>;
+          return (await r.json()) as Array<{ audioSrc: string; beatsSrc: string }>;
+        })
+        .catch(() => [] as Array<{ audioSrc: string; beatsSrc: string }>);
+      if (cancelled || useEditorStore.getState().audioSrc) return;
+
+      const fallback = songs[0];
+      if (fallback) setTrack(fallback.audioSrc, fallback.beatsSrc);
+    };
+
+    if (!audioSrc) void bootstrapTrack();
+    return () => {
+      cancelled = true;
+    };
+  }, [audioSrc, setTrack, setTrackByStem]);
 
   // Reactive beats load: re-fetches whenever the store's beatsSrc changes
   // (i.e. when SongPicker calls setTrack). toEditorUrl routes

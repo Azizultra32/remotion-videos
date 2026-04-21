@@ -36,6 +36,7 @@ const humanize = (stem: string): string =>
 export const SongPicker = () => {
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const setTrack = useEditorStore((s) => s.setTrack);
+  const setTrackByStem = useEditorStore((s) => s.setTrackByStem);
   const [songs, setSongs] = useState<SongEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<{ filename: string } | null>(null);
@@ -56,21 +57,39 @@ export const SongPicker = () => {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/songs")
-      .then((r) => {
+    void (async () => {
+      try {
+        const r = await fetch("/api/songs");
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data: SongEntry[]) => {
-        if (!cancelled) setSongs(data);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(String(err?.message ?? err));
-      });
+        const data: SongEntry[] = await r.json();
+        if (cancelled) return;
+        setSongs(data);
+        if (audioSrc) return;
+
+        const currentProject = await fetch("/api/current-project")
+          .then(async (resp) => {
+            if (!resp.ok) return null;
+            const body = (await resp.json()) as { stem?: string | null };
+            return body.stem ?? null;
+          })
+          .catch(() => null);
+        if (cancelled) return;
+
+        if (currentProject) {
+          const restored = await setTrackByStem(currentProject);
+          if (cancelled || restored) return;
+        }
+
+        const fallback = data[0];
+        if (fallback) setTrack(fallback.audioSrc, fallback.beatsSrc);
+      } catch (err) {
+        if (!cancelled) setError(String((err as Error)?.message ?? err));
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [audioSrc, setTrack, setTrackByStem]);
 
   const stem = stemFromAudioSrc(audioSrc);
   const current = songs?.find((s) => s.stem === stem) ?? null;

@@ -1,0 +1,270 @@
+{
+  "modules": [
+    {
+      "id": "text.typing",
+      "label": "Typing Text",
+      "category": "text",
+      "description": "Typewriter char-by-char reveal with blinking cursor",
+      "file": "text.typing.png"
+    },
+    {
+      "id": "text.glitch",
+      "label": "Glitch Text",
+      "category": "text",
+      "description": "RGB-split glitch with sine offsets + sporadic hits",
+      "file": "text.glitch.png"
+    },
+    {
+      "id": "text.popping",
+      "label": "Popping Text",
+      "category": "text",
+      "description": "Per-char spring pop-in with color cycling",
+      "file": "text.popping.png"
+    },
+    {
+      "id": "text.sliding",
+      "label": "Sliding Text",
+      "category": "text",
+      "description": "Directional slide-in with spring + fade",
+      "file": "text.sliding.png"
+    },
+    {
+      "id": "text.bellCurve",
+      "label": "Bell Curve Reveal",
+      "category": "text",
+      "description": "Gaussian opacity envelope peaking at element midpoint — text fades in then out",
+      "file": "text.bellCurve.png"
+    },
+    {
+      "id": "text.beatDrop",
+      "label": "Beat Drop Words",
+      "category": "text",
+      "description": "One word per detected beat (zeta drop). cut = hard swap, flash = decay envelope",
+      "file": "text.beatDrop.png"
+    },
+    {
+      "id": "text.fitboxSVG",
+      "label": "Fitbox SVG Word",
+      "category": "text",
+      "description": "Full-frame SVG word auto-fit via textLength + spacingAndGlyphs",
+      "file": "text.fitboxSVG.png"
+    },
+    {
+      "id": "audio.spectrumBars",
+      "label": "Spectrum Bars",
+      "category": "audio",
+      "description": "FFT frequency bars driven by the audio track",
+      "file": "audio.spectrumBars.png"
+    },
+    {
+      "id": "audio.waveformPath",
+      "label": "Waveform Path",
+      "category": "audio",
+      "description": "Smooth oscilloscope SVG path from live audio samples",
+      "file": "audio.waveformPath.png"
+    },
+    {
+      "id": "audio.bassGlow",
+      "label": "Bass Glow Overlay",
+      "category": "audio",
+      "description": "Full-frame color flash driven by a frequency band",
+      "file": "audio.bassGlow.png"
+    },
+    {
+      "id": "shape.pathReveal",
+      "label": "Path Reveal",
+      "category": "shape",
+      "description": "Progressive SVG path stroke-on, optional beat trigger.",
+      "file": "shape.pathReveal.png"
+    },
+    {
+      "id": "shape.neonStack",
+      "label": "Neon Stroke Stack",
+      "category": "shape",
+      "description": "4-layer stacked blur strokes for neon/glow, beat-flicker optional",
+      "file": "shape.neonStack.png"
+    },
+    {
+      "id": "shape.sonarRings",
+      "label": "Sonar Rings",
+      "category": "shape",
+      "description": "Expanding rings triggered on beats/downbeats/drops",
+      "file": "shape.sonarRings.png"
+    },
+    {
+      "id": "overlay.preDropFadeHold",
+      "label": "Pre-Drop Fade + Hold",
+      "category": "overlay",
+      "description": "N-beat black fade-in → M-beat hold → white flash at drop (element end)",
+      "file": "overlay.preDropFadeHold.png"
+    },
+    {
+      "id": "overlay.watermarkMask",
+      "label": "Watermark Mask",
+      "category": "overlay",
+      "description": "Configurable opaque panel to hide a corner watermark",
+      "file": "overlay.watermarkMask.png"
+    },
+    {
+      "id": "overlay.videoClip",
+      "label": "Video Clip",
+      "category": "video",
+      "description": "OffthreadVideo layer with optional beat-synced brightness boost",
+      "file": "overlay.videoClip.png"
+    },
+    {
+      "id": "overlay.shaderPulse",
+      "label": "Shader Pulse",
+      "category": "overlay",
+      "description": "WebGL fragment shader: audio-reactive radial glow + grain. Bass = pulse size, mid = hue drift, highs = grain.",
+      "file": "overlay.shaderPulse.png"
+    },
+    {
+      "id": "overlay.beatShock",
+      "label": "Beat Shock",
+      "category": "overlay",
+      "description": "WebGL shader: chromatic-aberration ring burst on every beat/downbeat/drop. Trail decays over ~350ms.",
+      "file": "overlay.beatShock.png"
+    },
+    {
+      "id": "overlay.bloomGlow",
+      "label": "Bloom Glow",
+      "category": "overlay",
+      "description": "Wandering soft-glow halos (faux bloom). Size pulses with bass, brightness with mid, grain with highs.",
+      "file": "overlay.bloomGlow.png"
+    },
+    {
+      "id": "overlay.beatColorFlash",
+      "label": "Beat Color Flash",
+      "category": "overlay",
+      "description": "Full-frame color overlay that punches to maxOpacity on every Nth beat, fades to 0 over flashDurationSec.",
+      "file": "overlay.beatColorFlash.png"
+    },
+    {
+      "id": "overlay.beatImageCycle",
+      "label": "Beat Image Cycle",
+      "category": "overlay",
+      "description": "Cycles through a list of images on every Nth beat/downbeat/drop with optional cross-fade.",
+      "file": "overlay.beatImageCycle.png"
+    },
+    {
+      "id": "overlay.beatVideoCycle",
+      "label": "Beat Video Cycle",
+      "category": "overlay",
+      "description": "Cycles through a list of video clips on every Nth beat/downbeat/drop. Plays muted by default.",
+      "file": "overlay.beatVideoCycle.png"
+    },
+    {
+      "id": "overlay.glitchShock",
+      "label": "Glitch Shock",
+      "category": "overlay",
+      "description": "Beat-triggered datamosh rectangles with RGB-offset tears. Up to 8 rects per beat, decays in 120ms.",
+      "file": "overlay.glitchShock.png"
+    },
+    {
+      "id": "overlay.speedVideo",
+      "label": "Speed Video",
+      "category": "overlay",
+      "description": "Video clip with adjustable playbackRate + startFromSec. Chain multiple instances on the timeline for beat-ramped speed changes.",
+      "file": "overlay.speedVideo.png"
+    },
+    {
+      "id": "overlay.staticImage",
+      "label": "Static Image",
+      "category": "overlay",
+      "description": "Single image overlay with fit, position, width/height, and fade-in / fade-out envelopes.",
+      "file": "overlay.staticImage.png"
+    },
+    {
+      "id": "audio.oscilloscope",
+      "label": "Oscilloscope",
+      "category": "audio",
+      "description": "Time-domain waveform line with optional glow. Pairs with Spectrum Waterfall for classic analyzer look.",
+      "file": "audio.oscilloscope.png"
+    },
+    {
+      "id": "overlay.plasmaBackdrop",
+      "label": "Plasma Backdrop",
+      "category": "overlay",
+      "description": "Domain-warped noise backdrop. Flow speed = mid band, brightness = bass, shimmer = highs.",
+      "file": "overlay.plasmaBackdrop.png"
+    },
+    {
+      "id": "audio.spectrumWaterfall",
+      "label": "Spectrum Waterfall",
+      "category": "audio",
+      "description": "Scrolling FFT plot — columns of frequency amplitude over time. Makes the whole track\\'s structure visible.",
+      "file": "audio.spectrumWaterfall.png"
+    },
+    {
+      "id": "overlay.motionBlurText",
+      "label": "Motion-Blur Text",
+      "category": "overlay",
+      "description": "Text swept across the frame with a procedural motion-blur trail.",
+      "file": "overlay.motionBlurText.png"
+    },
+    {
+      "id": "overlay.sceneTransition",
+      "label": "Scene Transition",
+      "category": "overlay",
+      "description": "Full-screen transition effect (fade / slide / wipe / flip / iris / clock-wipe).",
+      "file": "overlay.sceneTransition.png"
+    },
+    {
+      "id": "shape.shapeClip",
+      "label": "Shape",
+      "category": "shape",
+      "description": "Procedural shape: circle, square, star, or triangle.",
+      "file": "shape.shapeClip.png"
+    },
+    {
+      "id": "overlay.lottie",
+      "label": "Lottie Animation",
+      "category": "overlay",
+      "description": "Lottie (Bodymovin) JSON animation playback with fade envelope.",
+      "file": "overlay.lottie.png"
+    },
+    {
+      "id": "overlay.gif",
+      "label": "GIF Clip",
+      "category": "overlay",
+      "description": "Animated GIF playback synchronized to the composition clock.",
+      "file": "overlay.gif.png"
+    },
+    {
+      "id": "overlay.captions",
+      "label": "Captions / Subtitles",
+      "category": "overlay",
+      "description": "Caption overlay from an SRT string — active line shown at the playhead.",
+      "file": "overlay.captions.png"
+    },
+    {
+      "id": "overlay.noise",
+      "label": "Noise Field",
+      "category": "overlay",
+      "description": "Animated procedural Perlin noise field as a background plate.",
+      "file": "overlay.noise.png"
+    },
+    {
+      "id": "text.googleFont",
+      "label": "Google Font Text",
+      "category": "text",
+      "description": "Typography with a loaded Google Font (Inter, Poppins, Bebas Neue, etc.).",
+      "file": "text.googleFont.png"
+    },
+    {
+      "id": "overlay.three3D",
+      "label": "3D Object",
+      "category": "overlay",
+      "description": "Real-time 3D primitive (cube / sphere / torus / cone) via Three.js + @remotion/three.",
+      "file": "overlay.three3D.png"
+    }
+  ],
+  "failed": [
+    {
+      "id": "overlay.iframe",
+      "error": ""
+    }
+  ],
+  "generatedAt": "2026-04-21T07:06:36.906Z"
+}

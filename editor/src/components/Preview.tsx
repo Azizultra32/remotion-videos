@@ -41,7 +41,7 @@ export const Preview = () => {
     () => ({
       ...defaultMusicVideoProps,
       audioSrc: null,
-      beatsSrc: beatsSrc ?? defaultMusicVideoProps.beatsSrc,
+      beatsSrc,
       elements,
       events,
       muteAudioTag: true,

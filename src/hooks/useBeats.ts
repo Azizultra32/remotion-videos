@@ -78,7 +78,12 @@ export const useBeats = (src: string | null | undefined): BeatsAPI => {
       return;
     }
     const handle = delayRender(`useBeats:${src}`);
-    const url = src.startsWith("http") || src.startsWith("/") ? src : staticFile(src);
+    const url =
+      src.startsWith("http") || src.startsWith("/")
+        ? src
+        : src.startsWith("projects/")
+          ? `/api/${src}`
+          : staticFile(src);
     fetch(url)
       .then((r) => r.json())
       .then((j: BeatsJSON) => {

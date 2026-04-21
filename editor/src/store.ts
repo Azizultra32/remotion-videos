@@ -68,8 +68,11 @@ export const useEditorStore = create<EditorState>()(
         try {
           const r = await fetch("/api/songs");
           if (!r.ok) return false;
-          const body = (await r.json()) as { songs?: Array<{ stem: string; audioSrc: string; beatsSrc: string }> };
-          const match = body.songs?.find((s) => s.stem === stem);
+          const body = (await r.json()) as
+            | Array<{ stem: string; audioSrc: string; beatsSrc: string }>
+            | { songs?: Array<{ stem: string; audioSrc: string; beatsSrc: string }> };
+          const songs = Array.isArray(body) ? body : body.songs ?? [];
+          const match = songs.find((s) => s.stem === stem);
           if (!match || !match.audioSrc) return false;
           get().setTrack(match.audioSrc, match.beatsSrc);
           return true;

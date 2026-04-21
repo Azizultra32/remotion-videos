@@ -78,7 +78,7 @@ export const FloatingPreview = () => {
     () => ({
       ...defaultMusicVideoProps,
       audioSrc: null,
-      beatsSrc: beatsSrc ?? defaultMusicVideoProps.beatsSrc,
+      beatsSrc,
       elements,
       events,
       muteAudioTag: true,

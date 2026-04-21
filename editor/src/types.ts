@@ -138,6 +138,11 @@ export type EditorState = {
   setAudioSrc: (s: string | null) => void;
   setBeatsSrc: (s: string | null) => void;
   setTrack: (audioSrc: string, beatsSrc: string) => void;
+  // Async: look up the stem's actual audio filename via /api/songs
+  // (handles .mp3/.wav/.m4a) and call setTrack under the hood. Returns
+  // true if the stem was found and loaded. Chat's switchTrack dispatches
+  // through this instead of fabricating paths to avoid the .mp3 footgun.
+  setTrackByStem: (stem: string) => Promise<boolean>;
   // Named events
   setEvents: (events: EventMark[]) => void;
   upsertEventMark: (name: string, timeSec: number) => void;

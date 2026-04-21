@@ -20,7 +20,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveProjectDir } from "./paths";
+import { resolveAudioPath, resolveProjectDir } from "./paths";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -46,11 +46,12 @@ if (!args.project) {
 
 const stem = args.project;
 const projectDir = resolveProjectDir(repoRoot, stem);
-const audioPath = resolve(projectDir, "audio.mp3");
-if (!existsSync(audioPath)) {
-  console.error(`missing audio: projects/${stem}/audio.mp3`);
+const audioResolved = resolveAudioPath(projectDir);
+if (!audioResolved) {
+  console.error(`missing audio in projects/${stem}/ (looked for audio.mp3, audio.wav, audio.m4a)`);
   process.exit(1);
 }
+const audioPath = audioResolved.fullPath;
 
 const analysisDir = resolve(projectDir, "analysis");
 const beatsJson = resolve(analysisDir, "beats.json");

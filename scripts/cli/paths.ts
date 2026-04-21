@@ -54,6 +54,29 @@ export const ensureProjectsDir = (engineRoot: string): string => {
 };
 
 /**
+ * Resolve the actual audio file inside a project dir. mv:scaffold
+ * preserves the source extension (.mp3/.wav/.m4a) — hardcoding .mp3
+ * in consumers broke .wav projects silently. This checks each known
+ * extension and returns the first that exists. Returns null if none.
+ */
+export const resolveAudioPath = (projectDir: string): {
+  fullPath: string;
+  filename: string;
+  ext: ".mp3" | ".wav" | ".m4a";
+} | null => {
+  const candidates: Array<{ filename: string; ext: ".mp3" | ".wav" | ".m4a" }> = [
+    { filename: "audio.mp3", ext: ".mp3" },
+    { filename: "audio.wav", ext: ".wav" },
+    { filename: "audio.m4a", ext: ".m4a" },
+  ];
+  for (const c of candidates) {
+    const fullPath = join(projectDir, c.filename);
+    if (existsSync(fullPath)) return { fullPath, filename: c.filename, ext: c.ext };
+  }
+  return null;
+};
+
+/**
  * Remotion's staticFile("projects/<stem>/audio.mp3") resolves to
  * <engineRoot>/public/projects/<stem>/audio.mp3, which is served via a
  * symlink at <engineRoot>/public/projects pointing at the projects root.

@@ -11,7 +11,7 @@ import { mergePipelineElements } from "./utils/pipelineElements";
 
 export const useEditorStore = create<EditorState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       elements: [],
       currentTimeSec: 0,
       isPlaying: false,
@@ -27,8 +27,12 @@ export const useEditorStore = create<EditorState>()(
       compositionDuration: 90,
       fps: 24,
       snapMode: "beat",
-      audioSrc: "projects/love-in-traffic/audio.mp3",
-      beatsSrc: "projects/love-in-traffic/analysis.json",
+      // Initial state carries no project. SongPicker reads .current-project
+      // on boot and hydrates; mv:switch can also seed it from the CLI.
+      // Hardcoding a specific stem here was a fresh-clone bug — new users
+      // saw the editor point at a nonexistent file on first open.
+      audioSrc: null,
+      beatsSrc: null,
       setCurrentTime: (t) =>
         set((s) => ({
           currentTimeSec: typeof t === "function" ? t(s.currentTimeSec) : t,
@@ -57,6 +61,22 @@ export const useEditorStore = create<EditorState>()(
       setSnapMode: (m) => set({ snapMode: m }),
       setAudioSrc: (s) => set({ audioSrc: s }),
       setBeatsSrc: (s) => set({ beatsSrc: s }),
+      setTrackByStem: async (stem: string): Promise<boolean> => {
+        // Fetch the stem's actual audioSrc from the sidecar so we respect
+        // whatever extension mv:scaffold preserved (.mp3/.wav/.m4a).
+        // Hardcoding .mp3 here silently broke .wav projects.
+        try {
+          const r = await fetch("/api/songs");
+          if (!r.ok) return false;
+          const body = (await r.json()) as { songs?: Array<{ stem: string; audioSrc: string; beatsSrc: string }> };
+          const match = body.songs?.find((s) => s.stem === stem);
+          if (!match || !match.audioSrc) return false;
+          get().setTrack(match.audioSrc, match.beatsSrc);
+          return true;
+        } catch {
+          return false;
+        }
+      },
       // Convenience: switch tracks atomically. Clears timeline elements
       // (they're tied to beats/drops of the previous track) and resets the
       // playhead so we don't seek past the new track's unknown duration.

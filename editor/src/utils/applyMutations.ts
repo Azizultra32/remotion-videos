@@ -247,10 +247,11 @@ export const applyMutations = (mutations: unknown): MutationResult => {
                 const { stem } = (await r.json()) as { stem?: string };
                 // Auto-switch so the user immediately sees the new project in
                 // the editor and StageStrip tracks its analysis live.
+                // setTrackByStem fetches /api/songs to resolve the actual
+                // audio extension (.mp3/.wav/.m4a) — hardcoding `.mp3`
+                // here previously broke .wav projects silently.
                 if (stem) {
-                  useEditorStore
-                    .getState()
-                    .setTrack(`projects/${stem}/audio.mp3`, `projects/${stem}/analysis.json`);
+                  await useEditorStore.getState().setTrackByStem(stem);
                 }
               } catch {
                 /* ignore */
@@ -327,11 +328,12 @@ export const applyMutations = (mutations: unknown): MutationResult => {
             result.errors.push(`[${i}] switchTrack: stem required`);
             break;
           }
-          // Imperfect: we don't know the exact audio extension without
-          // consulting /api/songs. Default to .mp3 — mv:scaffold normalizes
-          // mp3/m4a inputs to .mp3 container names, so this is right for
-          // everything except .wav projects.
-          s.setTrack(`projects/${stem}/audio.mp3`, `projects/${stem}/analysis.json`);
+          // Fire-and-forget: setTrackByStem fetches /api/songs to
+          // resolve the actual audio extension (.mp3/.wav/.m4a). The
+          // mutation loop is sync; store hydration happens on the next
+          // tick. Errors are swallowed by setTrackByStem (returns false)
+          // rather than rejecting the whole mutation batch.
+          void s.setTrackByStem(stem);
           result.applied++;
           break;
         }

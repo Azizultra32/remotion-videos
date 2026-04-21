@@ -3,6 +3,7 @@
 import { getElementModule } from "@compositions/elements/registry";
 import { useEditorStore } from "../store";
 import { SchemaEditor } from "./SchemaEditor";
+import { SpringCurveVisualizer } from "./SpringCurveVisualizer";
 
 const fieldStyle: React.CSSProperties = {
   padding: "6px 8px",
@@ -42,6 +43,15 @@ const buildTimingEditorHash = (damping: number, stiffness: number): string => {
   };
   return `#config=${btoa(JSON.stringify(cfg))}`;
 };
+
+// Fields owned by SpringCurveVisualizer — hidden from SchemaEditor so
+// users aren't editing them in two places (the visualizer IS the control).
+const SPRING_FIELDS: ReadonlySet<string> = new Set([
+  "damping",
+  "mass",
+  "stiffness",
+  "overshootClamping",
+]);
 
 export const ElementDetail = () => {
   const { selectedElementId, elements, updateElement, removeElement, beatData, snapMode, events } =
@@ -85,6 +95,8 @@ export const ElementDetail = () => {
     const url = `https://www.remotion.dev/timing-editor${buildTimingEditorHash(d, s)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
+
+  const fps = useEditorStore.getState().fps;
 
   return (
     <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -268,21 +280,17 @@ export const ElementDetail = () => {
       <div style={{ height: 1, background: "#333", margin: "4px 0" }} />
 
       {hasSpringProps && (
-        <button
-          type="button"
-          onClick={openTimingEditor}
-          style={{
-            padding: "6px 8px",
-            background: "#1a2a3a",
-            border: "1px solid #368",
-            borderRadius: 4,
-            color: "#8cf",
-            fontSize: 11,
-            cursor: "pointer",
-          }}
-        >
-          Tune spring in Timing Editor
-        </button>
+        <SpringCurveVisualizer
+          damping={Number(element.props.damping) || 10}
+          mass={typeof element.props.mass === "number" ? element.props.mass : 1}
+          stiffness={Number(element.props.stiffness) || 100}
+          overshootClamping={!!element.props.overshootClamping}
+          fps={fps}
+          onChange={(patch) =>
+            updateElement(element.id, { props: { ...element.props, ...patch } })
+          }
+          onOpenFullEditor={openTimingEditor}
+        />
       )}
 
       {mod && (
@@ -290,6 +298,7 @@ export const ElementDetail = () => {
           schema={mod.schema}
           value={element.props}
           onChange={(patch) => updateElement(element.id, { props: { ...element.props, ...patch } })}
+          hiddenFields={hasSpringProps ? SPRING_FIELDS : undefined}
         />
       )}
     </div>

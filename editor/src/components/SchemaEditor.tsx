@@ -289,9 +289,15 @@ type Props = {
   schema: z.ZodType<any>;
   value: Record<string, unknown>;
   onChange: (patch: Record<string, unknown>) => void;
+  /**
+   * Field names to skip rendering. Used by ElementDetail when a richer
+   * control (e.g. SpringCurveVisualizer) has already taken ownership of
+   * those props and the generic numeric input would be redundant/crude.
+   */
+  hiddenFields?: ReadonlySet<string>;
 };
 
-export const SchemaEditor: React.FC<Props> = ({ schema, value, onChange }) => {
+export const SchemaEditor: React.FC<Props> = ({ schema, value, onChange, hiddenFields }) => {
   // unwrap walks optional/default/nullable wrappers regardless of inner
   // type. Its signature already takes `any`, so passing a ZodType<any> needs
   // no further cast — the caller code then discriminates by _def.type.
@@ -308,15 +314,17 @@ export const SchemaEditor: React.FC<Props> = ({ schema, value, onChange }) => {
   }
   return (
     <>
-      {keys.map((k) => (
-        <Field
-          key={k}
-          name={k}
-          schema={shape[k]}
-          value={value[k]}
-          onChange={(v) => onChange({ [k]: v })}
-        />
-      ))}
+      {keys
+        .filter((k) => !hiddenFields?.has(k))
+        .map((k) => (
+          <Field
+            key={k}
+            name={k}
+            schema={shape[k]}
+            value={value[k]}
+            onChange={(v) => onChange({ [k]: v })}
+          />
+        ))}
     </>
   );
 };

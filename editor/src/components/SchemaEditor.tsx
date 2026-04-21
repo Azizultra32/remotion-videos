@@ -16,6 +16,7 @@ import { useState } from "react";
 import type { z } from "zod";
 import { isEasingField } from "../utils/schemaFields";
 import { AssetPicker } from "./AssetPicker";
+import { EasingCurvePreview } from "./EasingCurvePreview";
 
 // Detect asset fields by name so we can render a "Pick" button next to the
 // input. Returns the asset kind (image/video) or null if the field is not
@@ -191,6 +192,7 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
               </option>
             ))}
           </select>
+          <EasingCurvePreview name={current} />
         </Row>
       );
     }

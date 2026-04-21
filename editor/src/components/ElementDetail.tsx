@@ -3,6 +3,7 @@
 import { getElementModule } from "@compositions/elements/registry";
 import { useEditorStore } from "../store";
 import { SchemaEditor } from "./SchemaEditor";
+import { FadeEnvelopeVisualizer } from "./FadeEnvelopeVisualizer";
 import { SpringCurveVisualizer } from "./SpringCurveVisualizer";
 
 const fieldStyle: React.CSSProperties = {
@@ -53,6 +54,14 @@ const SPRING_FIELDS: ReadonlySet<string> = new Set([
   "overshootClamping",
 ]);
 
+// Fields owned by FadeEnvelopeVisualizer — hidden from SchemaEditor
+// so the trapezoidal envelope is the sole control (not duplicated
+// under the generic numeric editor below).
+const FADE_FIELDS: ReadonlySet<string> = new Set([
+  "fadeInSec",
+  "fadeOutSec",
+]);
+
 export const ElementDetail = () => {
   const { selectedElementId, elements, updateElement, removeElement, beatData, snapMode, events } =
     useEditorStore();
@@ -89,6 +98,9 @@ export const ElementDetail = () => {
 
   const hasSpringProps =
     typeof element.props.damping === "number" && typeof element.props.stiffness === "number";
+  const hasFadeEnvelope =
+    typeof element.props.fadeInSec === "number" &&
+    typeof element.props.fadeOutSec === "number";
   const openTimingEditor = () => {
     const d = Number(element.props.damping);
     const s = Number(element.props.stiffness);
@@ -293,14 +305,33 @@ export const ElementDetail = () => {
         />
       )}
 
-      {mod && (
-        <SchemaEditor
-          schema={mod.schema}
-          value={element.props}
-          onChange={(patch) => updateElement(element.id, { props: { ...element.props, ...patch } })}
-          hiddenFields={hasSpringProps ? SPRING_FIELDS : undefined}
+      {hasFadeEnvelope && (
+        <FadeEnvelopeVisualizer
+          durationSec={element.durationSec}
+          fadeInSec={Number(element.props.fadeInSec) || 0}
+          fadeOutSec={Number(element.props.fadeOutSec) || 0}
+          onChange={(patch) =>
+            updateElement(element.id, { props: { ...element.props, ...patch } })
+          }
         />
       )}
+
+      {mod &&
+        (() => {
+          const hidden = new Set<string>();
+          if (hasSpringProps) for (const f of SPRING_FIELDS) hidden.add(f);
+          if (hasFadeEnvelope) for (const f of FADE_FIELDS) hidden.add(f);
+          return (
+            <SchemaEditor
+              schema={mod.schema}
+              value={element.props}
+              onChange={(patch) =>
+                updateElement(element.id, { props: { ...element.props, ...patch } })
+              }
+              hiddenFields={hidden.size > 0 ? hidden : undefined}
+            />
+          );
+        })()}
     </div>
   );
 };

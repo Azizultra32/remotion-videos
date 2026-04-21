@@ -156,6 +156,25 @@ export const Timeline = () => {
           {/* Bar lanes — single relative container for all tracks so
               beat-markers + playhead can span the whole height */}
           <div
+            onPointerDown={(e) => {
+              // Click-to-seek on the timeline itself (not the waveform).
+              // An element's own onPointerDown stopPropagation()'s, so
+              // this fires ONLY on empty space between elements.
+              // Right-click and drag-initiating clicks (secondary button,
+              // shift for range, etc.) pass through unchanged so existing
+              // selection/drag logic still works.
+              if (e.button !== 0) return;
+              if (e.target !== e.currentTarget) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const dataPx = e.clientX - rect.left + panPx;
+              const rawSec = Math.max(0, Math.min(compositionDuration, dataPx * effectiveSecPerPx));
+              const state = useEditorStore.getState();
+              // Snap to beat grid by default — matches drag/resize behavior.
+              // Shift-click bypasses snap for precise placement.
+              const snappedSec = snapTime(rawSec, state.snapMode, state.beatData, e.shiftKey);
+              state.setCurrentTime(snappedSec);
+              state.selectElement(null);
+            }}
             onDragOver={(e) => {
               // Accept only asset drags from AssetLibrary; native file
               // drops land on the AssetLibrary panel's dropzone instead.

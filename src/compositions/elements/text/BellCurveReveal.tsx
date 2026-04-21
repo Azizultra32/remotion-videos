@@ -87,7 +87,7 @@ export const BellCurveRevealModule: ElementModule<Props> = {
   id: "text.bellCurve",
   category: "text",
   label: "Bell Curve Reveal",
-  description: "Gaussian opacity envelope peaking at element midpoint (Dubfire AHURA)",
+  description: "Gaussian opacity envelope peaking at element midpoint — text fades in then out",
   defaultDurationSec: 10,
   defaultTrack: 0,
   schema,

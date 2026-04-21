@@ -16,9 +16,17 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CATEGORY_ORDER = ["text", "audio", "shape", "overlay", "video"];
 
+// Per-project custom elements (id prefix "custom.") live in a dedicated
+// PROJECT section so they don't clutter the engine palette. AHURA and
+// any other bespoke-per-track element thus show up ONLY in the project
+// section where they belong — not mixed in with TEXT/OVERLAYS alongside
+// reusable primitives. See projects/<stem>/custom-elements/*.tsx.
+const isProjectElement = (id: string): boolean => id.startsWith("custom.");
+
 export const Sidebar = () => {
   const { addElement, currentTimeSec, selectElement } = useEditorStore();
   const byCategory = listByCategory();
+  const projectElements = ELEMENT_MODULES.filter((m) => isProjectElement(m.id));
 
   const handleAdd = (moduleId: string) => {
     const mod = ELEMENT_MODULES.find((m) => m.id === moduleId);
@@ -45,7 +53,56 @@ export const Sidebar = () => {
         overflowY: "auto",
       }}
     >
-      {CATEGORY_ORDER.filter((c) => (byCategory[c] ?? []).length > 0).map((cat) => (
+      {/* Per-project custom elements first — they're the active creative
+          surface for the loaded track. Rendered under a single PROJECT
+          header (not sub-categorized) with a distinctive amber accent so
+          they're visually distinct from the reusable engine primitives
+          below. Section is hidden entirely when no project elements exist. */}
+      {projectElements.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <h3
+            style={{
+              margin: "0 0 8px 0",
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#d4a017",
+              letterSpacing: "0.1em",
+            }}
+          >
+            PROJECT
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {projectElements.map((mod) => (
+              <button
+                type="button"
+                key={mod.id}
+                onClick={() => handleAdd(mod.id)}
+                title={mod.description}
+                style={{
+                  padding: "6px 8px",
+                  background: "#1a1205",
+                  border: "1px solid #4a3510",
+                  borderRadius: 4,
+                  color: "#fff",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>+ {mod.label}</span>
+                <span style={{ fontSize: 9, color: "#988" }}>{mod.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {CATEGORY_ORDER.filter(
+        (c) => (byCategory[c] ?? []).filter((m) => !isProjectElement(m.id)).length > 0,
+      ).map((cat) => (
         <div key={cat} style={{ marginBottom: 16 }}>
           <h3
             style={{
@@ -59,7 +116,7 @@ export const Sidebar = () => {
             {CATEGORY_LABELS[cat] ?? cat.toUpperCase()}
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {byCategory[cat].map((mod) => (
+            {byCategory[cat].filter((m) => !isProjectElement(m.id)).map((mod) => (
               <button
                 type="button"
                 key={mod.id}

@@ -78,12 +78,14 @@ export const useBeats = (src: string | null | undefined): BeatsAPI => {
       return;
     }
     const handle = delayRender(`useBeats:${src}`);
+    // `projects/` paths resolve through `public/projects` (the sidecar and
+    // `scripts/cli/paths.ts` keep that symlinked at MV_PROJECTS_DIR), which
+    // means staticFile() works identically in the editor AND in production
+    // `npx remotion render` (where no /api/ server exists). An earlier revision
+    // rewrote projects/ -> /api/projects/ which silently 404'd on render and
+    // produced beat-less videos with no error.
     const url =
-      src.startsWith("http") || src.startsWith("/")
-        ? src
-        : src.startsWith("projects/")
-          ? `/api/${src}`
-          : staticFile(src);
+      src.startsWith("http") || src.startsWith("/") ? src : staticFile(src);
     fetch(url)
       .then((r) => r.json())
       .then((j: BeatsJSON) => {

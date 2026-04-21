@@ -22,8 +22,6 @@ import { useUndoHistory } from "./hooks/useUndoHistory";
 import { useEditorStore } from "./store";
 import { toEditorUrl } from "./utils/url";
 
-const DEFAULT_BEATS_URL = "/api/projects/love-in-traffic/analysis.json";
-
 // Mount-time ?beats=... override. Historically this was the only way to
 // switch tracks; now SongPicker handles runtime switching via store.setTrack.
 // This remains only as a seed for initial state when the store was empty.
@@ -57,7 +55,6 @@ export const App = () => {
   const beatsSrc = useEditorStore((s) => s.beatsSrc);
   const setBeatsSrc = useEditorStore((s) => s.setBeatsSrc);
   const setTrack = useEditorStore((s) => s.setTrack);
-  const setTrackByStem = useEditorStore((s) => s.setTrackByStem);
 
   // One-shot seed from ?beats=... if the store has no beatsSrc yet. After
   // this the SongPicker / store is the single source of truth.
@@ -88,27 +85,28 @@ export const App = () => {
       await waitForHydration();
       if (cancelled || useEditorStore.getState().audioSrc) return;
 
-      const currentStem = await fetch("/api/current-project")
-        .then(async (r) => {
-          if (!r.ok) return null;
-          const body = (await r.json()) as { stem?: string | null };
-          return body.stem ?? null;
-        })
-        .catch(() => null);
+      const [currentStem, songs] = await Promise.all([
+        fetch("/api/current-project")
+          .then(async (r) => {
+            if (!r.ok) return null;
+            const body = (await r.json()) as { stem?: string | null };
+            return body.stem ?? null;
+          })
+          .catch(() => null),
+        fetch("/api/songs")
+          .then(async (r) => {
+            if (!r.ok) return [] as Array<{ stem: string; audioSrc: string; beatsSrc: string }>;
+            return (await r.json()) as Array<{ stem: string; audioSrc: string; beatsSrc: string }>;
+          })
+          .catch(() => [] as Array<{ stem: string; audioSrc: string; beatsSrc: string }>),
+      ]);
       if (cancelled || useEditorStore.getState().audioSrc) return;
 
-      if (currentStem) {
-        const restored = await setTrackByStem(currentStem);
-        if (cancelled || restored || useEditorStore.getState().audioSrc) return;
+      const currentSong = currentStem ? songs.find((song) => song.stem === currentStem) : null;
+      if (currentSong?.audioSrc) {
+        setTrack(currentSong.audioSrc, currentSong.beatsSrc);
+        return;
       }
-
-      const songs = await fetch("/api/songs")
-        .then(async (r) => {
-          if (!r.ok) return [] as Array<{ audioSrc: string; beatsSrc: string }>;
-          return (await r.json()) as Array<{ audioSrc: string; beatsSrc: string }>;
-        })
-        .catch(() => [] as Array<{ audioSrc: string; beatsSrc: string }>);
-      if (cancelled || useEditorStore.getState().audioSrc) return;
 
       const fallback = songs[0];
       if (fallback) setTrack(fallback.audioSrc, fallback.beatsSrc);
@@ -118,12 +116,12 @@ export const App = () => {
     return () => {
       cancelled = true;
     };
-  }, [audioSrc, setTrack, setTrackByStem]);
+  }, [audioSrc, setTrack]);
 
   // Reactive beats load: re-fetches whenever the store's beatsSrc changes
   // (i.e. when SongPicker calls setTrack). toEditorUrl routes
   // "projects/<stem>/analysis.json" -> "/api/projects/<stem>/analysis.json".
-  const beatsUrl = toEditorUrl(beatsSrc) ?? getQueryBeatsUrl() ?? DEFAULT_BEATS_URL;
+  const beatsUrl = toEditorUrl(beatsSrc) ?? getQueryBeatsUrl();
   useBeatData(beatsUrl);
 
   const audioUrl = toEditorUrl(audioSrc);

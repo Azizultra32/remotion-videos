@@ -9,6 +9,12 @@ import { sidecarPlugin } from "./vite-plugin-sidecar";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
+// MV_REMOTE=1 disables HMR. HMR opens a WebSocket back to the dev server;
+// over a tunnel (localtunnel, cloudflared quick tunnel) that WS drops and
+// reconnects on a loop, which freezes the page. When viewing the editor
+// remotely for playback/demo only, launch with `MV_REMOTE=1 npm run dev`.
+const remoteMode = process.env.MV_REMOTE === "1";
+
 // Single source of truth for the projects-dir resolver lives at
 // scripts/cli/paths.ts (handles MV_PROJECTS_DIR overrides + `~/`
 // expansion via node:os homedir()). Importing rather than re-
@@ -63,6 +69,8 @@ export default defineConfig({
     // Safe in dev: the dev server doesn't expose secrets; sidecar has its
     // own path-traversal guards on /api/projects/*.
     allowedHosts: true,
+    // Disable HMR under MV_REMOTE=1. See remoteMode comment above.
+    hmr: remoteMode ? false : undefined,
     // Vite's default fs.allow is the project root (editor/). Per-project
     // custom-elements live in projects/<stem>/custom-elements/*.tsx — outside
     // editor/ by design, and outside the repo entirely when MV_PROJECTS_DIR

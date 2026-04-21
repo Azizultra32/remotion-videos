@@ -40,10 +40,16 @@ const normalize = (raw: unknown): BeatData => {
   };
 };
 
-export const useBeatData = (url: string) => {
+export const useBeatData = (url: string | null) => {
   const setBeatData = useEditorStore((s) => s.setBeatData);
   useEffect(() => {
     let cancelled = false;
+    if (!url) {
+      setBeatData(normalize({}));
+      return () => {
+        cancelled = true;
+      };
+    }
     fetch(url)
       .then((r) => r.json())
       .then((d) => {

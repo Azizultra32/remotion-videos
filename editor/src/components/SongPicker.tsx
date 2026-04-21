@@ -35,12 +35,11 @@ const humanize = (stem: string): string =>
 
 export const SongPicker = () => {
   const audioSrc = useEditorStore((s) => s.audioSrc);
-  const setTrack = useEditorStore((s) => s.setTrack);
-  const setTrackByStem = useEditorStore((s) => s.setTrackByStem);
   const [songs, setSongs] = useState<SongEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<{ filename: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const setTrack = useEditorStore((s) => s.setTrack);
 
   const refreshSongs = async (): Promise<SongEntry[] | null> => {
     try {
@@ -57,39 +56,21 @@ export const SongPicker = () => {
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      try {
-        const r = await fetch("/api/songs");
+    void fetch("/api/songs")
+      .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data: SongEntry[] = await r.json();
-        if (cancelled) return;
-        setSongs(data);
-        if (audioSrc) return;
-
-        const currentProject = await fetch("/api/current-project")
-          .then(async (resp) => {
-            if (!resp.ok) return null;
-            const body = (await resp.json()) as { stem?: string | null };
-            return body.stem ?? null;
-          })
-          .catch(() => null);
-        if (cancelled) return;
-
-        if (currentProject) {
-          const restored = await setTrackByStem(currentProject);
-          if (cancelled || restored) return;
-        }
-
-        const fallback = data[0];
-        if (fallback) setTrack(fallback.audioSrc, fallback.beatsSrc);
-      } catch (err) {
+        return r.json();
+      })
+      .then((data: SongEntry[]) => {
+        if (!cancelled) setSongs(data);
+      })
+      .catch((err) => {
         if (!cancelled) setError(String((err as Error)?.message ?? err));
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
-  }, [audioSrc, setTrack, setTrackByStem]);
+  }, []);
 
   const stem = stemFromAudioSrc(audioSrc);
   const current = songs?.find((s) => s.stem === stem) ?? null;
@@ -172,6 +153,7 @@ export const SongPicker = () => {
         >
           {!songs && <option value="">Loading…</option>}
           {songs && songs.length === 0 && <option value="">No tracks found</option>}
+          {songs && songs.length > 0 && !stem && <option value="">Select track…</option>}
           {songs && stem && !current && (
             <option value={stem} disabled>
               {humanize(stem)} (missing)

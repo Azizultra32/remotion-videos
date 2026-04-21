@@ -18,6 +18,12 @@ import { PlasmaBackdropModule } from "./overlays/PlasmaBackdrop";
 import { ShaderPulseModule } from "./overlays/ShaderPulse";
 import { MotionBlurTextModule } from "./overlays/MotionBlurText";
 import { SceneTransitionModule } from "./overlays/SceneTransition";
+import { LottieClipModule } from "./overlays/LottieClip";
+import { GifClipModule } from "./overlays/GifClip";
+import { CaptionsModule } from "./overlays/Captions";
+import { IFrameEmbedModule } from "./overlays/IFrameEmbed";
+import { NoiseFieldModule } from "./overlays/NoiseField";
+import { GoogleFontTextModule } from "./text/GoogleFontText";
 import { VideoClipModule } from "./overlays/VideoClip";
 import { WatermarkMaskModule } from "./overlays/WatermarkMask";
 import { NeonStrokeStackModule } from "./shapes/NeonStrokeStack";
@@ -71,6 +77,12 @@ const ENGINE_ELEMENT_MODULES: ElementModule<any>[] = [
   MotionBlurTextModule,
   SceneTransitionModule,
   ShapeClipModule,
+  LottieClipModule,
+  GifClipModule,
+  CaptionsModule,
+  IFrameEmbedModule,
+  NoiseFieldModule,
+  GoogleFontTextModule,
 ];
 
 // Merge built-ins with per-project custom elements. Later entries win on id
@@ -120,6 +132,12 @@ export const ELEMENT_SOURCE_PATHS: Record<string, string> = {
   "text.typing": "src/compositions/elements/text/TypingText.tsx",
   "overlay.motionBlurText": "src/compositions/elements/overlays/MotionBlurText.tsx",
   "overlay.sceneTransition": "src/compositions/elements/overlays/SceneTransition.tsx",
+  "overlay.lottie": "src/compositions/elements/overlays/LottieClip.tsx",
+  "overlay.gif": "src/compositions/elements/overlays/GifClip.tsx",
+  "overlay.captions": "src/compositions/elements/overlays/Captions.tsx",
+  "overlay.iframe": "src/compositions/elements/overlays/IFrameEmbed.tsx",
+  "overlay.noise": "src/compositions/elements/overlays/NoiseField.tsx",
+  "text.googleFont": "src/compositions/elements/text/GoogleFontText.tsx",
   "shape.shapeClip": "src/compositions/elements/shapes/ShapeClip.tsx",
 };
 

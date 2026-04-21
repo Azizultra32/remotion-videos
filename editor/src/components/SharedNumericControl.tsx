@@ -333,10 +333,11 @@ export const guessConstraints = (fieldName: string): { min: number; max: number;
     return { min: 1, max: 256, step: 1, integer: true };
   if (/frames?$/.test(n))
     return { min: 0, max: 240, step: 1, integer: true };
-  // Font size
-  if (/fontsize$/.test(n))
-    return { min: 8, max: 400, step: 1, integer: false };
-  if (/fontweight$/.test(n))
+  // Font size — match any field starting or ending with "fontsize"
+  // (fontSize, fontSizeStart, fontSizeEnd, baseFontSize, etc.)
+  if (/fontsize/.test(n))
+    return { min: 8, max: 1000, step: 1, integer: false };
+  if (/fontweight/.test(n))
     return { min: 100, max: 900, step: 100, integer: true };
   // Time in seconds
   if (/(sec$|seconds$|durationsec|sigmasec|trailsec|fadesec|fadein|fadeout|decay|life)/.test(n))

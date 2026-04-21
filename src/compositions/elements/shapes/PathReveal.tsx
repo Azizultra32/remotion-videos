@@ -21,17 +21,17 @@ import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   svgPath: z.string(),
-  viewBoxWidth: z.number(),
-  viewBoxHeight: z.number(),
+  viewBoxWidth: z.number().min(1).max(10000),
+  viewBoxHeight: z.number().min(1).max(10000),
   stroke: z.string(),
-  strokeWidth: z.number(),
+  strokeWidth: z.number().min(0.5).max(50).step(0.5),
   fill: z.string(),
   x: z.number().min(-50).max(150),
   y: z.number().min(-50).max(150),
   widthPct: z.number().min(1).max(200),
   heightPct: z.number().min(1).max(200),
   triggerOnBeats: z.boolean(),
-  drawDurationFrames: z.number().min(1).max(600),
+  drawDurationFrames: z.number().int().min(1).max(600),
 });
 
 type Props = z.infer<typeof schema>;

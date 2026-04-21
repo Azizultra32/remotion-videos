@@ -4,13 +4,13 @@ import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   color: z.string(),
-  strokeWidth: z.number(),
-  ringLifeSec: z.number(),
-  maxRadiusPct: z.number(),
+  strokeWidth: z.number().min(0.5).max(20).step(0.5),
+  ringLifeSec: z.number().min(0.1).max(20).step(0.1),
+  maxRadiusPct: z.number().min(1).max(100),
   triggerOn: z.enum(["beats", "downbeats", "drops"]),
-  x: z.number(),
-  y: z.number(),
-  fadeExponent: z.number(),
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+  fadeExponent: z.number().min(0.1).max(10).step(0.1),
 });
 
 type Props = z.infer<typeof schema>;

@@ -8,14 +8,14 @@ const schema = z.object({
   text: z.string(),
   textColor: z.string(),
   cursorColor: z.string(),
-  fontSize: z.number(),
-  fontWeight: z.number(),
+  fontSize: z.number().min(8).max(400),
+  fontWeight: z.number().min(100).max(900),
   fontFamily: z.string(),
-  durationInFramesToType: z.number(),
-  cursorBlinkSpeed: z.number(),
+  durationInFramesToType: z.number().int().min(1).max(600),
+  cursorBlinkSpeed: z.number().int().min(1).max(120),
   textAlign: z.enum(["left", "center", "right"]),
-  x: z.number(),
-  y: z.number(),
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
 });
 
 type Props = z.infer<typeof schema>;

@@ -6,11 +6,11 @@ import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   videoSrc: z.string(),
-  videoStartSec: z.number(),
-  opacity: z.number(),
-  scale: z.number(),
-  beatBrightnessBoost: z.number(),
-  beatBrightnessDecay: z.number(),
+  videoStartSec: z.number().min(0).max(600).step(0.01),
+  opacity: z.number().min(0).max(1).step(0.01),
+  scale: z.number().min(0.1).max(5).step(0.01),
+  beatBrightnessBoost: z.number().min(0).max(4).step(0.05),
+  beatBrightnessDecay: z.number().min(0).max(20).step(0.1),
   objectFit: z.enum(["cover", "contain", "fill"]),
   muted: z.boolean(),
 });

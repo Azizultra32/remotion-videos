@@ -4,12 +4,12 @@ import { expDecay } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
-  fadeInBeats: z.number(),
-  holdBeats: z.number(),
+  fadeInBeats: z.number().int().min(0).max(64),
+  holdBeats: z.number().int().min(0).max(64),
   flashColor: z.string(),
-  flashDecay: z.number(),
+  flashDecay: z.number().min(0).max(20).step(0.1),
   holdColor: z.string(),
-  finalOpacity: z.number(),
+  finalOpacity: z.number().min(0).max(1).step(0.01),
 });
 
 type Props = z.infer<typeof schema>;

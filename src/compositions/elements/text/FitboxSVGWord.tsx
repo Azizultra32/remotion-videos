@@ -6,14 +6,14 @@ import type { ElementModule, ElementRendererProps } from "../types";
 const schema = z.object({
   text: z.string(),
   textColor: z.string(),
-  fontWeight: z.number(),
+  fontWeight: z.number().min(100).max(900),
   fontFamily: z.string(),
-  fillPct: z.number(),
-  heightPct: z.number(),
-  x: z.number(),
-  y: z.number(),
-  fadeInFrames: z.number(),
-  fadeOutFrames: z.number(),
+  fillPct: z.number().min(1).max(100),
+  heightPct: z.number().min(1).max(100),
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+  fadeInFrames: z.number().int().min(0).max(300),
+  fadeOutFrames: z.number().int().min(0).max(300),
 });
 
 type Props = z.infer<typeof schema>;

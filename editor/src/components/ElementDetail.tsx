@@ -116,16 +116,71 @@ export const ElementDetail = () => {
   const fps = useEditorStore.getState().fps;
 
   return (
-    <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-      {element && (
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            alignItems: "center",
-            marginBottom: 8,
-          }}
-        >
+    // Density pass: padding 16→10, row gap 12→8. Matches the tighter
+    // feel of col-1 palette. Column is its own overflow-y scroller
+    // (owned by App.tsx's col-2 div) so we don't set overflow here.
+    <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+      {/*
+        Sticky header. When the prop list is long enough to scroll, the
+        user loses track of which element they're editing. Pinning the
+        label + type chip to the top of the column (via sticky, not
+        fixed — scoped to the scrollable parent) keeps that context
+        visible without stealing real estate when the list is short.
+        Margin negatives pull it flush to col-2's 10-px pad so the
+        backdrop extends edge-to-edge behind the title text.
+      */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 2,
+          background: "#111",
+          margin: "-10px -10px 0 -10px",
+          padding: "10px 10px 8px 10px",
+          borderBottom: "1px solid #222",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#eee",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+              flex: 1,
+            }}
+            title={`${element.label} — ${mod ? mod.id : `unknown: ${element.type}`}`}
+          >
+            {element.label}{" "}
+            <span style={{ color: "#666", fontWeight: 400, fontSize: 10 }}>
+              ({mod ? mod.id : `unknown: ${element.type}`})
+            </span>
+          </h3>
+          <button
+            type="button"
+            onClick={() => removeElement(element.id)}
+            style={{
+              padding: "3px 8px",
+              background: "#4a1a1a",
+              border: "1px solid #833",
+              borderRadius: 3,
+              color: "#f88",
+              fontSize: 10,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            Delete
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <span
             style={{
               fontSize: 9,
@@ -155,29 +210,6 @@ export const ElementDetail = () => {
             {isLocked ? "UNLOCK" : "LOCK"}
           </button>
         </div>
-      )}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
-          {element.label}{" "}
-          <span style={{ color: "#666", fontWeight: 400, fontSize: 10 }}>
-            ({mod ? mod.id : `unknown: ${element.type}`})
-          </span>
-        </h3>
-        <button
-          type="button"
-          onClick={() => removeElement(element.id)}
-          style={{
-            padding: "4px 10px",
-            background: "#4a1a1a",
-            border: "1px solid #833",
-            borderRadius: 4,
-            color: "#f88",
-            fontSize: 11,
-            cursor: "pointer",
-          }}
-        >
-          Delete
-        </button>
       </div>
 
       {!mod && (
@@ -335,6 +367,12 @@ export const ElementDetail = () => {
             <SchemaEditor
               schema={mod.schema}
               value={element.props}
+              // Thread defaults so per-prop ↺ reset can light up when the
+              // current value differs from the module's canonical default.
+              defaults={mod.defaults as Record<string, unknown>}
+              // Scope group collapse state per element type so each
+              // element type's ergonomic layout is independent.
+              persistKey={mod.id}
               onChange={(patch) =>
                 updateElement(element.id, { props: { ...element.props, ...patch } })
               }

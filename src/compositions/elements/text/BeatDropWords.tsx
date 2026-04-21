@@ -8,12 +8,12 @@ const schema = z.object({
   mode: z.enum(["cut", "flash"]),
   textColor: z.string(),
   backgroundColor: z.string(),
-  fontSize: z.number(),
-  fontWeight: z.number(),
+  fontSize: z.number().min(8).max(600),
+  fontWeight: z.number().min(100).max(900),
   fontFamily: z.string(),
   letterSpacing: z.string(),
   useDownbeatsOnly: z.boolean(),
-  decay: z.number(),
+  decay: z.number().min(0).max(20).step(0.1),
   blackBackground: z.boolean(),
 });
 

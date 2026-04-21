@@ -15,15 +15,15 @@ import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   videoSrc: z.string(),
-  playbackRate: z.number().min(0).max(100),
-  startFromSec: z.number().min(0),
+  playbackRate: z.number().min(0).max(100).step(0.05),
+  startFromSec: z.number().min(0).max(600).step(0.01),
   fit: z.enum(["cover", "contain"]),
-  x: z.number(),
-  y: z.number(),
+  x: z.number().min(-50).max(150),
+  y: z.number().min(-50).max(150),
   widthPct: z.number().min(1).max(200),
   heightPct: z.number().min(1).max(200),
   muted: z.boolean(),
-  volume: z.number().min(0).max(1),
+  volume: z.number().min(0).max(1).step(0.01),
 });
 
 type Props = z.infer<typeof schema>;

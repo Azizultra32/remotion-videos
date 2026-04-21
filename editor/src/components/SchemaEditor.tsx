@@ -12,12 +12,14 @@
 //   wrapper._def.innerType        is the wrapped schema (optional/default/nullable)
 
 import { EASING_NAMES } from "@utils/easing";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { z } from "zod";
 import { isEasingField } from "../utils/schemaFields";
 import { AssetPicker } from "./AssetPicker";
+import { ColorField } from "./ColorField";
 import { EasingCurvePreview } from "./EasingCurvePreview";
 import { SharedNumericControl, extractZodConstraints, guessConstraints } from "./SharedNumericControl";
+import { Vector2Field } from "./Vector2Field";
 
 // Detect asset fields by name so we can render a "Pick" button next to the
 // input. Returns the asset kind (image/video) or null if the field is not
@@ -72,6 +74,10 @@ type FieldProps = {
   name: string;
   schema: any;
   value: unknown;
+  // Optional schema default, threaded into numeric controls for the ↺
+  // reset affordance. Undefined for fields where the element module
+  // didn't supply a default (e.g. string fields, unset props).
+  defaultValue?: unknown;
   onChange: (v: unknown) => void;
 };
 
@@ -149,7 +155,7 @@ const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onCh
   );
 };
 
-const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
+const Field: React.FC<FieldProps> = ({ name, schema, value, defaultValue, onChange }) => {
   const inner = unwrap(schema);
   const tn = defType(inner);
   const prettyName = name.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
@@ -171,15 +177,15 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
 
   if (tn === "string") {
     if (isColorField(name)) {
+      // ColorField owns its own row layout (swatch + HEX + optional reset
+      // + popover with recent-colors history). No <Row> wrapper — that
+      // would double up labels.
       return (
-        <Row label={prettyName}>
-          <input
-            type="color"
-            value={String(value ?? "#ffffff")}
-            onChange={(e) => onChange(e.target.value)}
-            style={{ ...fieldStyle, padding: 2, height: 28 }}
-          />
-        </Row>
+        <ColorField
+          label={prettyName}
+          value={String(value ?? "#ffffff")}
+          onChange={(hex) => onChange(hex)}
+        />
       );
     }
     if (isEasingField(name)) {
@@ -221,6 +227,7 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
     const max = zod.max ?? heuristic.max;
     const step = zod.step ?? heuristic.step;
     const integer = zod.integer ?? heuristic.integer;
+    const dv = typeof defaultValue === "number" ? defaultValue : undefined;
     return (
       <SharedNumericControl
         label={prettyName}
@@ -229,6 +236,7 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, onChange }) => {
         max={max}
         step={step}
         integer={integer}
+        defaultValue={dv}
         onChange={onChange}
       />
     );
@@ -344,36 +352,300 @@ type Props = {
    * those props and the generic numeric input would be redundant/crude.
    */
   hiddenFields?: ReadonlySet<string>;
+  /**
+   * Schema defaults from the ElementModule's `.defaults` dict. Threaded
+   * through to numeric controls for the per-prop ↺ reset affordance.
+   */
+  defaults?: Record<string, unknown>;
+  /**
+   * Stable key for persisting group open/closed state in localStorage,
+   * typically the ElementModule.id. When omitted, sections render open
+   * and nothing is persisted. Keeps each element type's collapse state
+   * independent so a complex element's layout doesn't dictate a simple
+   * one's.
+   */
+  persistKey?: string;
 };
 
-export const SchemaEditor: React.FC<Props> = ({ schema, value, onChange, hiddenFields }) => {
+// Shared-prefix grouping. When a schema has lots of numeric knobs that
+// share a prefix (outerOpacity / outerGlow / outerOffset → "outer*"),
+// bucket them under a collapsible section. We only collapse when:
+//   - total field count > 8 (below that, flat reads faster), AND
+//   - at least 2 distinct prefixes each have ≥ 3 fields.
+// Falls back to a single flat list otherwise.
+//
+// Prefix extraction: leading lowercase run up to the first uppercase
+// letter. "outerOpacity" → "outer"; "fadeInSec" → "fade"; "x" → "x".
+// Friendly section titles for common roles; unknown prefixes keep their
+// capitalized raw form.
+const SECTION_TITLES: Record<string, string> = {
+  outer: "Outer",
+  mid: "Mid",
+  middle: "Middle",
+  inner: "Inner",
+  core: "Core",
+  spring: "Spring",
+  fade: "Fade",
+  color: "Color",
+  fill: "Fill",
+  stroke: "Stroke",
+  font: "Typography",
+  text: "Typography",
+  bg: "Background",
+  background: "Background",
+  shadow: "Shadow",
+  blur: "Effects",
+  glow: "Effects",
+};
+
+const extractPrefix = (name: string): string => {
+  const m = /^([a-z]+)(?=[A-Z]|$)/.exec(name);
+  return m ? m[1] : name.toLowerCase();
+};
+
+const groupFields = (keys: string[]): { title: string; keys: string[] }[] => {
+  if (keys.length <= 8) return [{ title: "", keys }];
+  const buckets = new Map<string, string[]>();
+  for (const k of keys) {
+    const p = extractPrefix(k);
+    const arr = buckets.get(p) ?? [];
+    arr.push(k);
+    buckets.set(p, arr);
+  }
+  const strong: { title: string; keys: string[] }[] = [];
+  const weak: string[] = [];
+  for (const [prefix, group] of buckets) {
+    if (group.length >= 3) {
+      const title = SECTION_TITLES[prefix] ?? (prefix.charAt(0).toUpperCase() + prefix.slice(1));
+      strong.push({ title, keys: group });
+    } else {
+      weak.push(...group);
+    }
+  }
+  // Require ≥2 strong buckets — otherwise collapsing buys nothing.
+  if (strong.length < 2) return [{ title: "", keys }];
+  // Keep original field order within each section + between sections.
+  const orderedStrong = strong
+    .map((s) => ({ title: s.title, keys: keys.filter((k) => s.keys.includes(k)) }))
+    .sort((a, b) => keys.indexOf(a.keys[0]) - keys.indexOf(b.keys[0]));
+  if (weak.length > 0) {
+    orderedStrong.push({ title: "Other", keys: keys.filter((k) => weak.includes(k)) });
+  }
+  return orderedStrong;
+};
+
+const storageKey = (persistKey: string, title: string): string =>
+  `mv-editor.schemaGroups.${persistKey}.${title || "_all"}`;
+
+// Pairs that collapse into a single Vector2Field instead of two scalar
+// rows. Anchor = first-appearing key (where the Vector2 renders in the
+// list); sibling = removed from the normal loop. `linkable` enables the
+// lock-aspect toggle (size pairs); `showPreview` draws the 32×20
+// crosshair preview (position pairs).
+type PairConfig = {
+  x: string;
+  y: string;
+  label: string;
+  linkable: boolean;
+  showPreview: boolean;
+};
+const VECTOR_PAIRS: readonly PairConfig[] = [
+  // Position: independent axes, crosshair preview so 50/50 reads as "center."
+  { x: "x", y: "y", label: "Position", linkable: false, showPreview: true },
+  // Size: aspect-lockable, no crosshair (a size isn't a point in space).
+  { x: "widthPct", y: "heightPct", label: "Size", linkable: true, showPreview: false },
+];
+
+// Given the ordered key list of a schema, compute which keys are pair
+// anchors, which are siblings to skip, and what config each anchor uses.
+// Pure — no React state involved — memoized by the caller via keys.join.
+const detectVectorPairs = (
+  keys: string[],
+): { anchors: Map<string, PairConfig>; siblings: Set<string> } => {
+  const anchors = new Map<string, PairConfig>();
+  const siblings = new Set<string>();
+  const keySet = new Set(keys);
+  for (const p of VECTOR_PAIRS) {
+    if (!keySet.has(p.x) || !keySet.has(p.y)) continue;
+    // Respect schema declaration order — if `y` appears before `x`,
+    // the Vector2 renders at y's slot.
+    const ix = keys.indexOf(p.x);
+    const iy = keys.indexOf(p.y);
+    const first = ix < iy ? p.x : p.y;
+    const second = first === p.x ? p.y : p.x;
+    anchors.set(first, p);
+    siblings.add(second);
+  }
+  return { anchors, siblings };
+};
+
+const CollapsibleSection: React.FC<{
+  title: string;
+  persistKey: string;
+  children: React.ReactNode;
+}> = ({ title, persistKey, children }) => {
+  const key = storageKey(persistKey, title);
+  const [open, setOpen] = useState<boolean>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+      return raw === null ? true : raw === "1";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") window.localStorage.setItem(key, open ? "1" : "0");
+    } catch {
+      /* ignore quota / private-mode errors */
+    }
+  }, [open, key]);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "4px 6px",
+          background: "transparent",
+          border: "none",
+          borderBottom: "1px solid #2a2a2a",
+          color: "#bbb",
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <span style={{ display: "inline-block", width: 10, color: "#666" }}>
+          {open ? "▾" : "▸"}
+        </span>
+        {title}
+      </button>
+      {open && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{children}</div>
+      )}
+    </div>
+  );
+};
+
+export const SchemaEditor: React.FC<Props> = ({
+  schema,
+  value,
+  onChange,
+  hiddenFields,
+  defaults,
+  persistKey,
+}) => {
   // unwrap walks optional/default/nullable wrappers regardless of inner
   // type. Its signature already takes `any`, so passing a ZodType<any> needs
   // no further cast — the caller code then discriminates by _def.type.
   const anySchema = unwrap(schema);
   // Zod 4: `.shape` is a plain object on ZodObject (no function call).
   const shape: Record<string, any> = anySchema?.shape ?? {};
-  const keys = Object.keys(shape);
-  if (keys.length === 0) {
+  const allKeys = Object.keys(shape);
+
+  // Detect x/y and widthPct/heightPct pairs on THIS schema. Anchor
+  // renders as a Vector2Field; sibling is removed from the visible set
+  // so the normal loop/grouping doesn't double-render it.
+  const allKeysSig = allKeys.join("|");
+  const pairMap = useMemo(
+    () => detectVectorPairs(allKeys),
+    // biome-ignore lint/correctness/useExhaustiveDependencies: allKeysSig
+    // is the stringified identity of allKeys; the only real dependency.
+    [allKeysSig],
+  );
+
+  const visibleKeys = useMemo(
+    () =>
+      allKeys.filter(
+        (k) => !hiddenFields?.has(k) && !pairMap.siblings.has(k),
+      ),
+    [allKeys, hiddenFields, pairMap],
+  );
+  const groups = useMemo(() => groupFields(visibleKeys), [visibleKeys]);
+
+  if (allKeys.length === 0) {
     return (
       <pre style={{ ...fieldStyle, margin: 0, whiteSpace: "pre-wrap" }}>
         {JSON.stringify(value, null, 2)}
       </pre>
     );
   }
+
+  const renderField = (k: string) => {
+    const pair = pairMap.anchors.get(k);
+    if (pair) {
+      // Resolve constraints for both axes the same way Field does for
+      // scalar numbers: Zod-declared .min/.max/.step wins; then field-
+      // name heuristics. Extra unwrap because shape[pair.x] may be
+      // wrapped (optional/default) — e.g. z.number().min(1).max(200).default(100).
+      const xSchema = unwrap(shape[pair.x]);
+      const ySchema = unwrap(shape[pair.y]);
+      const xH = guessConstraints(pair.x);
+      const yH = guessConstraints(pair.y);
+      const xZ = extractZodConstraints(xSchema);
+      const yZ = extractZodConstraints(ySchema);
+      const xVal = typeof value[pair.x] === "number" ? (value[pair.x] as number) : 0;
+      const yVal = typeof value[pair.y] === "number" ? (value[pair.y] as number) : 0;
+      return (
+        <Vector2Field
+          key={`__pair_${pair.x}_${pair.y}`}
+          label={pair.label}
+          xValue={xVal}
+          yValue={yVal}
+          xMin={xZ.min ?? xH.min}
+          xMax={xZ.max ?? xH.max}
+          xStep={xZ.step ?? xH.step}
+          yMin={yZ.min ?? yH.min}
+          yMax={yZ.max ?? yH.max}
+          yStep={yZ.step ?? yH.step}
+          linkable={pair.linkable}
+          showPreview={pair.showPreview}
+          onChange={(x, y) => onChange({ [pair.x]: x, [pair.y]: y })}
+        />
+      );
+    }
+    return (
+      <Field
+        key={k}
+        name={k}
+        schema={shape[k]}
+        value={value[k]}
+        defaultValue={defaults?.[k]}
+        onChange={(v) => onChange({ [k]: v })}
+      />
+    );
+  };
+
+  // Flat list: preserves the pre-upgrade look for elements with ≤8
+  // fields or schemas where no strong prefix cluster emerged.
+  if (groups.length === 1 && groups[0].title === "") {
+    return <>{groups[0].keys.map(renderField)}</>;
+  }
+
   return (
     <>
-      {keys
-        .filter((k) => !hiddenFields?.has(k))
-        .map((k) => (
-          <Field
-            key={k}
-            name={k}
-            schema={shape[k]}
-            value={value[k]}
-            onChange={(v) => onChange({ [k]: v })}
-          />
-        ))}
+      {groups.map((g) =>
+        g.title === "" ? (
+          <div key="__flat" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {g.keys.map(renderField)}
+          </div>
+        ) : (
+          <CollapsibleSection
+            key={g.title}
+            title={g.title}
+            persistKey={persistKey ?? "_default"}
+          >
+            {g.keys.map(renderField)}
+          </CollapsibleSection>
+        ),
+      )}
     </>
   );
 };

@@ -87,8 +87,8 @@ void main() {
 const schema = z.object({
   colorA: z.string(),
   colorB: z.string(),
-  scale: z.number(),
-  intensity: z.number(),
+  scale: z.number().min(0.1).max(10).step(0.05),
+  intensity: z.number().min(0).max(4).step(0.05),
 });
 
 type Props = z.infer<typeof schema>;

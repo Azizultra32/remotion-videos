@@ -16,13 +16,13 @@ import type { ElementModule, ElementRendererProps } from "../types";
 const schema = z.object({
   imageSrc: z.string(),
   fit: z.enum(["cover", "contain"]),
-  x: z.number(),                           // center x in %
-  y: z.number(),                           // center y in %
+  x: z.number().min(-50).max(150),         // center x in %
+  y: z.number().min(-50).max(150),         // center y in %
   widthPct: z.number().min(1).max(200),
   heightPct: z.number().min(1).max(200),
-  fadeInSec: z.number().min(0).max(5),
-  fadeOutSec: z.number().min(0).max(5),
-  opacity: z.number().min(0).max(1),
+  fadeInSec: z.number().min(0).max(5).step(0.05),
+  fadeOutSec: z.number().min(0).max(5).step(0.05),
+  opacity: z.number().min(0).max(1).step(0.01),
 });
 
 type Props = z.infer<typeof schema>;

@@ -4,13 +4,13 @@ import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   position: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]),
-  widthPx: z.number(),
-  heightPx: z.number(),
-  offsetPx: z.number(),
+  widthPx: z.number().min(1).max(4000),
+  heightPx: z.number().min(1).max(4000),
+  offsetPx: z.number().min(0).max(1000),
   background: z.string(),
-  blurPx: z.number(),
-  opacity: z.number(),
-  borderRadius: z.number(),
+  blurPx: z.number().min(0).max(100).step(0.5),
+  opacity: z.number().min(0).max(1).step(0.01),
+  borderRadius: z.number().min(0).max(200),
 });
 
 type Props = z.infer<typeof schema>;

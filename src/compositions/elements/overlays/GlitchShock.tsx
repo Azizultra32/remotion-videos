@@ -65,9 +65,9 @@ void main() { vUv = aPosition * 0.5 + 0.5; gl_Position = vec4(aPosition, 0.0, 1.
 
 const schema = z.object({
   triggerOn: z.enum(["beats", "downbeats", "drops"]),
-  trailSec: z.number(),
+  trailSec: z.number().min(0.02).max(2).step(0.01),
   rectCount: z.number().int().min(1).max(8),
-  maxOffset: z.number(),
+  maxOffset: z.number().min(0).max(0.5).step(0.005),
   color: z.string(),
 });
 

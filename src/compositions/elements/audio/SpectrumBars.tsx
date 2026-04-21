@@ -5,13 +5,13 @@ import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   position: z.enum(["top", "bottom", "middle"]),
-  numberOfBars: z.number(),
-  height: z.number(),
+  numberOfBars: z.number().int().min(4).max(256),
+  height: z.number().min(10).max(2000),
   color: z.string(),
-  opacity: z.number(),
+  opacity: z.number().min(0).max(1).step(0.01),
   mirror: z.boolean(),
-  gap: z.number(),
-  amplitude: z.number(),
+  gap: z.number().min(0).max(40),
+  amplitude: z.number().min(0).max(4).step(0.05),
   logScale: z.boolean(),
 });
 

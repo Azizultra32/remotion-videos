@@ -15,11 +15,11 @@ const schema = z.object({
   triggerOn: z.enum(["beats", "downbeats", "drops"]),
   everyN: z.number().int().min(1).max(32), // advance every N triggers
   fit: z.enum(["cover", "contain"]),
-  x: z.number(),       // center x in % (0-100)
-  y: z.number(),       // center y in % (0-100)
+  x: z.number().min(-50).max(150),       // center x in % (0-100)
+  y: z.number().min(-50).max(150),       // center y in % (0-100)
   widthPct: z.number().min(1).max(200),
   heightPct: z.number().min(1).max(200),
-  fadeSec: z.number().min(0).max(1), // cross-fade between consecutive images
+  fadeSec: z.number().min(0).max(1).step(0.01), // cross-fade between consecutive images
 });
 
 type Props = z.infer<typeof schema>;

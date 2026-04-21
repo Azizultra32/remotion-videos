@@ -78,10 +78,10 @@ void main() {
 
 const schema = z.object({
   triggerOn: z.enum(["beats", "downbeats", "drops"]),
-  trailSec: z.number(),
-  speed: z.number(),         // ring expansion speed (NDC units per sec)
+  trailSec: z.number().min(0.05).max(5).step(0.05),
+  speed: z.number().min(0.05).max(5).step(0.05),         // ring expansion speed (NDC units per sec)
   color: z.string(),          // ring tint
-  aberration: z.number(),    // chromatic aberration (0..0.04)
+  aberration: z.number().min(0).max(0.1).step(0.001),    // chromatic aberration (0..0.04)
 });
 
 type Props = z.infer<typeof schema>;

@@ -32,6 +32,15 @@ type Props = {
   // Defaults to 2 px/step — a full slider range in ~300-600 px of drag.
   pxPerStep?: number;
   integer?: boolean;
+  // Optional schema default. When provided AND value !== defaultValue, a
+  // tiny ↺ reset affordance appears at the end of the row. Clicking it
+  // calls onChange(defaultValue). Threaded in from SchemaEditor, which
+  // pulls it from the element's ElementModule.defaults dict. See the
+  // `Reset button per prop` upgrade for why this lives on the control
+  // instead of being computed inside ElementDetail: the control already
+  // owns the row's horizontal layout, so adding a trailing 14-px slot is
+  // cheaper than plumbing a wrapper component.
+  defaultValue?: number;
   onChange: (v: number) => void;
 };
 
@@ -97,12 +106,30 @@ export const SharedNumericControl: React.FC<Props> = ({
   step,
   pxPerStep = 2,
   integer = false,
+  defaultValue,
   onChange,
 }) => {
   const [textInput, setTextInput] = useState<string>(formatValue(value, step));
   const [editing, setEditing] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // Hover flags feed subtle #1f1f1f background-highlights on the drag
+  // label and slider track — the Framer/Figma idiom where the affordance
+  // surfaces on pointer-enter so users discover it without reading a
+  // tooltip. Passive `col-resize` alone is too easy to miss.
+  const [labelHover, setLabelHover] = useState(false);
+  const [sliderHover, setSliderHover] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const dragRef = useRef<{ startX: number; startValue: number } | null>(null);
+
+  // ↺ reset affordance: show only when a schema default was threaded in
+  // AND the current value differs from it (within the step resolution,
+  // so micro-drift from math expressions doesn't keep the button lit
+  // forever). Comparing at step-precision matches what the user sees in
+  // the text input.
+  const canReset =
+    typeof defaultValue === "number" &&
+    Number.isFinite(defaultValue) &&
+    formatValue(value, step) !== formatValue(defaultValue, step);
 
   // Sync the text input with incoming value changes (but not while editing
   // — the user's pending "+10" typed expression shouldn't be clobbered).
@@ -156,7 +183,10 @@ export const SharedNumericControl: React.FC<Props> = ({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "80px 1fr 60px",
+        // 4th column is a 14-px reset slot. Kept fixed-width so row
+        // alignment stays crisp across rows where canReset is false —
+        // the slot just renders an empty spacer in that case.
+        gridTemplateColumns: "80px 1fr 60px 14px",
         gap: 6,
         alignItems: "center",
         padding: "3px 0",
@@ -167,16 +197,26 @@ export const SharedNumericControl: React.FC<Props> = ({
         onPointerMove={dragging ? onLabelPointerMove : undefined}
         onPointerUp={onLabelPointerUp}
         onPointerCancel={onLabelPointerUp}
+        onPointerEnter={() => setLabelHover(true)}
+        onPointerLeave={() => setLabelHover(false)}
         title={`${label}: drag to scrub. Shift = fine (10×). Alt = coarse (10×). Range ${min}–${max}.`}
         style={{
           fontSize: 11,
-          color: "#aaa",
+          color: labelHover || dragging ? "#ddd" : "#aaa",
           cursor: dragging ? "ew-resize" : "col-resize",
           userSelect: "none",
           textTransform: "capitalize",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
+          // Subtle hover highlight surfaces the drag affordance. #1f1f1f
+          // on the ~#111 editor surface reads as "this is interactive"
+          // without screaming. Rounded so it hugs the label glyph.
+          background: labelHover || dragging ? "#1f1f1f" : "transparent",
+          borderRadius: 3,
+          padding: "2px 5px",
+          margin: "-2px -5px",
+          transition: "background 80ms ease-out, color 80ms ease-out",
         }}
       >
         {label}
@@ -191,14 +231,27 @@ export const SharedNumericControl: React.FC<Props> = ({
         step={step}
         value={value}
         onChange={(e) => commit(Number.parseFloat(e.target.value))}
-        style={{ width: "100%", accentColor: "#4a9" }}
+        onPointerEnter={() => setSliderHover(true)}
+        onPointerLeave={() => setSliderHover(false)}
+        style={{
+          width: "100%",
+          accentColor: "#4a9",
+          // Match the label's hover treatment on the track for symmetry.
+          // The range element's native track can't be restyled cross-
+          // browser without ::-webkit pseudos, so we apply the hint to
+          // the containing row via padding on the input itself.
+          background: sliderHover ? "#1f1f1f" : "transparent",
+          borderRadius: 3,
+          padding: "2px 0",
+          transition: "background 80ms ease-out",
+        }}
       />
       <input
         type="text"
         value={textInput}
-        onFocus={() => setEditing(true)}
+        onFocus={() => { setEditing(true); setInputFocused(true); }}
         onChange={(e) => setTextInput(e.target.value)}
-        onBlur={onTextCommit}
+        onBlur={() => { setInputFocused(false); onTextCommit(); }}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.currentTarget.blur(); }
           else if (e.key === "Escape") {
@@ -212,15 +265,51 @@ export const SharedNumericControl: React.FC<Props> = ({
           width: "100%",
           padding: "3px 5px",
           background: "#1a1a1a",
-          border: "1px solid #333",
+          // Focus-ring: editor accent #4a9 at 2px offset via box-shadow.
+          // Real `outline-offset` was avoided because the row is already
+          // dense; box-shadow ring is additive and doesn't reflow.
+          border: `1px solid ${inputFocused ? "#4a9" : "#333"}`,
+          boxShadow: inputFocused ? "0 0 0 2px rgba(68,170,153,0.35)" : "none",
+          outline: "none",
           borderRadius: 3,
           color: "#ddd",
           fontSize: 11,
           fontFamily: "monospace",
           textAlign: "right",
           boxSizing: "border-box",
+          transition: "border-color 80ms ease-out, box-shadow 80ms ease-out",
         }}
       />
+      {canReset ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof defaultValue === "number") commit(defaultValue);
+          }}
+          title={`Reset to default (${formatValue(defaultValue as number, step)})`}
+          style={{
+            width: 14,
+            height: 14,
+            padding: 0,
+            lineHeight: 1,
+            background: "transparent",
+            border: "none",
+            color: "#888",
+            cursor: "pointer",
+            fontSize: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onPointerEnter={(e) => { e.currentTarget.style.color = "#4a9"; }}
+          onPointerLeave={(e) => { e.currentTarget.style.color = "#888"; }}
+        >
+          ↺
+        </button>
+      ) : (
+        // Empty spacer preserves grid alignment when no reset is needed.
+        <span aria-hidden="true" />
+      )}
     </div>
   );
 };

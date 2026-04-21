@@ -62,7 +62,7 @@ void main() { vUv = aPosition * 0.5 + 0.5; gl_Position = vec4(aPosition, 0.0, 1.
 const schema = z.object({
   color: z.string(),
   haloCount: z.number().int().min(1).max(6),
-  intensity: z.number(),
+  intensity: z.number().min(0).max(4).step(0.05),
 });
 
 type Props = z.infer<typeof schema>;

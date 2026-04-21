@@ -6,10 +6,10 @@ import type { ElementModule, ElementRendererProps } from "../types";
 const schema = z.object({
   color: z.string(),
   band: z.enum(["bass", "mid", "highs"]),
-  opacityScale: z.number(),
-  opacityBase: z.number(),
+  opacityScale: z.number().min(0).max(1).step(0.05),
+  opacityBase: z.number().min(0).max(1).step(0.01),
   blendMode: z.enum(["normal", "screen", "overlay", "multiply", "lighten"]),
-  bandWidthHint: z.number(),
+  bandWidthHint: z.number().int().min(8).max(512),
 });
 
 type Props = z.infer<typeof schema>;

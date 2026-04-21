@@ -14,13 +14,13 @@ const schema = z.object({
   triggerOn: z.enum(["beats", "downbeats", "drops"]),
   everyN: z.number().int().min(1).max(32),
   fit: z.enum(["cover", "contain"]),
-  x: z.number(),
-  y: z.number(),
+  x: z.number().min(-50).max(150),
+  y: z.number().min(-50).max(150),
   widthPct: z.number().min(1).max(200),
   heightPct: z.number().min(1).max(200),
-  startFromSec: z.number().min(0), // offset into each clip when it becomes active
+  startFromSec: z.number().min(0).max(600).step(0.01), // offset into each clip when it becomes active
   muted: z.boolean(),
-  volume: z.number().min(0).max(1),
+  volume: z.number().min(0).max(1).step(0.01),
 });
 
 type Props = z.infer<typeof schema>;

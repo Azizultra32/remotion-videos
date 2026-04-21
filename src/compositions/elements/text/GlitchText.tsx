@@ -9,14 +9,14 @@ const schema = z.object({
   textColor: z.string(),
   glitchColor1: z.string(),
   glitchColor2: z.string(),
-  fontSize: z.number(),
-  fontWeight: z.number(),
+  fontSize: z.number().min(8).max(400),
+  fontWeight: z.number().min(100).max(900),
   fontFamily: z.string(),
-  glitchStrength: z.number(),
-  glitchSpeed: z.number(),
-  sporadicChance: z.number(),
-  x: z.number(),
-  y: z.number(),
+  glitchStrength: z.number().min(0).max(50),
+  glitchSpeed: z.number().min(0).max(5),
+  sporadicChance: z.number().min(0).max(1),
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
 });
 
 type Props = z.infer<typeof schema>;

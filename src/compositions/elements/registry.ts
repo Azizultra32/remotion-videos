@@ -23,6 +23,7 @@ import { GifClipModule } from "./overlays/GifClip";
 import { CaptionsModule } from "./overlays/Captions";
 import { IFrameEmbedModule } from "./overlays/IFrameEmbed";
 import { NoiseFieldModule } from "./overlays/NoiseField";
+import { Three3DModule } from "./overlays/Three3D";
 import { GoogleFontTextModule } from "./text/GoogleFontText";
 import { VideoClipModule } from "./overlays/VideoClip";
 import { WatermarkMaskModule } from "./overlays/WatermarkMask";
@@ -83,6 +84,7 @@ const ENGINE_ELEMENT_MODULES: ElementModule<any>[] = [
   IFrameEmbedModule,
   NoiseFieldModule,
   GoogleFontTextModule,
+  Three3DModule,
 ];
 
 // Merge built-ins with per-project custom elements. Later entries win on id
@@ -137,6 +139,7 @@ export const ELEMENT_SOURCE_PATHS: Record<string, string> = {
   "overlay.captions": "src/compositions/elements/overlays/Captions.tsx",
   "overlay.iframe": "src/compositions/elements/overlays/IFrameEmbed.tsx",
   "overlay.noise": "src/compositions/elements/overlays/NoiseField.tsx",
+  "overlay.three3D": "src/compositions/elements/overlays/Three3D.tsx",
   "text.googleFont": "src/compositions/elements/text/GoogleFontText.tsx",
   "shape.shapeClip": "src/compositions/elements/shapes/ShapeClip.tsx",
 };

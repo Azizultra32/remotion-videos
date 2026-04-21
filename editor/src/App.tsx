@@ -80,6 +80,15 @@ export const App = () => {
   return (
     <ShortcutsProvider>
       <div
+        onWheel={(e) => {
+          // Block browser pinch-zoom (ctrl+wheel on mac trackpads) at the
+          // root so it never escapes to the page. Individual panels
+          // (Timeline/Scrubber) still handle their own wheel events; this
+          // only catches ctrl-modifier zoom attempts which nothing else
+          // consumes. Prevents the "scroll takes me away from the editor"
+          // pathology where a pinch gesture rescaled the whole DOM.
+          if (e.ctrlKey) e.preventDefault();
+        }}
         style={{
           display: "grid",
           gridTemplateColumns: `${SIDEBAR_COL_WIDTH}px minmax(0, 1fr) ${CHAT_COL_WIDTH}px`,
@@ -89,27 +98,47 @@ export const App = () => {
           overflow: "hidden",
           background: "#111",
           color: "#fff",
+          // Block trackpad pinch + double-tap zoom from propagating to the
+          // browser. Belt-and-braces with the ctrl+wheel guard above.
+          touchAction: "none",
         }}
       >
-        {/* Sidebar column: Header → Element Library → Element Detail */}
+        {/* Left column: header on top, then three independently-scrolling
+            panels (Sidebar / AssetLibrary / ElementDetail) laid out as a
+            flex column so AssetLibrary is ALWAYS visible — previously the
+            whole column was a single scroll view and AssetLibrary lived
+            below-fold behind a long Sidebar. */}
         <div
-          style={{ gridRow: "1/5", borderRight: "1px solid #333", padding: 0, overflowY: "auto" }}
+          style={{
+            gridRow: "1/5",
+            borderRight: "1px solid #333",
+            padding: 0,
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+          }}
         >
-          <div style={{ padding: 16, borderBottom: "1px solid #333" }}>
+          <div style={{ padding: 16, borderBottom: "1px solid #333", flex: "0 0 auto" }}>
             <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Music Video Editor</h2>
             <ErrorBoundary name="Song Picker">
               <SongPicker />
             </ErrorBoundary>
           </div>
-          <ErrorBoundary name="Sidebar">
-            <Sidebar />
-          </ErrorBoundary>
-          <ErrorBoundary name="Asset Library">
-            <AssetLibrary />
-          </ErrorBoundary>
-          <ErrorBoundary name="Element Detail">
-            <ElementDetail />
-          </ErrorBoundary>
+          <div style={{ flex: "1 1 40%", minHeight: 0, overflowY: "auto", borderBottom: "1px solid #333" }}>
+            <ErrorBoundary name="Sidebar">
+              <Sidebar />
+            </ErrorBoundary>
+          </div>
+          <div style={{ flex: "1 1 30%", minHeight: 0, overflowY: "auto", borderBottom: "1px solid #333", background: "#0a0a0a" }}>
+            <ErrorBoundary name="Asset Library">
+              <AssetLibrary />
+            </ErrorBoundary>
+          </div>
+          <div style={{ flex: "1 1 30%", minHeight: 0, overflowY: "auto" }}>
+            <ErrorBoundary name="Element Detail">
+              <ElementDetail />
+            </ErrorBoundary>
+          </div>
         </div>
 
         {/* Transport Controls — pinned to row 1 col 2 (above Scrubber). */}

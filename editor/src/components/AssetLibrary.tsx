@@ -219,26 +219,29 @@ export const AssetLibrary = () => {
         all: "unset",
         display: "flex",
         alignItems: "center",
-        gap: 6,
+        gap: 8,
         cursor: "pointer",
-        margin: "0 0 8px 0",
-        width: "100%",
+        margin: "0 0 10px 0",
+        padding: "6px 8px",
+        background: "#2a4a7a",
+        borderRadius: 4,
+        width: "calc(100% - 16px)",
       }}
-      title={collapsed ? "Expand asset library" : "Collapse asset library"}
+      title={collapsed ? "Expand media library" : "Collapse media library"}
     >
-      <span style={{ fontSize: 9, color: "#888", width: 10 }}>{collapsed ? "▶" : "▼"}</span>
+      <span style={{ fontSize: 11, color: "#fff", width: 10 }}>{collapsed ? "▶" : "▼"}</span>
       <span
         style={{
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: 700,
-          color: "#666",
-          letterSpacing: "0.1em",
+          color: "#fff",
+          letterSpacing: "0.08em",
         }}
       >
-        ASSETS
+        MEDIA · drop files here
       </span>
       <span style={{ flex: 1 }} />
-      <span style={{ fontSize: 9, color: "#555" }}>
+      <span style={{ fontSize: 10, color: "#cfd8e8" }}>
         {entries ? `${filtered.length}/${entries.length}` : "…"}
       </span>
     </button>

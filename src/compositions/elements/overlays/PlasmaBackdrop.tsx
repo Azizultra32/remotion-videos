@@ -1,7 +1,14 @@
 import type React from "react";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
-import { useFFT } from "../../../hooks/useFFT";
+import { useReactiveBands } from "../audioReactiveRuntime";
+import {
+  bindFullscreenShaderState,
+  createFullscreenShaderState,
+  disposeFullscreenShaderState,
+  type FullscreenShaderState,
+  resizeFullscreenCanvas,
+} from "../fullscreenShaderRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Plasma backdrop — domain-warped noise flowing organically. Continuous
@@ -102,100 +109,71 @@ const defaults: Props = {
 
 const hexToRgb = (hex: string): [number, number, number] => {
   const m = hex.replace("#", "").trim();
-  const ex = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
+  const ex =
+    m.length === 3
+      ? m
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : m;
   const n = parseInt(ex, 16);
   if (Number.isNaN(n)) return [1, 0.5, 1];
   return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
 };
 
-const compile = (gl: WebGL2RenderingContext, type: number, src: string): WebGLShader | null => {
-  const s = gl.createShader(type); if (!s) return null;
-  gl.shaderSource(s, src); gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    // eslint-disable-next-line no-console
-    console.error("plasma shader:", gl.getShaderInfoLog(s)); gl.deleteShader(s); return null;
-  }
-  return s;
-};
-
-const makeProgram = (gl: WebGL2RenderingContext): WebGLProgram | null => {
-  const vs = compile(gl, gl.VERTEX_SHADER, VERT);
-  const fs = compile(gl, gl.FRAGMENT_SHADER, FRAG);
-  if (!vs || !fs) return null;
-  const p = gl.createProgram(); if (!p) return null;
-  gl.attachShader(p, vs); gl.attachShader(p, fs);
-  gl.bindAttribLocation(p, 0, "aPosition"); gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return null;
-  return p;
-};
-
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { colorA, colorB, scale, intensity } = element.props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const glStateRef = useRef<{
-    gl: WebGL2RenderingContext;
-    prog: WebGLProgram;
-    vao: WebGLVertexArrayObject;
-    locs: Record<string, WebGLUniformLocation | null>;
-  } | null>(null);
+  const glStateRef = useRef<FullscreenShaderState<
+    "uResolution" | "uTime" | "uBass" | "uMid" | "uHigh" | "uColorA" | "uColorB" | "uScale"
+  > | null>(null);
 
-  const fft = useFFT({
-    src: ctx.audioSrc ?? "",
-    frame: ctx.frame,
-    fps: ctx.fps,
-    numberOfSamples: 256,
-    assetRegistry: ctx.assetRegistry,
-  });
+  const reactive = useReactiveBands({ ctx, intensity, numberOfSamples: 256 });
 
   useEffect(() => {
-    const canvas = canvasRef.current; if (!canvas) return;
-    const gl = canvas.getContext("webgl2"); if (!gl) return;
-    const prog = makeProgram(gl); if (!prog) return;
-    const vao = gl.createVertexArray(); if (!vao) return;
-    gl.bindVertexArray(vao);
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    glStateRef.current = {
-      gl, prog, vao,
-      locs: {
-        uResolution: gl.getUniformLocation(prog, "uResolution"),
-        uTime: gl.getUniformLocation(prog, "uTime"),
-        uBass: gl.getUniformLocation(prog, "uBass"),
-        uMid: gl.getUniformLocation(prog, "uMid"),
-        uHigh: gl.getUniformLocation(prog, "uHigh"),
-        uColorA: gl.getUniformLocation(prog, "uColorA"),
-        uColorB: gl.getUniformLocation(prog, "uColorB"),
-        uScale: gl.getUniformLocation(prog, "uScale"),
-      },
-    };
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const gl = canvas.getContext("webgl2");
+    if (!gl) return;
+    const state = createFullscreenShaderState(gl, {
+      fragmentSource: FRAG,
+      label: "PlasmaBackdrop",
+      uniformNames: [
+        "uResolution",
+        "uTime",
+        "uBass",
+        "uMid",
+        "uHigh",
+        "uColorA",
+        "uColorB",
+        "uScale",
+      ] as const,
+      vertexSource: VERT,
+    });
+    if (!state) return;
+    glStateRef.current = state;
     return () => {
-      if (!glStateRef.current) return;
-      glStateRef.current.gl.deleteProgram(prog);
-      glStateRef.current.gl.deleteVertexArray(vao);
+      const current = glStateRef.current;
+      if (!current) return;
+      disposeFullscreenShaderState(current);
       glStateRef.current = null;
     };
   }, []);
 
   useEffect(() => {
-    const state = glStateRef.current; const canvas = canvasRef.current;
+    const state = glStateRef.current;
+    const canvas = canvasRef.current;
     if (!state || !canvas) return;
-    const { gl, prog, vao, locs } = state;
-
-    const dpr = 1; // Fixed for deterministic renders
-    const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
-    const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    const { gl, locs } = state;
+    resizeFullscreenCanvas(canvas);
     gl.viewport(0, 0, canvas.width, canvas.height);
 
-    gl.useProgram(prog);
-    gl.bindVertexArray(vao);
+    bindFullscreenShaderState(state);
     gl.uniform2f(locs.uResolution, canvas.width, canvas.height);
-    gl.uniform1f(locs.uTime, ctx.frame / Math.max(1, ctx.fps));
-    gl.uniform1f(locs.uBass, (fft?.bass ?? 0) * intensity);
-    gl.uniform1f(locs.uMid, (fft?.mid ?? 0) * intensity);
-    gl.uniform1f(locs.uHigh, (fft?.highs ?? 0) * intensity);
+    gl.uniform1f(locs.uTime, reactive.timeSec);
+    gl.uniform1f(locs.uBass, reactive.bass);
+    gl.uniform1f(locs.uMid, reactive.mid);
+    gl.uniform1f(locs.uHigh, reactive.highs);
     const [ar, ag, ab] = hexToRgb(colorA);
     const [br, bg, bb] = hexToRgb(colorB);
     gl.uniform3f(locs.uColorA, ar, ag, ab);
@@ -205,7 +183,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }, [ctx.frame, ctx.fps, fft?.bass, fft?.mid, fft?.highs, colorA, colorB, scale, intensity]);
+  }, [reactive.bass, reactive.highs, reactive.mid, reactive.timeSec, colorA, colorB, scale]);
 
   return (
     <canvas
@@ -225,7 +203,8 @@ export const PlasmaBackdropModule: ElementModule<Props> = {
   id: "overlay.plasmaBackdrop",
   category: "overlay",
   label: "Plasma Backdrop",
-  description: "Domain-warped noise backdrop. Flow speed = mid band, brightness = bass, shimmer = highs.",
+  description:
+    "Domain-warped noise backdrop. Flow speed = mid band, brightness = bass, shimmer = highs.",
   defaultDurationSec: 60,
   defaultTrack: 4,
   schema,

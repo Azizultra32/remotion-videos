@@ -458,6 +458,56 @@ describe("beat trigger helper contract", () => {
       expect(images[0]?.getAttribute("data-src")).toBe("/static/b.png");
       expect(Number(readMockStyle(images[0]).opacity)).toBe(1);
     });
+
+    it("supports deterministic seeded and weighted selection modes", async () => {
+      const seededElement = {
+        ...baseElement,
+        props: {
+          ...BeatImageCycleModule.defaults,
+          fadeSec: 0,
+          images: ["quiet.png", "hero.png", "accent.png"],
+          selectionMode: "weighted-random" as const,
+          selectionSeed: "chorus",
+          selectionWeights: [1, 20, 1],
+          triggerOn: "beats" as const,
+        },
+        type: BeatImageCycleModule.id,
+      };
+
+      await act(async () => {
+        root.render(
+          <BeatImageCycleModule.Renderer
+            ctx={buildCtx({ beats: [0.1, 0.2, 0.3], tSec: 0.3 })}
+            element={seededElement}
+          />,
+        );
+      });
+
+      let images = Array.from(container.querySelectorAll('[data-testid="img"]'));
+      expect(images).toHaveLength(1);
+      expect(images[0]?.getAttribute("data-src")).toBe("/static/hero.png");
+
+      await act(async () => {
+        root.render(
+          <BeatImageCycleModule.Renderer
+            ctx={buildCtx({ beats: [0.1, 0.2, 0.3], tSec: 0.3 })}
+            element={{
+              ...seededElement,
+              props: {
+                ...seededElement.props,
+                selectionMode: "seeded-random",
+                selectionSeed: "drop-bank",
+                selectionWeights: [],
+              },
+            }}
+          />,
+        );
+      });
+
+      images = Array.from(container.querySelectorAll('[data-testid="img"]'));
+      expect(images).toHaveLength(1);
+      expect(images[0]?.getAttribute("data-src")).toBe("/static/accent.png");
+    });
   });
 
   describe("BeatVideoCycle", () => {

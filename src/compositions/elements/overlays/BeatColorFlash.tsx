@@ -1,6 +1,8 @@
 import type React from "react";
 import { useMemo } from "react";
 import { z } from "zod";
+import { getLinearTriggerDecay } from "../modulationRuntime";
+import { getTriggerState, selectTriggerTimes } from "../triggerRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Beat-gated color flash: on each beat/downbeat/drop, a full-frame color
@@ -36,34 +38,27 @@ const defaults: Props = {
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { color, triggerOn, everyN, flashDurationSec, maxOpacity, blendMode } = element.props;
 
-  const beatArr =
-    triggerOn === "beats" ? ctx.beats.beats :
-    triggerOn === "downbeats" ? ctx.beats.downbeats :
-    ctx.beats.drops;
-
   const tSec = ctx.frame / Math.max(1, ctx.fps);
+  const triggerTimes = selectTriggerTimes(ctx.beats, triggerOn);
 
   // Find most recent "every Nth" trigger <= tSec.
-  const lastTriggerAt = useMemo(() => {
-    if (beatArr.length === 0) return null;
-    let passed = 0;
-    let last = -1;
-    for (const b of beatArr) {
-      if (b > tSec) break;
-      passed += 1;
-      if (passed % everyN === 0) last = b;
-    }
-    return last >= 0 ? last : null;
-  }, [beatArr, tSec, everyN]);
+  const lastTriggerAt = useMemo(
+    () =>
+      getTriggerState({
+        triggerTimes,
+        tSec,
+        everyN,
+        itemCount: 1,
+      }).lastNthTriggerAt,
+    [everyN, tSec, triggerTimes],
+  );
 
-  let opacity = 0;
-  if (lastTriggerAt !== null) {
-    const age = tSec - lastTriggerAt;
-    if (age >= 0 && age < flashDurationSec) {
-      // Linear ramp from maxOpacity -> 0 over flashDurationSec
-      opacity = maxOpacity * (1 - age / flashDurationSec);
-    }
-  }
+  const opacity = getLinearTriggerDecay({
+    lastTriggerAt,
+    tSec,
+    durationSec: flashDurationSec,
+    peak: maxOpacity,
+  });
 
   if (opacity <= 0) return null;
 
@@ -85,7 +80,8 @@ export const BeatColorFlashModule: ElementModule<Props> = {
   id: "overlay.beatColorFlash",
   category: "overlay",
   label: "Beat Color Flash",
-  description: "Full-frame color overlay that punches to maxOpacity on every Nth beat, fades to 0 over flashDurationSec.",
+  description:
+    "Full-frame color overlay that punches to maxOpacity on every Nth beat, fades to 0 over flashDurationSec.",
   defaultDurationSec: 30,
   defaultTrack: 7,
   schema,

@@ -1,6 +1,9 @@
 import type React from "react";
 import { z } from "zod";
-import { useFFT } from "../../../hooks/useFFT";
+import {
+  selectReactiveBandValue,
+  useReactiveBands,
+} from "../audioReactiveRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
@@ -25,15 +28,12 @@ const defaults: Props = {
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { color, band, opacityScale, opacityBase, blendMode, bandWidthHint } = element.props;
-  const fft = useFFT({
-    src: ctx.audioSrc ?? "",
-    frame: ctx.frame,
-    fps: ctx.fps,
+  const reactive = useReactiveBands({
+    ctx,
     numberOfSamples: Math.max(32, bandWidthHint),
-    assetRegistry: ctx.assetRegistry,
   });
-  if (!ctx.audioSrc || !fft) return null;
-  const v = band === "bass" ? fft.bass : band === "mid" ? fft.mid : fft.highs;
+  if (!reactive.hasAudio) return null;
+  const v = selectReactiveBandValue(reactive, band);
   const opacity = Math.max(0, Math.min(1, opacityBase + v * opacityScale));
   return (
     <div

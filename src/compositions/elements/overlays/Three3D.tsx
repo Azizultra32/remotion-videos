@@ -1,9 +1,6 @@
 import type React from "react";
-import { useRef } from "react";
 import { AbsoluteFill, interpolate } from "remotion";
 import { ThreeCanvas } from "@remotion/three";
-import { useFrame } from "@react-three/fiber";
-import type { Mesh } from "three";
 import { z } from "zod";
 import type { ElementModule, ElementRendererProps } from "../types";
 
@@ -14,9 +11,8 @@ import type { ElementModule, ElementRendererProps } from "../types";
 // scene graph. Positioned in viewport percent inside a rectangular
 // sub-canvas — ThreeCanvas manages its own WebGL context per instance.
 //
-// Deterministic: rotation is driven by useFrame's clock.elapsedTime
-// (seeded from Remotion's frame clock in headless render), so any
-// (frame, props) tuple produces the same pixels.
+// Deterministic: rotation is driven from ctx.elementLocalSec, so any
+// (frame, props) tuple produces the same pixels regardless of host timing.
 
 const schema = z.object({
   shape: z.enum(["cube", "sphere", "torus", "cone"]),
@@ -62,15 +58,6 @@ const SpinningMesh: React.FC<{
   wireframe: boolean;
   elementLocalSec: number;
 }> = ({ shape, color, scale, rotXPerSec, rotYPerSec, rotZPerSec, wireframe, elementLocalSec }) => {
-  const meshRef = useRef<Mesh>(null);
-
-  useFrame(() => {
-    if (!meshRef.current) return;
-    meshRef.current.rotation.x = rotXPerSec * elementLocalSec;
-    meshRef.current.rotation.y = rotYPerSec * elementLocalSec;
-    meshRef.current.rotation.z = rotZPerSec * elementLocalSec;
-  });
-
   const geometry = (() => {
     switch (shape) {
       case "sphere":
@@ -85,7 +72,14 @@ const SpinningMesh: React.FC<{
   })();
 
   return (
-    <mesh ref={meshRef} scale={scale}>
+    <mesh
+      rotation={[
+        rotXPerSec * elementLocalSec,
+        rotYPerSec * elementLocalSec,
+        rotZPerSec * elementLocalSec,
+      ]}
+      scale={scale}
+    >
       {geometry}
       <meshStandardMaterial color={color} wireframe={wireframe} />
     </mesh>

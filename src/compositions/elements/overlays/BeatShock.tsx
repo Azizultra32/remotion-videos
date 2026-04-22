@@ -1,6 +1,14 @@
 import type React from "react";
 import { useEffect, useMemo, useRef } from "react";
 import { z } from "zod";
+import {
+  bindFullscreenShaderState,
+  createFullscreenShaderState,
+  disposeFullscreenShaderState,
+  type FullscreenShaderState,
+  resizeFullscreenCanvas,
+} from "../fullscreenShaderRuntime";
+import { collectRecentTriggerAges, selectTriggerTimes } from "../triggerRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // BeatShock — a beat-triggered chromatic-aberration shock ring.
@@ -79,9 +87,9 @@ void main() {
 const schema = z.object({
   triggerOn: z.enum(["beats", "downbeats", "drops"]),
   trailSec: z.number().min(0.05).max(5).step(0.05),
-  speed: z.number().min(0.05).max(5).step(0.05),         // ring expansion speed (NDC units per sec)
-  color: z.string(),          // ring tint
-  aberration: z.number().min(0).max(0.1).step(0.001),    // chromatic aberration (0..0.04)
+  speed: z.number().min(0.05).max(5).step(0.05), // ring expansion speed (NDC units per sec)
+  color: z.string(), // ring tint
+  aberration: z.number().min(0).max(0.1).step(0.001), // chromatic aberration (0..0.04)
 });
 
 type Props = z.infer<typeof schema>;
@@ -96,72 +104,42 @@ const defaults: Props = {
 
 const hexToRgb = (hex: string): [number, number, number] => {
   const m = hex.replace("#", "").trim();
-  const expanded = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
+  const expanded =
+    m.length === 3
+      ? m
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : m;
   const n = parseInt(expanded, 16);
   if (Number.isNaN(n)) return [1, 1, 1];
   return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
 };
 
-const compile = (gl: WebGL2RenderingContext, type: number, src: string): WebGLShader | null => {
-  const s = gl.createShader(type);
-  if (!s) return null;
-  gl.shaderSource(s, src); gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    // eslint-disable-next-line no-console
-    console.error("shader compile error:", gl.getShaderInfoLog(s));
-    gl.deleteShader(s);
-    return null;
-  }
-  return s;
-};
-
-const makeProgram = (gl: WebGL2RenderingContext): WebGLProgram | null => {
-  const vs = compile(gl, gl.VERTEX_SHADER, VERT);
-  const fs = compile(gl, gl.FRAGMENT_SHADER, FRAG);
-  if (!vs || !fs) return null;
-  const p = gl.createProgram();
-  if (!p) return null;
-  gl.attachShader(p, vs); gl.attachShader(p, fs);
-  gl.bindAttribLocation(p, 0, "aPosition"); gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-    // eslint-disable-next-line no-console
-    console.error("link error:", gl.getProgramInfoLog(p));
-    return null;
-  }
-  return p;
-};
-
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { triggerOn, trailSec, speed, color, aberration } = element.props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const glStateRef = useRef<{
-    gl: WebGL2RenderingContext;
-    prog: WebGLProgram;
-    vao: WebGLVertexArrayObject;
-    locs: Record<string, WebGLUniformLocation | null>;
-  } | null>(null);
+  const glStateRef = useRef<FullscreenShaderState<
+    "uResolution" | "uAges" | "uActiveCount" | "uTrail" | "uSpeed" | "uColor" | "uAberration"
+  > | null>(null);
 
   // Which beat array to drive rings from.
-  const allBeats =
-    triggerOn === "beats" ? ctx.beats.beats :
-    triggerOn === "downbeats" ? ctx.beats.downbeats :
-    ctx.beats.drops;
+  const triggerTimes = selectTriggerTimes(ctx.beats, triggerOn);
 
   // Current time in seconds at this frame
   const tSec = ctx.frame / Math.max(1, ctx.fps);
 
   // Ages of the last up-to-16 beats within the trail window. Oldest first.
-  const ages = useMemo(() => {
-    const out: number[] = [];
-    for (const bt of allBeats) {
-      const age = tSec - bt;
-      if (age < 0) break; // beats is sorted ascending; past this, all future
-      if (age > trailSec) continue;
-      out.push(age);
-      if (out.length >= 16) break;
-    }
-    return out;
-  }, [allBeats, tSec, trailSec]);
+  const ages = useMemo(
+    () =>
+      collectRecentTriggerAges({
+        triggerTimes,
+        tSec,
+        trailSec,
+        limit: 16,
+      }),
+    [triggerTimes, tSec, trailSec],
+  );
 
   // One-time WebGL setup
   useEffect(() => {
@@ -169,31 +147,26 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     if (!canvas) return;
     const gl = canvas.getContext("webgl2");
     if (!gl) return;
-    const prog = makeProgram(gl);
-    if (!prog) return;
-    const vao = gl.createVertexArray();
-    if (!vao) return;
-    gl.bindVertexArray(vao);
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    glStateRef.current = {
-      gl, prog, vao,
-      locs: {
-        uResolution: gl.getUniformLocation(prog, "uResolution"),
-        uAges: gl.getUniformLocation(prog, "uAges"),
-        uActiveCount: gl.getUniformLocation(prog, "uActiveCount"),
-        uTrail: gl.getUniformLocation(prog, "uTrail"),
-        uSpeed: gl.getUniformLocation(prog, "uSpeed"),
-        uColor: gl.getUniformLocation(prog, "uColor"),
-        uAberration: gl.getUniformLocation(prog, "uAberration"),
-      },
-    };
+    const state = createFullscreenShaderState(gl, {
+      fragmentSource: FRAG,
+      label: "BeatShock",
+      uniformNames: [
+        "uResolution",
+        "uAges",
+        "uActiveCount",
+        "uTrail",
+        "uSpeed",
+        "uColor",
+        "uAberration",
+      ] as const,
+      vertexSource: VERT,
+    });
+    if (!state) return;
+    glStateRef.current = state;
     return () => {
-      if (!glStateRef.current) return;
-      glStateRef.current.gl.deleteProgram(prog);
-      glStateRef.current.gl.deleteVertexArray(vao);
+      const current = glStateRef.current;
+      if (!current) return;
+      disposeFullscreenShaderState(current);
       glStateRef.current = null;
     };
   }, []);
@@ -203,20 +176,17 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     const state = glStateRef.current;
     const canvas = canvasRef.current;
     if (!state || !canvas) return;
-    const { gl, prog, vao, locs } = state;
-
-    const dpr = 1; // Fixed for deterministic renders
-    const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
-    const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    const { gl, locs } = state;
+    resizeFullscreenCanvas(canvas);
     gl.viewport(0, 0, canvas.width, canvas.height);
 
     // Pack ages into a fixed-size Float32Array; unused slots get -1 (skipped).
     const packed = new Float32Array(16).fill(-1);
-    ages.slice(0, 16).forEach((a, i) => { packed[i] = a; });
+    ages.slice(0, 16).forEach((a, i) => {
+      packed[i] = a;
+    });
 
-    gl.useProgram(prog);
-    gl.bindVertexArray(vao);
+    bindFullscreenShaderState(state);
     gl.uniform2f(locs.uResolution, canvas.width, canvas.height);
     gl.uniform1fv(locs.uAges, packed);
     gl.uniform1i(locs.uActiveCount, Math.min(16, ages.length));
@@ -251,7 +221,8 @@ export const BeatShockModule: ElementModule<Props> = {
   id: "overlay.beatShock",
   category: "overlay",
   label: "Beat Shock",
-  description: "WebGL shader: chromatic-aberration ring burst on every beat/downbeat/drop. Trail decays over ~350ms.",
+  description:
+    "WebGL shader: chromatic-aberration ring burst on every beat/downbeat/drop. Trail decays over ~350ms.",
   defaultDurationSec: 30,
   defaultTrack: 6,
   schema,

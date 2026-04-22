@@ -1,6 +1,7 @@
 import type React from "react";
 import { z } from "zod";
-import { expDecay, FONT_STACK } from "../_helpers";
+import { FONT_STACK } from "../_helpers";
+import { getExponentialTriggerDecay } from "../modulationRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
@@ -53,10 +54,18 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const beatsInside = beatSource.filter((t) => t >= element.startSec && t <= ctx.absTimeSec);
   if (beatsInside.length === 0) return null;
 
-  const wordIndex = (beatsInside.length - 1) % words.length;
+  const beatCount = beatsInside.length;
+  const wordIndex = (beatCount - 1) % words.length;
   const word = words[wordIndex];
-  const lastBeatTime = beatsInside[beatsInside.length - 1];
-  const opacity = mode === "cut" ? 1 : expDecay(ctx.absTimeSec - lastBeatTime, decay);
+  const lastTriggerAt = beatsInside[beatCount - 1] ?? null;
+  const opacity =
+    mode === "cut"
+      ? 1
+      : getExponentialTriggerDecay({
+          lastTriggerAt,
+          tSec: ctx.absTimeSec,
+          decay,
+        });
   const kick = mode === "flash" ? 0.96 + opacity * 0.06 : 1;
 
   return (

@@ -3,6 +3,8 @@ import { useMemo } from "react";
 import { Img, staticFile } from "remotion";
 import { z } from "zod";
 import { resolveStatic } from "../_helpers";
+import { selectTriggeredMedia } from "../mediaSelectionRuntime";
+import { selectTriggerTimes } from "../triggerRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Beat-cycling image: advances through a list of images on every Nth beat /
@@ -15,9 +17,12 @@ const schema = z.object({
   images: z.array(z.string()),
   triggerOn: z.enum(["beats", "downbeats", "drops"]),
   everyN: z.number().int().min(1).max(32), // advance every N triggers
+  selectionMode: z.enum(["sequence", "seeded-random", "weighted-random"]),
+  selectionSeed: z.string().max(120),
+  selectionWeights: z.array(z.number().positive().max(1000)).max(64),
   fit: z.enum(["cover", "contain"]),
-  x: z.number().min(-50).max(150),       // center x in % (0-100)
-  y: z.number().min(-50).max(150),       // center y in % (0-100)
+  x: z.number().min(-50).max(150), // center x in % (0-100)
+  y: z.number().min(-50).max(150), // center y in % (0-100)
   widthPct: z.number().min(1).max(200),
   heightPct: z.number().min(1).max(200),
   fadeSec: z.number().min(0).max(1).step(0.01), // cross-fade between consecutive images
@@ -29,6 +34,9 @@ const defaults: Props = {
   images: [],
   triggerOn: "downbeats",
   everyN: 1,
+  selectionMode: "sequence",
+  selectionSeed: "",
+  selectionWeights: [],
   fit: "cover",
   x: 50,
   y: 50,
@@ -38,36 +46,48 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { images, triggerOn, everyN, fit, x, y, widthPct, heightPct, fadeSec } = element.props;
-
-  const beatArr =
-    triggerOn === "beats" ? ctx.beats.beats :
-    triggerOn === "downbeats" ? ctx.beats.downbeats :
-    ctx.beats.drops;
+  const {
+    images,
+    triggerOn,
+    everyN,
+    selectionMode,
+    selectionSeed,
+    selectionWeights,
+    fit,
+    x,
+    y,
+    widthPct,
+    heightPct,
+    fadeSec,
+  } = element.props;
 
   const tSec = ctx.frame / Math.max(1, ctx.fps);
+  const triggerTimes = selectTriggerTimes(ctx.beats, triggerOn);
 
-  // Count triggers <= tSec to find current step; step/everyN -> current index.
   const { currentIdx, prevIdx, tSinceChange } = useMemo(() => {
-    if (images.length === 0 || beatArr.length === 0) {
+    if (images.length === 0 || triggerTimes.length === 0) {
       return { currentIdx: 0, prevIdx: -1, tSinceChange: 0 };
     }
-    let passed = 0;
-    let lastTriggerAt = 0;
-    for (const b of beatArr) {
-      if (b > tSec) break;
-      passed += 1;
-      if (passed % everyN === 0) lastTriggerAt = b;
-    }
-    const stepCount = Math.floor(passed / everyN);
-    const idx = stepCount % images.length;
-    const prev = stepCount > 0 ? (stepCount - 1) % images.length : -1;
-    return { currentIdx: idx, prevIdx: prev, tSinceChange: tSec - lastTriggerAt };
-  }, [images.length, beatArr, tSec, everyN]);
+    const state = selectTriggeredMedia({
+      items: images,
+      triggerTimes,
+      tSec,
+      everyN,
+      selectionMode,
+      seed: selectionSeed,
+      weights: selectionWeights,
+    });
+    return {
+      currentIdx: state.currentIdx,
+      prevIdx: state.prevIdx,
+      tSinceChange: state.timeSinceAnchorSec,
+    };
+  }, [images, triggerTimes, tSec, everyN, selectionMode, selectionSeed, selectionWeights]);
 
   if (images.length === 0) return null;
   const currentSrc = resolveStatic(images[currentIdx], staticFile, ctx.assetRegistry);
-  const prevSrc = prevIdx >= 0 ? resolveStatic(images[prevIdx], staticFile, ctx.assetRegistry) : null;
+  const prevSrc =
+    prevIdx >= 0 ? resolveStatic(images[prevIdx], staticFile, ctx.assetRegistry) : null;
 
   // Cross-fade: current fades in over fadeSec, prev fades out.
   const fadeT = fadeSec > 0 ? Math.min(1, tSinceChange / fadeSec) : 1;
@@ -104,11 +124,14 @@ export const BeatImageCycleModule: ElementModule<Props> = {
   id: "overlay.beatImageCycle",
   category: "overlay",
   label: "Beat Image Cycle",
-  description: "Cycles through a list of images on every Nth beat/downbeat/drop with optional cross-fade.",
+  description:
+    "Cycles through a list of images on every Nth beat/downbeat/drop with optional cross-fade.",
   defaultDurationSec: 30,
   defaultTrack: 8,
   schema,
   defaults,
-  mediaFields: [{ name: "images", kind: "image", multi: true }],
+  mediaFields: [
+    { name: "images", kind: "image", multi: true, label: "Image collection" },
+  ],
   Renderer,
 };

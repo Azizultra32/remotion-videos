@@ -1,7 +1,14 @@
 import type React from "react";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
-import { useFFT } from "../../../hooks/useFFT";
+import { useReactiveBands } from "../audioReactiveRuntime";
+import {
+  bindFullscreenShaderState,
+  createFullscreenShaderState,
+  disposeFullscreenShaderState,
+  type FullscreenShaderState,
+  resizeFullscreenCanvas,
+} from "../fullscreenShaderRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // GLSL fragment shader: full-frame radial gradient + grain, audio-reactive.
@@ -84,61 +91,26 @@ const defaults: Props = {
 // Parse a CSS hex color into a normalized vec3 for the shader.
 const hexToRgb = (hex: string): [number, number, number] => {
   const m = hex.replace("#", "").trim();
-  const expanded = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
+  const expanded =
+    m.length === 3
+      ? m
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : m;
   const n = parseInt(expanded, 16);
   if (Number.isNaN(n)) return [1, 0.5, 0.5];
   return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
 };
 
-const compileShader = (gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null => {
-  const shader = gl.createShader(type);
-  if (!shader) return null;
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    // eslint-disable-next-line no-console
-    console.error("shader compile error:", gl.getShaderInfoLog(shader));
-    gl.deleteShader(shader);
-    return null;
-  }
-  return shader;
-};
-
-const createProgram = (gl: WebGL2RenderingContext): WebGLProgram | null => {
-  const vs = compileShader(gl, gl.VERTEX_SHADER, VERT_SHADER);
-  const fs = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_SHADER);
-  if (!vs || !fs) return null;
-  const prog = gl.createProgram();
-  if (!prog) return null;
-  gl.attachShader(prog, vs);
-  gl.attachShader(prog, fs);
-  gl.bindAttribLocation(prog, 0, "aPosition");
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    // eslint-disable-next-line no-console
-    console.error("program link error:", gl.getProgramInfoLog(prog));
-    return null;
-  }
-  return prog;
-};
-
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { color, intensity } = element.props;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const glStateRef = useRef<{
-    gl: WebGL2RenderingContext;
-    prog: WebGLProgram;
-    vao: WebGLVertexArrayObject;
-    locs: Record<string, WebGLUniformLocation | null>;
-  } | null>(null);
+  const glStateRef = useRef<FullscreenShaderState<
+    "uResolution" | "uTime" | "uBass" | "uMid" | "uHigh" | "uColor"
+  > | null>(null);
 
-  const fft = useFFT({
-    src: ctx.audioSrc ?? "",
-    frame: ctx.frame,
-    fps: ctx.fps,
-    numberOfSamples: 256,
-    assetRegistry: ctx.assetRegistry,
-  });
+  const reactive = useReactiveBands({ ctx, intensity, numberOfSamples: 256 });
 
   // One-time WebGL setup: program + fullscreen quad VAO
   useEffect(() => {
@@ -150,39 +122,18 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
       console.warn("ShaderPulse: webgl2 unavailable");
       return;
     }
-    const prog = createProgram(gl);
-    if (!prog) return;
-    const vao = gl.createVertexArray();
-    if (!vao) return;
-    gl.bindVertexArray(vao);
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    // Fullscreen quad in clip space
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-      gl.STATIC_DRAW,
-    );
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    glStateRef.current = {
-      gl,
-      prog,
-      vao,
-      locs: {
-        uResolution: gl.getUniformLocation(prog, "uResolution"),
-        uTime: gl.getUniformLocation(prog, "uTime"),
-        uBass: gl.getUniformLocation(prog, "uBass"),
-        uMid: gl.getUniformLocation(prog, "uMid"),
-        uHigh: gl.getUniformLocation(prog, "uHigh"),
-        uColor: gl.getUniformLocation(prog, "uColor"),
-      },
-    };
+    const state = createFullscreenShaderState(gl, {
+      fragmentSource: FRAG_SHADER,
+      label: "ShaderPulse",
+      uniformNames: ["uResolution", "uTime", "uBass", "uMid", "uHigh", "uColor"] as const,
+      vertexSource: VERT_SHADER,
+    });
+    if (!state) return;
+    glStateRef.current = state;
     return () => {
-      if (!glStateRef.current) return;
-      const { gl } = glStateRef.current;
-      gl.deleteProgram(prog);
-      gl.deleteVertexArray(vao);
+      const current = glStateRef.current;
+      if (!current) return;
+      disposeFullscreenShaderState(current);
       glStateRef.current = null;
     };
   }, []);
@@ -193,26 +144,18 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     const state = glStateRef.current;
     const canvas = canvasRef.current;
     if (!state || !canvas) return;
-    const { gl, prog, vao, locs } = state;
+    const { gl, locs } = state;
 
-    // Size the drawing buffer to the canvas's CSS size; Remotion's composition
-    // width/height already constrain this via the parent.
-    const dpr = 1; // Fixed for deterministic renders
-    const targetW = Math.max(1, Math.floor(canvas.clientWidth * dpr));
-    const targetH = Math.max(1, Math.floor(canvas.clientHeight * dpr));
-    if (canvas.width !== targetW || canvas.height !== targetH) {
-      canvas.width = targetW;
-      canvas.height = targetH;
-    }
+    // Fixed DPR preserves byte-identical render sizing across machines.
+    resizeFullscreenCanvas(canvas);
     gl.viewport(0, 0, canvas.width, canvas.height);
 
-    gl.useProgram(prog);
-    gl.bindVertexArray(vao);
+    bindFullscreenShaderState(state);
     gl.uniform2f(locs.uResolution, canvas.width, canvas.height);
-    gl.uniform1f(locs.uTime, ctx.frame / Math.max(1, ctx.fps));
-    gl.uniform1f(locs.uBass, (fft?.bass ?? 0) * intensity);
-    gl.uniform1f(locs.uMid, (fft?.mid ?? 0) * intensity);
-    gl.uniform1f(locs.uHigh, (fft?.highs ?? 0) * intensity);
+    gl.uniform1f(locs.uTime, reactive.timeSec);
+    gl.uniform1f(locs.uBass, reactive.bass);
+    gl.uniform1f(locs.uMid, reactive.mid);
+    gl.uniform1f(locs.uHigh, reactive.highs);
     const [r, g, b] = hexToRgb(color);
     gl.uniform3f(locs.uColor, r, g, b);
 
@@ -220,7 +163,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }, [ctx.frame, ctx.fps, fft?.bass, fft?.mid, fft?.highs, color, intensity]);
+  }, [reactive.bass, reactive.highs, reactive.mid, reactive.timeSec, color]);
 
   return (
     <canvas
@@ -241,7 +184,8 @@ export const ShaderPulseModule: ElementModule<Props> = {
   id: "overlay.shaderPulse",
   category: "overlay",
   label: "Shader Pulse",
-  description: "WebGL fragment shader: audio-reactive radial glow + grain. Bass = pulse size, mid = hue drift, highs = grain.",
+  description:
+    "WebGL fragment shader: audio-reactive radial glow + grain. Bass = pulse size, mid = hue drift, highs = grain.",
   defaultDurationSec: 30,
   defaultTrack: 5,
   schema,

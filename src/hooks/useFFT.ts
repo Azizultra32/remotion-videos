@@ -1,6 +1,7 @@
 import { useWindowedAudioData, visualizeAudio } from "@remotion/media-utils";
 import { useMemo } from "react";
 import { staticFile } from "remotion";
+import { resolveStatic } from "../compositions/elements/_helpers";
 
 export type FFTBands = {
   bins: number[];
@@ -25,6 +26,7 @@ export type UseFFTArgs = {
   numberOfSamples?: number;
   windowInSeconds?: number;
   smoothing?: boolean;
+  assetRegistry?: Array<{ id: string; path: string }> | null;
 };
 
 export const useFFT = ({
@@ -32,14 +34,13 @@ export const useFFT = ({
   frame,
   fps,
   numberOfSamples = 64,
-  // Tight window — the Player decodes this slice on every seek. 30s on a
-  // 128 MB mp3 stalls the audio clock; 3s is plenty for FFT continuity.
   windowInSeconds = 3,
   smoothing = true,
+  assetRegistry,
 }: UseFFTArgs): FFTBands | null => {
   const resolved = useMemo(
-    () => (src.startsWith("http") || src.startsWith("/") ? src : staticFile(src)),
-    [src],
+    () => resolveStatic(src, staticFile, assetRegistry),
+    [src, assetRegistry],
   );
 
   const { audioData, dataOffsetInSeconds } = useWindowedAudioData({

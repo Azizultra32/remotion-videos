@@ -20,11 +20,13 @@ import {
   type MusicVideoProps,
 } from "@compositions/MusicVideo";
 import { Player, type PlayerRef } from "@remotion/player";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditorStore } from "../store";
 import { useStorage } from "../hooks/useStorage";
 import { SIDEBAR_COL_WIDTH, DEFAULT_LEFT_MARGIN } from "../constants/layout";
-import { toEditorUrl } from "../utils/url";
+import { stemFromAudioSrc, toEditorUrl } from "../utils/url";
+import { loadAssetRegistry } from "../lib/assetRecordStore";
+import type { AssetRecord } from "../types/assetRecord";
 import {
   computeDragPosition,
   type Pos,
@@ -74,6 +76,21 @@ export const FloatingPreview = () => {
   const playerRef = useRef<PlayerRef>(null);
   const audioUrl = useMemo(() => toEditorUrl(audioSrc), [audioSrc]);
 
+  const [assetRegistry, setAssetRegistry] = useState<AssetRecord[] | null>(null);
+  const currentStem = stemFromAudioSrc(audioSrc);
+
+  useEffect(() => {
+    if (!currentStem) {
+      setAssetRegistry(null);
+      return;
+    }
+    let cancelled = false;
+    loadAssetRegistry(currentStem)
+      .then((records) => { if (!cancelled) setAssetRegistry(records); })
+      .catch(() => { if (!cancelled) setAssetRegistry(null); });
+    return () => { cancelled = true; };
+  }, [currentStem]);
+
   const inputProps = useMemo(
     () => ({
       ...defaultMusicVideoProps,
@@ -83,8 +100,9 @@ export const FloatingPreview = () => {
       events,
       muteAudioTag: true,
       analysisAudioSrc: audioUrl,
+      assetRegistry: assetRegistry?.map((r) => ({ id: r.id, path: r.path })) ?? null,
     }),
-    [audioUrl, beatsSrc, elements, events],
+    [audioUrl, beatsSrc, elements, events, assetRegistry],
   );
 
   // Mirror play/pause

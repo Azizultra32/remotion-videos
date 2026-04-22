@@ -137,6 +137,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     frame: ctx.frame,
     fps: ctx.fps,
     numberOfSamples: 256,
+    assetRegistry: ctx.assetRegistry,
   });
 
   // One-time WebGL setup: program + fullscreen quad VAO

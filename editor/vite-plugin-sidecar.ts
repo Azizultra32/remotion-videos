@@ -1221,6 +1221,45 @@ const handleAssetsRegistryPost = async (
 
   const registry = body as { version: 1; records: unknown[] };
 
+  // Validate each record has required fields and correct types
+  const ID_RE = /^ast_[0-9a-f]{16}$/;
+  const VALID_KINDS = new Set(["image", "video", "gif"]);
+  const VALID_SCOPES = new Set(["global", "project"]);
+  for (let i = 0; i < registry.records.length; i++) {
+    const r = registry.records[i];
+    if (!r || typeof r !== "object") {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}] is not an object` }));
+      return;
+    }
+    const rec = r as Record<string, unknown>;
+    if (typeof rec.id !== "string" || !ID_RE.test(rec.id)) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}].id must match ast_<16-hex-chars>` }));
+      return;
+    }
+    if (typeof rec.path !== "string" || rec.path.length === 0) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}].path must be a non-empty string` }));
+      return;
+    }
+    if (typeof rec.kind !== "string" || !VALID_KINDS.has(rec.kind)) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}].kind must be image|video|gif` }));
+      return;
+    }
+    if (typeof rec.scope !== "string" || !VALID_SCOPES.has(rec.scope)) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}].scope must be global|project` }));
+      return;
+    }
+  }
+
   // Ensure project directory exists
   const projectDir = path.join(PROJECTS_DIR, stem);
   try {

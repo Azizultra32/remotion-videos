@@ -37,7 +37,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   // We want the RAW time-domain signal. useFFT gives the frequency spectrum;
   // we use waveform from the same hook. Not all hook variants expose it;
   // we fall back to approximating from spectrum if not.
-  const fft = useFFT({ src: ctx.audioSrc ?? "", frame: ctx.frame, fps: ctx.fps, numberOfSamples: 512 });
+  const fft = useFFT({ src: ctx.audioSrc ?? "", frame: ctx.frame, fps: ctx.fps, numberOfSamples: 512, assetRegistry: ctx.assetRegistry });
   // useFFT doesn\'t expose a time-domain waveform directly. We build a
   // pseudo-oscilloscope from `raw` (visualizeAudio amplitudes per frequency
   // bin) — multiply by a slowly-varying sinusoid so the line oscillates

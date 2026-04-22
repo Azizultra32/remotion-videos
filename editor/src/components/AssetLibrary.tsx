@@ -55,7 +55,7 @@ const countAssetReferences = (
   elements: readonly TimelineElement[],
   assetPath: string,
 ): number => {
-  const assetId = generateAssetId(assetPath);
+      const assetId = generateAssetId(asset.path);
   let count = 0;
   for (const element of elements) {
     for (const value of Object.values(element.props ?? {})) {
@@ -599,37 +599,28 @@ export const AssetLibrary = () => {
 
   const assetUsageCounts = useMemo(() => {
     const next: Record<string, number> = {};
-    const idToPath = new Map<string, string>();
-    for (const element of elements) {
-      for (const value of Object.values(element.props ?? {})) {
-        if (typeof value === "string" && isValidAssetId(value)) {
-          idToPath.set(value, value);
-        }
-        if (Array.isArray(value)) {
-          for (const item of value) {
-            if (typeof item === "string" && isValidAssetId(item)) {
-              idToPath.set(item, item);
-            }
-          }
-        }
-      }
-    }
-    const normalizeKey = (s: string): string => {
-      if (isValidAssetId(s)) return s;
-      return s;
-    };
     for (const element of elements) {
       for (const value of Object.values(element.props ?? {})) {
         if (typeof value === "string") {
-          const key = normalizeKey(value);
-          next[key] = (next[key] ?? 0) + 1;
+          next[value] = (next[value] ?? 0) + 1;
+          // Also count by the derived counterpart: if it's an ID, count under its path; if it's a path, count under its ID
+          if (isValidAssetId(value)) {
+            // ID → also count under the path it would generate from
+            // (we can't reverse-lookup without registry, so just count the ID)
+          } else {
+            const derivedId = generateAssetId(value);
+            next[derivedId] = (next[derivedId] ?? 0) + 1;
+          }
           continue;
         }
         if (Array.isArray(value)) {
           for (const item of value) {
             if (typeof item === "string") {
-              const key = normalizeKey(item);
-              next[key] = (next[key] ?? 0) + 1;
+              next[item] = (next[item] ?? 0) + 1;
+              if (!isValidAssetId(item)) {
+                const derivedId = generateAssetId(item);
+                next[derivedId] = (next[derivedId] ?? 0) + 1;
+              }
             }
           }
         }
@@ -668,7 +659,7 @@ export const AssetLibrary = () => {
       let record = findAssetByPath(registry, e.path);
 
       if (!record) {
-        assetId = generateAssetId(e.path);
+        assetId = generateAssetId();
         record = {
           id: assetId as `ast_${string}`,
           path: e.path,
@@ -737,7 +728,6 @@ export const AssetLibrary = () => {
       const record = findAssetByPath(registry, asset.path);
 
       if (!record) {
-        // Create new record
         assetId = generateAssetId(asset.path);
         const newRecord = {
           id: assetId,
@@ -780,7 +770,7 @@ export const AssetLibrary = () => {
   const selectedElementTargetsForAsset = useCallback(
     (asset: AssetEntry | null): SelectedElementAssetTarget[] => {
       if (!asset || !selectedElement || !selectedModule) return [];
-      const assetId = generateAssetId(asset.path);
+  const assetId = generateAssetId(assetPath);
       return findMediaFieldsForKind(selectedModule.mediaFields, asset.kind).map((field) => {
         const currentValue = selectedElement.props[field.name];
         const alreadyHasAsset = field.multi

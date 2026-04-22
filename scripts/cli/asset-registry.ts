@@ -17,11 +17,15 @@ import type {
   AssetRegistryFile,
   AssetId,
 } from "../../editor/src/types/assetRecord";
-import { isValidAssetId } from "../../editor/src/types/assetRecord";
+import {
+  isValidAssetId,
+  AssetRegistryFileSchema,
+} from "../../editor/src/types/assetRecord";
 
 /**
  * Read asset registry from projects/<stem>/assets.json
  * Returns empty array if file doesn't exist.
+ * Validates structure with Zod before returning.
  */
 export async function readAssetsJson(
   projectsDir: string,
@@ -31,10 +35,23 @@ export async function readAssetsJson(
 
   try {
     const content = await fs.readFile(filePath, "utf-8");
-    const registry: AssetRegistryFile = JSON.parse(content);
+    const raw = JSON.parse(content);
+
+    // Validate with Zod schema
+    const result = AssetRegistryFileSchema.safeParse(raw);
+    if (!result.success) {
+      console.error(
+        `[asset-registry] Validation failed for ${filePath}:`,
+        result.error.format()
+      );
+      throw new Error(
+        `Invalid assets.json: ${result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ")}`
+      );
+    }
+
     return {
-      version: registry.version,
-      records: registry.records || [],
+      version: result.data.version,
+      records: result.data.records,
     };
   } catch (error: any) {
     // File doesn't exist yet, return empty registry
@@ -48,6 +65,7 @@ export async function readAssetsJson(
 /**
  * Write asset registry to projects/<stem>/assets.json
  * Uses atomic write (tmp + rename) to prevent corruption.
+ * Validates with Zod before writing.
  */
 export async function writeAssetsJson(
   projectsDir: string,
@@ -62,6 +80,18 @@ export async function writeAssetsJson(
     records: data.records,
   };
 
+  // Validate with Zod before writing
+  const result = AssetRegistryFileSchema.safeParse(registry);
+  if (!result.success) {
+    console.error(
+      `[asset-registry] Validation failed before write to ${filePath}:`,
+      result.error.format()
+    );
+    throw new Error(
+      `Cannot write invalid assets.json: ${result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ")}`
+    );
+  }
+
   // Write to temp file first
   await fs.writeFile(tmpPath, JSON.stringify(registry, null, 2), "utf-8");
 
@@ -72,6 +102,7 @@ export async function writeAssetsJson(
 /**
  * Synchronous version of writeAssetsJson for scaffold/setup scripts.
  * Used during project initialization when async is not needed.
+ * Validates with Zod before writing.
  */
 export function writeAssetsJsonSync(
   projectsDir: string,
@@ -84,6 +115,18 @@ export function writeAssetsJsonSync(
     version: 1,
     records: data.records,
   };
+
+  // Validate with Zod before writing
+  const result = AssetRegistryFileSchema.safeParse(registry);
+  if (!result.success) {
+    console.error(
+      `[asset-registry] Validation failed before sync write to ${filePath}:`,
+      result.error.format()
+    );
+    throw new Error(
+      `Cannot write invalid assets.json: ${result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ")}`
+    );
+  }
 
   writeFileSync(filePath, JSON.stringify(registry, null, 2) + "\n", "utf-8");
 }
@@ -111,12 +154,11 @@ export function findAssetById(
 }
 
 /**
- * Generate a stable asset ID from path using FNV-1a 64-bit hash.
- * Format: ast_<16-char-hash>
+ * Generate a unique asset ID using timestamp + random hex.
+ * Format: ast_<16-char-hex>
+ * IDs are opaque and rename-stable — path is stored separately.
  *
  * MUST match the browser version in editor/src/types/assetRecord.ts exactly.
- * Both environments use FNV-1a instead of node:crypto so the same path always
- * produces the same ID regardless of runtime.
  */
 export function generateAssetId(path: string): string {
   let hash = 0xcbf29ce484222325n;
@@ -128,7 +170,7 @@ export function generateAssetId(path: string): string {
   }
 
   const hashHex = hash.toString(16).padStart(16, "0");
-  return `ast_${hashHex.slice(0, 16)}`;
+  return `ast_${hashHex}`;
 }
 
 /**

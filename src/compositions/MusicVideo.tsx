@@ -3,6 +3,7 @@ import { AbsoluteFill, Audio, staticFile, useCurrentFrame, useVideoConfig } from
 import { z } from "zod";
 import { useBeats } from "../hooks/useBeats";
 import { type EventMark, resolveStartSec } from "../utils/events";
+import { resolveStatic } from "./elements/_helpers";
 import { ELEMENT_REGISTRY } from "./elements/registry";
 import type { ElementRendererProps, RenderCtx, TimelineElement } from "./elements/types";
 
@@ -150,11 +151,7 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
     <AbsoluteFill style={{ backgroundColor }}>
       {audioSrc && !muteAudioTag && (
         <Audio
-          src={
-            audioSrc.startsWith("http") || audioSrc.startsWith("/")
-              ? audioSrc
-              : staticFile(audioSrc)
-          }
+          src={resolveStatic(audioSrc, staticFile, assetRegistry)}
         />
       )}
 

@@ -30,6 +30,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     frame: ctx.frame,
     fps: ctx.fps,
     numberOfSamples: Math.max(32, bandWidthHint),
+    assetRegistry: ctx.assetRegistry,
   });
   if (!ctx.audioSrc || !fft) return null;
   const v = band === "bass" ? fft.bass : band === "mid" ? fft.mid : fft.highs;

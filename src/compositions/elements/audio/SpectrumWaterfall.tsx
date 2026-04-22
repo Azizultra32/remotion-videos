@@ -61,7 +61,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     while (n < numberOfBars) n *= 2;
     return n;
   }, [numberOfBars]);
-  const fft = useFFT({ src: ctx.audioSrc ?? "", frame: ctx.frame, fps: ctx.fps, numberOfSamples: pow2Samples });
+  const fft = useFFT({ src: ctx.audioSrc ?? "", frame: ctx.frame, fps: ctx.fps, numberOfSamples: pow2Samples, assetRegistry: ctx.assetRegistry });
   const spectrum = useMemo(() => {
     if (!fft?.bins) return new Float32Array(numberOfBars);
     const src = fft.bins;

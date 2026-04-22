@@ -277,6 +277,16 @@ if (isMusicVideo) {
   // This walks through all element props recursively and replaces any
   // ast_<hash> strings with the actual path from assets.json.
   const rawElements = Array.isArray(timeline.elements) ? timeline.elements : [];
+
+  // Check for unresolved asset IDs — these require a registry to resolve.
+  const hasAssetIds = JSON.stringify(rawElements).includes('"ast_');
+  if (hasAssetIds && assetRecords.length === 0) {
+    console.error(`[mv:render] ERROR: timeline contains asset IDs (ast_...) but assets.json is empty or missing.`);
+    console.error(`[mv:render] Run 'npm run mv:analyze -- --project ${stem}' or manually create assets.json.`);
+    console.error(`[mv:render] Aborting — asset IDs cannot be resolved without a registry.`);
+    process.exit(1);
+  }
+
   const resolvedElements = assetRecords.length > 0
     ? resolveAssetIds(rawElements, assetRecords, stem)
     : rawElements;

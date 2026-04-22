@@ -102,7 +102,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     locs: Record<string, WebGLUniformLocation | null>;
   } | null>(null);
 
-  const fft = useFFT({ src: ctx.audioSrc ?? "", frame: ctx.frame, fps: ctx.fps, numberOfSamples: 256 });
+  const fft = useFFT({ src: ctx.audioSrc ?? "", frame: ctx.frame, fps: ctx.fps, numberOfSamples: 256, assetRegistry: ctx.assetRegistry });
 
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;

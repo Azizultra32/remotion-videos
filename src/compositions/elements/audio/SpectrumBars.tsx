@@ -50,6 +50,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     frame: ctx.frame,
     fps: ctx.fps,
     numberOfSamples: 128,
+    assetRegistry: ctx.assetRegistry,
   });
   if (!ctx.audioSrc || !fft) return null;
 

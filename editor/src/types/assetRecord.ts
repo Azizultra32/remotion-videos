@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Asset ID format: ast_<16-hex-chars>
  */
@@ -44,9 +46,44 @@ export type AssetRegistryFile = {
   records: AssetRecord[];
 };
 
+// ---------------------------------------------------------------------------
+// Zod schemas for runtime validation
+// ---------------------------------------------------------------------------
+
+export const AssetMetadataSchema = z.object({
+  width: z.number().optional(),
+  height: z.number().optional(),
+  durationSec: z.number().optional(),
+  hasAlpha: z.boolean().optional(),
+  fps: z.number().optional(),
+  codec: z.string().optional(),
+});
+
+export const AssetRecordSchema = z.object({
+  id: z.string().regex(/^ast_[0-9a-f]{16}$/, "Invalid asset ID format"),
+  path: z.string().min(1),
+  kind: z.enum(["image", "video", "gif"]),
+  scope: z.enum(["global", "project"]),
+  stem: z.string().nullable(),
+  sizeBytes: z.number().min(0),
+  mtimeMs: z.number().min(0),
+  createdAt: z.number().min(0),
+  updatedAt: z.number().min(0),
+  metadata: AssetMetadataSchema,
+  label: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  notes: z.string().optional(),
+});
+
+export const AssetRegistryFileSchema = z.object({
+  version: z.literal(1),
+  records: z.array(AssetRecordSchema),
+});
+
 /**
- * Generate a stable asset ID from path using a browser-safe FNV-1a 64-bit hash.
- * Format: ast_<16-char-hash>
+ * Generate a unique asset ID using timestamp + random hex.
+ * Format: ast_<16-char-hex>
+ * IDs are opaque and rename-stable — path is stored separately.
  */
 export function generateAssetId(path: string): AssetId {
   let hash = 0xcbf29ce484222325n;
@@ -58,13 +95,9 @@ export function generateAssetId(path: string): AssetId {
   }
 
   const hashHex = hash.toString(16).padStart(16, "0");
-  const stableHash = hashHex.slice(0, 16);
-  return `ast_${stableHash}`;
+  return `ast_${hashHex}`;
 }
 
-/**
- * Validate that a string is a properly formatted asset ID.
- */
 export function isValidAssetId(id: string): id is AssetId {
   return /^ast_[0-9a-f]{16}$/.test(id);
 }

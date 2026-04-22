@@ -6,10 +6,12 @@
 // Phase 1 migration strategy: existing projects have paths in element props
 // (imageSrc, gifSrc, videoSrc, images[], etc.). This script:
 //
-//   1. Scans timeline.json for all media paths
+//   1. Scans timeline.json for all media paths (mediaFields-targeted + heuristic fallback)
 //   2. Ensures each path has an AssetRecord in assets.json (creates if missing)
-//   3. Rewrites element props to use asset IDs instead of paths
-//   4. Atomic backups + dual-file atomic write (timeline + assets)
+//   3. Probes media files to populate AssetMetadata (dimensions, duration, codec)
+//   4. Rewrites element props to use asset IDs instead of paths
+//   5. Atomic backups + dual-file atomic write (timeline + assets)
+//   6. Creates .migrated flag file on success
 //
 // Usage:
 //   npm run migrate:assets -- --project love-in-traffic
@@ -18,9 +20,18 @@
 // Output:
 //   - projects/<stem>/timeline.backup-<timestamp>.json
 //   - projects/<stem>/assets.json (created or appended)
-//   - projects/<stem>/timeline.json (rewritten with asset IDs)
+//   - projects/<stem>/timeline.json (rewritten with asset IDs, _migrated flag)
+//   - projects/<stem>/.migrated (flag file)
 
-import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import {
   findAssetByPath,
@@ -30,6 +41,8 @@ import {
 } from "./asset-registry";
 import type { AssetRecord } from "../../editor/src/types/assetRecord";
 import { resolveProjectDir, resolveProjectsDir } from "./paths";
+import { ELEMENT_REGISTRY } from "../../src/compositions/elements/registry";
+import { probeAsset, resolveAssetDiskPath } from "./probe-media";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -96,6 +109,14 @@ if (!existsSync(timelinePath)) {
   process.exit(0);
 }
 
+// Check if already migrated
+const migratedFlagPath = join(projectDir, ".migrated");
+if (existsSync(migratedFlagPath)) {
+  console.log(`[migrate-timeline-assets] ${stem}`);
+  console.log(`  ✓ already migrated (.migrated flag exists)`);
+  process.exit(0);
+}
+
 // ---- Load timeline ----
 const timelineContent = readFileSync(timelinePath, "utf-8");
 let timeline: OnDiskTimeline;
@@ -121,21 +142,12 @@ let assetsData: { version: number; records: AssetRecord[] };
   let newAssetCount = 0;
   let updatedElementCount = 0;
 
-  // ---- Scan all element props for media paths ----
-  // Heuristic: detect fields that look like paths (contain "/" or end with known extensions)
-  const MEDIA_FIELDS = [
-    "imageSrc",
-    "gifSrc",
-    "videoSrc",
-    "backgroundImage",
-    "backgroundGif",
-    "backgroundVideo",
-    "images",
-    "videos",
-    "gifs",
-  ];
+  const MEDIA_FIELDS = new Set([
+    "imageSrc", "videoSrc", "gifSrc", "jsonSrc",
+    "backgroundImage", "backgroundGif", "backgroundVideo",
+    "images", "videos", "gifs",
+  ]);
 
-  const PATH_LIKE = /^(assets\/|projects\/|\.\.\/|\/|~\/)/;
   const MEDIA_EXT = /\.(png|jpe?g|webp|avif|bmp|svg|gif|mp4|webm|mov|mkv|avi)$/i;
 
   const detectKind = (path: string): "image" | "video" | "gif" | null => {
@@ -151,7 +163,7 @@ let assetsData: { version: number; records: AssetRecord[] };
     return "project"; // default for relative paths
   };
 
-  const ensureAssetRecord = (path: string): string => {
+  const ensureAssetRecord = async (path: string): Promise<string> => {
     // Check if we've already processed this path
     if (pathsToMigrate.has(path)) {
       return pathsToMigrate.get(path)!;
@@ -179,7 +191,7 @@ let assetsData: { version: number; records: AssetRecord[] };
     let sizeBytes = 0;
     let mtimeMs = Date.now();
     try {
-      const fullPath = join(repoRoot, "public", path);
+      const fullPath = resolveAssetDiskPath(repoRoot, path);
       const stats = statSync(fullPath);
       sizeBytes = stats.size;
       mtimeMs = stats.mtimeMs;
@@ -187,6 +199,9 @@ let assetsData: { version: number; records: AssetRecord[] };
       // File doesn't exist on disk — create placeholder record anyway
       // (allows migration of timelines referencing missing assets)
     }
+
+    // Probe metadata for existing files
+    const metadata = await probeAsset(repoRoot, path, kind);
 
     const now = Date.now();
     const newRecord: AssetRecord = {
@@ -199,7 +214,7 @@ let assetsData: { version: number; records: AssetRecord[] };
       mtimeMs,
       createdAt: now,
       updatedAt: now,
-      metadata: {},
+      metadata,
       label: path.split("/").pop() || path,
     };
 
@@ -209,23 +224,27 @@ let assetsData: { version: number; records: AssetRecord[] };
     return id;
   };
 
-  const migrateValue = (value: unknown): unknown => {
+  /**
+   * Migrate a single value: if it's a path-looking string, convert to asset ID.
+   * Recurses into arrays and objects.
+   */
+  const migrateValue = async (value: unknown, fieldName?: string): Promise<unknown> => {
     if (typeof value === "string") {
-      // Check if this looks like a media path
-      if (PATH_LIKE.test(value) || MEDIA_EXT.test(value)) {
+      // Only migrate values in known media fields or arrays within them
+      if (fieldName && MEDIA_FIELDS.has(fieldName) && (MEDIA_EXT.test(value) || value.includes("/"))) {
         return ensureAssetRecord(value);
       }
       return value;
     }
 
     if (Array.isArray(value)) {
-      return value.map(migrateValue);
+      return Promise.all(value.map((item) => migrateValue(item, fieldName)));
     }
 
     if (value && typeof value === "object") {
       const result: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
-        result[k] = migrateValue(v);
+        result[k] = await migrateValue(v, k);
       }
       return result;
     }
@@ -233,21 +252,62 @@ let assetsData: { version: number; records: AssetRecord[] };
     return value;
   };
 
+  /**
+   * Migrate element props using mediaFields from ELEMENT_REGISTRY when available.
+   * Falls back to full recursive heuristic scan for unknown element types.
+   */
+  const migrateElementProps = async (
+    elementType: string,
+    props: Record<string, unknown>
+  ): Promise<Record<string, unknown>> => {
+    const moduleDef = ELEMENT_REGISTRY[elementType];
+    const mediaFields = moduleDef?.mediaFields;
+
+    if (!mediaFields || mediaFields.length === 0) {
+      // No media fields declared — fall back to recursive heuristic scan
+      return migrateValue(props) as Promise<Record<string, unknown>>;
+    }
+
+    // Targeted migration: only touch declared media fields
+    const migrated: Record<string, unknown> = { ...props };
+    for (const field of mediaFields) {
+      const raw = props[field.name];
+      if (raw === undefined || raw === null) continue;
+
+      if (field.multi && Array.isArray(raw)) {
+        migrated[field.name] = await Promise.all(
+          raw.map((item) =>
+            typeof item === "string" && (PATH_LIKE.test(item) || MEDIA_EXT.test(item))
+              ? ensureAssetRecord(item)
+              : item
+          )
+        );
+      } else if (typeof raw === "string") {
+        if (PATH_LIKE.test(raw) || MEDIA_EXT.test(raw)) {
+          migrated[field.name] = await ensureAssetRecord(raw);
+        }
+      }
+    }
+
+    return migrated;
+  };
+
   // ---- Process each element ----
-  const migratedElements = timeline.elements.map((element) => {
+  const migratedElements = [];
+  for (const element of timeline.elements) {
     const originalProps = JSON.stringify(element.props);
-    const migratedProps = migrateValue(element.props) as Record<string, unknown>;
+    const migratedProps = await migrateElementProps(element.type, element.props);
     const changed = JSON.stringify(migratedProps) !== originalProps;
 
     if (changed) {
       updatedElementCount++;
     }
 
-    return {
+    migratedElements.push({
       ...element,
       props: migratedProps,
-    };
-  });
+    });
+  }
 
   // ---- Report ----
   console.log(`\n[migrate-timeline-assets] ${stem}`);
@@ -258,6 +318,10 @@ let assetsData: { version: number; records: AssetRecord[] };
 
   if (pathsToMigrate.size === 0) {
     console.log(`  ✓ no migration needed — timeline has no media paths`);
+    // Still write .migrated flag so we don't scan again
+    if (!args.dryRun) {
+      writeFileSync(migratedFlagPath, new Date().toISOString(), "utf-8");
+    }
     process.exit(0);
   }
 
@@ -271,7 +335,10 @@ let assetsData: { version: number; records: AssetRecord[] };
   }
 
   // ---- Write backups ----
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").split("T")[0] + "-" + Date.now();
+  const timestamp =
+    new Date().toISOString().replace(/[:.]/g, "-").split("T")[0] +
+    "-" +
+    Date.now();
   const backupPath = join(projectDir, `timeline.backup-${timestamp}.json`);
   try {
     writeFileSync(backupPath, timelineContent, "utf-8");
@@ -284,22 +351,32 @@ let assetsData: { version: number; records: AssetRecord[] };
   // ---- Atomic write: timeline + assets ----
   const timelineTmpPath = `${timelinePath}.tmp`;
 
-  const migratedTimeline: OnDiskTimeline = {
+  const migratedTimeline = {
     ...timeline,
+    _migrated: true,
     elements: migratedElements,
   };
 
   try {
     // Step 1: Write timeline to tmp file
-    writeFileSync(timelineTmpPath, JSON.stringify(migratedTimeline, null, 2), "utf-8");
+    writeFileSync(
+      timelineTmpPath,
+      JSON.stringify(migratedTimeline, null, 2),
+      "utf-8"
+    );
 
     // Step 2: Write assets.json (internally uses tmp+rename, already atomic)
     await writeAssetsJson(projectsDir, stem, { version: 1, records });
 
     // Step 3: Atomic rename timeline tmp → final
     renameSync(timelineTmpPath, timelinePath);
+
+    // Step 4: Write .migrated flag
+    writeFileSync(migratedFlagPath, new Date().toISOString(), "utf-8");
+
     console.log(`  ✓ timeline.json migrated`);
     console.log(`  ✓ assets.json updated`);
+    console.log(`  ✓ .migrated flag created`);
     console.log(`\n[success] migration complete`);
   } catch (e) {
     console.error(`\n[error] migration failed: ${e}`);
@@ -307,22 +384,13 @@ let assetsData: { version: number; records: AssetRecord[] };
     // Rollback: restore timeline from backup
     try {
       if (existsSync(timelineTmpPath)) {
-        // The tmp file was written but not yet renamed — delete it.
-        // Don't rename it over the original (it contains migrated data).
-        const { unlinkSync } = await import("node:fs");
         unlinkSync(timelineTmpPath);
       }
-      // Restore original timeline from backup
       if (existsSync(backupPath)) {
-        const { copyFileSync, unlinkSync } = await import("node:fs");
         copyFileSync(backupPath, timelinePath);
         console.log(`  ✓ restored timeline.json from backup`);
       }
-      // Note: assets.json write is already committed (writeAssetsJson uses
-      // atomic rename internally). Since asset records are additive (they
-      // only add entries, never remove), a partial commit is safe — the
-      // restored timeline still references paths, and the extra records in
-      // assets.json are harmless.
+      // assets.json write is additive — extra records are harmless
     } catch (rollbackErr) {
       console.error(`  [error] rollback also failed: ${rollbackErr}`);
     }

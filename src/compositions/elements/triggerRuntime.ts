@@ -95,6 +95,8 @@ export const collectRecentTriggerAges = ({
   trailSec: number;
   limit: number;
 }): number[] => {
+  if (limit <= 0) return [];
+
   const ages: number[] = [];
 
   for (const triggerTime of triggerTimes) {
@@ -102,7 +104,7 @@ export const collectRecentTriggerAges = ({
     const age = tSec - triggerTime;
     if (age > trailSec) continue;
     ages.push(age);
-    if (ages.length >= limit) break;
+    if (ages.length > limit) ages.shift();
   }
 
   return ages;

@@ -1,6 +1,6 @@
 import type React from "react";
 import { useEffect, useState } from "react";
-import { AbsoluteFill, interpolate, staticFile } from "remotion";
+import { AbsoluteFill, delayRender, continueRender, interpolate, staticFile } from "remotion";
 import { Lottie, type LottieAnimationData } from "@remotion/lottie";
 import { z } from "zod";
 import { resolveStatic } from "../_helpers";
@@ -50,9 +50,13 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
 
   const [data, setData] = useState<LottieAnimationData | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [handle] = useState(() => delayRender("Loading Lottie JSON"));
 
   useEffect(() => {
-    if (!jsonSrc) return;
+    if (!jsonSrc) {
+      continueRender(handle);
+      return;
+    }
     let cancelled = false;
     const url = resolveStatic(jsonSrc, staticFile, ctx.assetRegistry);
     fetch(url)
@@ -61,15 +65,21 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
         return r.json();
       })
       .then((j: LottieAnimationData) => {
-        if (!cancelled) setData(j);
+        if (!cancelled) {
+          setData(j);
+          continueRender(handle);
+        }
       })
       .catch((e) => {
-        if (!cancelled) setErr(String(e));
+        if (!cancelled) {
+          setErr(String(e));
+          continueRender(handle);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [jsonSrc]);
+  }, [jsonSrc, handle]);
 
   const localSec = ctx.elementLocalSec;
   const durationSec = element.durationSec;

@@ -60,15 +60,15 @@ const SpinningMesh: React.FC<{
   rotYPerSec: number;
   rotZPerSec: number;
   wireframe: boolean;
-}> = ({ shape, color, scale, rotXPerSec, rotYPerSec, rotZPerSec, wireframe }) => {
+  elementLocalSec: number;
+}> = ({ shape, color, scale, rotXPerSec, rotYPerSec, rotZPerSec, wireframe, elementLocalSec }) => {
   const meshRef = useRef<Mesh>(null);
 
-  useFrame((state) => {
+  useFrame(() => {
     if (!meshRef.current) return;
-    const t = state.clock.getElapsedTime();
-    meshRef.current.rotation.x = rotXPerSec * t;
-    meshRef.current.rotation.y = rotYPerSec * t;
-    meshRef.current.rotation.z = rotZPerSec * t;
+    meshRef.current.rotation.x = rotXPerSec * elementLocalSec;
+    meshRef.current.rotation.y = rotYPerSec * elementLocalSec;
+    meshRef.current.rotation.z = rotZPerSec * elementLocalSec;
   });
 
   const geometry = (() => {
@@ -156,6 +156,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
             rotYPerSec={rotYPerSec}
             rotZPerSec={rotZPerSec}
             wireframe={wireframe}
+            elementLocalSec={localSec}
           />
         </ThreeCanvas>
       </div>

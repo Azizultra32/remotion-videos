@@ -16,7 +16,7 @@ import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   videoSrc: z.string(),
-  playbackRate: z.number().min(0).max(100).step(0.05),
+  playbackRate: z.number().min(0.01).max(100).step(0.05),
   startFromSec: z.number().min(0).max(600).step(0.01),
   fit: z.enum(["cover", "contain"]),
   x: z.number().min(-50).max(150),

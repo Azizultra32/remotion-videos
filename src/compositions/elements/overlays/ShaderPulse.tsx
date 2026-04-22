@@ -196,7 +196,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
 
     // Size the drawing buffer to the canvas's CSS size; Remotion's composition
     // width/height already constrain this via the parent.
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = 1; // Fixed for deterministic renders
     const targetW = Math.max(1, Math.floor(canvas.clientWidth * dpr));
     const targetH = Math.max(1, Math.floor(canvas.clientHeight * dpr));
     if (canvas.width !== targetW || canvas.height !== targetH) {

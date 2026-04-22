@@ -56,6 +56,8 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     dataOffsetInSeconds,
     channel: 0,
   });
+  if (samples.length < 2) return null;
+
   const points = samples.map((v, i) => ({
     x: (i / (samples.length - 1)) * ctx.width,
     y: height / 2 + v * (height / 2) * amplitude,

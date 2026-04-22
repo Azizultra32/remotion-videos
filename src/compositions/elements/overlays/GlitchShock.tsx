@@ -197,7 +197,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     const state = glStateRef.current; const canvas = canvasRef.current;
     if (!state || !canvas) return;
     const { gl, prog, vao, locs } = state;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = 1; // Fixed for deterministic renders
     const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
     const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }

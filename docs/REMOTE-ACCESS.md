@@ -32,6 +32,22 @@ npm run mv:tunnel -- --kill
 - URL is un-guessable but unauthenticated — don't post it publicly
 - Rate-limited (fine for one user; bad for anything production)
 
+**Stability model:**
+- This is now stable for a single dev session:
+  `npm run mv:tunnel` can bring up the editor, publish the tunnel, and keep
+  both alive under `launchd` after the shell command exits.
+- This is **not** a permanent or reusable URL:
+  every new tunnel session gets a fresh `*.trycloudflare.com` hostname.
+- Normal editor code changes should **not** require tunnel code changes again,
+  as long as the editor still serves on `127.0.0.1:4000` and `/api/songs`
+  stays healthy.
+- The tunnel path may need updates again if we change any of these invariants:
+  the editor port, the dev command, the sidecar/API readiness contract, or the
+  host/origin model used by Vite.
+- Even with no repo changes, this path is still dependent on Cloudflare quick
+  tunnels, so machine sleep/restart, local network changes, or Cloudflare
+  invalidating the quick tunnel can require re-running `npm run mv:tunnel`.
+
 **Required config** (already applied, commit `bfc408d`):
 Vite 6 blocks requests whose Host header isn't in `server.allowedHosts`. The
 editor's `vite.config.ts` now has `allowedHosts: true` so any tunnel hostname
@@ -46,6 +62,10 @@ reverted — re-apply.
 tunnel process keeps running under `launchd` until you explicitly stop it with
 `npm run mv:tunnel -- --kill`. If the wrapper had to auto-start the editor, the
 same kill command stops that managed editor service too.
+
+**Operational meaning:** treat Path 1 as a reliable session bootstrap, not as
+infrastructure. If you need the same hostname later, or want something that
+survives machine/network churn with less babysitting, use Path 2 instead.
 
 ## Path 2 — Named cloudflared tunnel (stable URL, free)
 
@@ -110,6 +130,12 @@ reverted, re-apply (engine-locked path, requires `ENGINE_UNLOCK=1`).
 
 **`npm run mv:tunnel` says `cloudflared` is not installed** → install it with
 `brew install cloudflared`.
+
+**Tunnel URL used to work and now shows 502/530** → first check whether the
+local editor is still healthy on `http://127.0.0.1:4000/api/songs`. If local
+health is gone, restart with `npm run mv:tunnel`. If local health is fine but
+the public URL is bad, kill and recreate the quick tunnel:
+`npm run mv:tunnel -- --kill && npm run mv:tunnel`.
 
 **Tunnel URL loads but `/api/songs` 500s** → sidecar isn't running because Vite
 didn't start. Run `cd editor && npm run dev` and check stderr.

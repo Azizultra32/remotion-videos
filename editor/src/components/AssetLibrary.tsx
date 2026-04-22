@@ -15,8 +15,15 @@
 
 import { ELEMENT_MODULES, ELEMENT_REGISTRY } from "@compositions/elements/registry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useProjectAssetRegistry } from "../hooks/useProjectAssetRegistry";
+import { ensureAssetRecord } from "../lib/assetRecordStore";
 import { useEditorStore } from "../store";
+import type { TimelineElement } from "../types";
+import { generateAssetId, isValidAssetId } from "../types/assetRecord";
 import {
+  type EditorAssetEntry as AssetEntry,
+  type AssetKind,
+  type AssetSortMode,
   applyAssetToModuleProps,
   assetKindLabel,
   assetPreviewUrlFor,
@@ -30,14 +37,8 @@ import {
   mediaFieldLabel,
   moduleIdForAssetKind,
   seededPropsForModuleAsset,
-  type AssetKind,
-  type AssetSortMode,
-  type EditorAssetEntry as AssetEntry,
 } from "../utils/assets";
-import type { TimelineElement } from "../types";
 import { stemFromAudioSrc } from "../utils/url";
-import { generateAssetId, isValidAssetId } from "../types/assetRecord";
-import { loadAssetRegistry, saveAssetRegistry, findAssetByPath } from "../lib/assetRecordStore";
 
 const POLL_MS = 2000;
 
@@ -51,25 +52,8 @@ const VIDEO_MODULE_ID = "overlay.speedVideo";
 
 const newId = () => `el-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-const countAssetReferences = (
-  elements: readonly TimelineElement[],
-  assetPath: string,
-): number => {
-      const assetId = generateAssetId(asset.path);
-  let count = 0;
-  for (const element of elements) {
-    for (const value of Object.values(element.props ?? {})) {
-      if (value === assetPath || value === assetId) {
-        count += 1;
-        continue;
-      }
-      if (Array.isArray(value) && (value.includes(assetPath) || value.includes(assetId))) {
-        count += 1;
-      }
-    }
-  }
-  return count;
-};
+const formatMissingSince = (value: number | null | undefined): string =>
+  typeof value === "number" ? new Date(value).toLocaleString() : "awaiting reconcile";
 
 type AssetPreviewMeta = {
   width?: number;
@@ -188,10 +172,25 @@ const AssetUseModal = ({
             gap: 10,
           }}
         >
-          <div style={{ fontSize: 11, color: "#7f8ba0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: "#7f8ba0",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
             Use {assetKindLabel(asset.kind)}
           </div>
-          <div style={{ color: "#d8dfeb", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <div
+            style={{
+              color: "#d8dfeb",
+              fontSize: 12,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
             {asset.label}
           </div>
           <div style={{ flex: 1 }} />
@@ -262,9 +261,16 @@ const AssetUseModal = ({
                 lineHeight: 1.5,
               }}
             >
-              <div><strong style={{ color: "#eef2f7" }}>Kind:</strong> {assetKindLabel(asset.kind)}</div>
-              <div><strong style={{ color: "#eef2f7" }}>Scope:</strong> {assetScopeLabel(asset.scope, asset.stem)}</div>
-              <div><strong style={{ color: "#eef2f7" }}>Used in timeline:</strong> {usageCount}</div>
+              <div>
+                <strong style={{ color: "#eef2f7" }}>Kind:</strong> {assetKindLabel(asset.kind)}
+              </div>
+              <div>
+                <strong style={{ color: "#eef2f7" }}>Scope:</strong>{" "}
+                {assetScopeLabel(asset.scope, asset.stem)}
+              </div>
+              <div>
+                <strong style={{ color: "#eef2f7" }}>Used in timeline:</strong> {usageCount}
+              </div>
               <div style={{ wordBreak: "break-word" }}>
                 <strong style={{ color: "#eef2f7" }}>Path:</strong> {asset.path}
               </div>
@@ -341,9 +347,17 @@ const AssetUseModal = ({
                           }}
                         >
                           <div style={{ fontWeight: 700 }}>
-                            {target.alreadyHasAsset ? `${target.label} already contains this asset` : describeMediaFieldAction(target)}
+                            {target.alreadyHasAsset
+                              ? `${target.label} already contains this asset`
+                              : describeMediaFieldAction(target)}
                           </div>
-                          <div style={{ fontSize: 10, color: target.alreadyHasAsset ? "#6f7b8a" : "#b7d8c2", marginTop: 3 }}>
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: target.alreadyHasAsset ? "#6f7b8a" : "#b7d8c2",
+                              marginTop: 3,
+                            }}
+                          >
                             {target.multi
                               ? "Adds this asset to the selected element without removing existing media."
                               : "Replaces the selected element's current media path."}
@@ -359,7 +373,8 @@ const AssetUseModal = ({
                 </>
               ) : (
                 <div style={{ fontSize: 10, color: "#728094" }}>
-                  No element selected. Choose one on the timeline if you want to replace or append media directly.
+                  No element selected. Choose one on the timeline if you want to replace or append
+                  media directly.
                 </div>
               )}
             </div>
@@ -391,9 +406,7 @@ const AssetUseModal = ({
                       textAlign: "left",
                     }}
                   >
-                    <div style={{ fontSize: 11, fontWeight: 700 }}>
-                      Add as {moduleAction.label}
-                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 700 }}>Add as {moduleAction.label}</div>
                     <div style={{ fontSize: 10, color: "#8e9aaf", marginTop: 3 }}>
                       {moduleAction.description}
                       {moduleAction.multi ? " Appends this asset to a list-based media field." : ""}
@@ -452,7 +465,7 @@ const useAssetPreviewMeta = (entries: AssetEntry[] | null) => {
         video.src = src;
         video.onloadedmetadata = () => {
           if (cancelled) return;
-          setMetaMap((prev) => (
+          setMetaMap((prev) =>
             prev[entry.path]
               ? prev
               : {
@@ -462,8 +475,8 @@ const useAssetPreviewMeta = (entries: AssetEntry[] | null) => {
                     height: video.videoHeight || undefined,
                     durationSec: Number.isFinite(video.duration) ? video.duration : undefined,
                   },
-                }
-          ));
+                },
+          );
         };
         video.onerror = () => {
           if (cancelled) return;
@@ -474,7 +487,7 @@ const useAssetPreviewMeta = (entries: AssetEntry[] | null) => {
         img.src = assetPreviewUrlFor(entry);
         img.onload = () => {
           if (cancelled) return;
-          setMetaMap((prev) => (
+          setMetaMap((prev) =>
             prev[entry.path]
               ? prev
               : {
@@ -483,8 +496,8 @@ const useAssetPreviewMeta = (entries: AssetEntry[] | null) => {
                     width: img.naturalWidth || undefined,
                     height: img.naturalHeight || undefined,
                   },
-                }
-          ));
+                },
+          );
         };
         img.onerror = () => {
           if (cancelled) return;
@@ -503,6 +516,8 @@ const useAssetPreviewMeta = (entries: AssetEntry[] | null) => {
 export const AssetLibrary = () => {
   const [entries, setEntries] = useState<AssetEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reconcileError, setReconcileError] = useState<string | null>(null);
+  const [reconcilePending, setReconcilePending] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">("all");
   const [kindFilter, setKindFilter] = useState<"all" | AssetKind>("all");
@@ -515,12 +530,14 @@ export const AssetLibrary = () => {
   const currentStem = useEditorStore((s) => stemFromAudioSrc(s.audioSrc));
   const selectedElementId = useEditorStore((s) => s.selectedElementId);
   const elements = useEditorStore((s) => s.elements);
+  const { assetRecords, assetRegistryError, missingAssetRecords, runAssetReconcile } =
+    useProjectAssetRegistry();
   const metaMap = useAssetPreviewMeta(entries);
   const selectedElement = useMemo(
     () => elements.find((element) => element.id === selectedElementId) ?? null,
     [elements, selectedElementId],
   );
-  const selectedModule = selectedElement ? ELEMENT_REGISTRY[selectedElement.type] ?? null : null;
+  const selectedModule = selectedElement ? (ELEMENT_REGISTRY[selectedElement.type] ?? null) : null;
 
   useEffect(() => {
     if (!currentStem && importScope === "project") setImportScope("global");
@@ -599,15 +616,24 @@ export const AssetLibrary = () => {
 
   const assetUsageCounts = useMemo(() => {
     const next: Record<string, number> = {};
+    const isAssetPath = (value: string) =>
+      value.startsWith("assets/") || value.startsWith("projects/");
+    const idToPath = new Map<string, string>();
+    for (const record of assetRecords) {
+      idToPath.set(record.id, record.path);
+      for (const alias of record.aliases ?? []) {
+        idToPath.set(alias, record.path);
+      }
+    }
     for (const element of elements) {
       for (const value of Object.values(element.props ?? {})) {
         if (typeof value === "string") {
           next[value] = (next[value] ?? 0) + 1;
-          // Also count by the derived counterpart: if it's an ID, count under its path; if it's a path, count under its ID
-          if (isValidAssetId(value)) {
-            // ID → also count under the path it would generate from
-            // (we can't reverse-lookup without registry, so just count the ID)
-          } else {
+          const resolvedPath = idToPath.get(value);
+          if (resolvedPath) {
+            next[resolvedPath] = (next[resolvedPath] ?? 0) + 1;
+          }
+          if (isAssetPath(value) && !isValidAssetId(value)) {
             const derivedId = generateAssetId(value);
             next[derivedId] = (next[derivedId] ?? 0) + 1;
           }
@@ -617,7 +643,11 @@ export const AssetLibrary = () => {
           for (const item of value) {
             if (typeof item === "string") {
               next[item] = (next[item] ?? 0) + 1;
-              if (!isValidAssetId(item)) {
+              const resolvedPath = idToPath.get(item);
+              if (resolvedPath) {
+                next[resolvedPath] = (next[resolvedPath] ?? 0) + 1;
+              }
+              if (isAssetPath(item) && !isValidAssetId(item)) {
                 const derivedId = generateAssetId(item);
                 next[derivedId] = (next[derivedId] ?? 0) + 1;
               }
@@ -627,7 +657,7 @@ export const AssetLibrary = () => {
       }
     }
     return next;
-  }, [elements]);
+  }, [assetRecords, elements]);
 
   const selectedElementCompatibleKinds = useMemo(
     () => new Set((selectedModule?.mediaFields ?? []).map((field) => field.kind as AssetKind)),
@@ -644,10 +674,6 @@ export const AssetLibrary = () => {
       return;
     }
 
-    // Generate/lookup asset ID for this path
-    const { generateAssetId } = await import("../types/assetRecord");
-    const { loadAssetRegistry, saveAssetRegistry, findAssetByPath } = await import("../lib/assetRecordStore");
-
     if (!currentStem) {
       setError("No current project loaded. Cannot create asset record.");
       return;
@@ -655,29 +681,12 @@ export const AssetLibrary = () => {
 
     let assetId: string;
     try {
-      const registry = await loadAssetRegistry(currentStem);
-      let record = findAssetByPath(registry, e.path);
-
-      if (!record) {
-        assetId = generateAssetId();
-        record = {
-          id: assetId as `ast_${string}`,
-          path: e.path,
-          kind: e.kind,
-          scope: e.scope,
-          stem: e.stem,
-          sizeBytes: e.size,
-          mtimeMs: e.mtime,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          metadata: {},
-          label: e.label,
-        };
-        registry.push(record);
-        await saveAssetRegistry(currentStem, registry);
-      } else {
-        assetId = record.id;
-      }
+      const record = await ensureAssetRecord(currentStem, {
+        path: e.path,
+        kind: e.kind,
+        label: e.label,
+      });
+      assetId = record.id;
     } catch (err) {
       console.error("Failed to create/lookup asset record:", err);
       setError(`Failed to create asset record: ${String(err)}`);
@@ -713,10 +722,6 @@ export const AssetLibrary = () => {
       return;
     }
 
-    // Generate/lookup asset ID for this path
-    const { generateAssetId } = await import("../types/assetRecord");
-    const { loadAssetRegistry, saveAssetRegistry, findAssetByPath } = await import("../lib/assetRecordStore");
-
     if (!currentStem) {
       setError("No current project loaded. Cannot create asset record.");
       return;
@@ -724,29 +729,12 @@ export const AssetLibrary = () => {
 
     let assetId: ReturnType<typeof generateAssetId>;
     try {
-      const registry = await loadAssetRegistry(currentStem);
-      const record = findAssetByPath(registry, asset.path);
-
-      if (!record) {
-        assetId = generateAssetId(asset.path);
-        const newRecord = {
-          id: assetId,
-          path: asset.path,
-          kind: asset.kind,
-          scope: asset.scope,
-          stem: asset.stem,
-          sizeBytes: asset.size,
-          mtimeMs: asset.mtime,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          metadata: {},
-          label: asset.label,
-        };
-        registry.push(newRecord);
-        await saveAssetRegistry(currentStem, registry);
-      } else {
-        assetId = record.id;
-      }
+      const record = await ensureAssetRecord(currentStem, {
+        path: asset.path,
+        kind: asset.kind,
+        label: asset.label,
+      });
+      assetId = record.id;
     } catch (err) {
       console.error("Failed to create/lookup asset record:", err);
       setError(`Failed to create asset record: ${String(err)}`);
@@ -770,12 +758,18 @@ export const AssetLibrary = () => {
   const selectedElementTargetsForAsset = useCallback(
     (asset: AssetEntry | null): SelectedElementAssetTarget[] => {
       if (!asset || !selectedElement || !selectedModule) return [];
-  const assetId = generateAssetId(assetPath);
+      const record = assetRecords.find((entry) => entry.path === asset.path) ?? null;
+      const candidateValues = new Set<string>([
+        asset.path,
+        generateAssetId(asset.path),
+        ...(record ? [record.id, ...(record.aliases ?? [])] : []),
+      ]);
       return findMediaFieldsForKind(selectedModule.mediaFields, asset.kind).map((field) => {
         const currentValue = selectedElement.props[field.name];
         const alreadyHasAsset = field.multi
-          ? Array.isArray(currentValue) && (currentValue.includes(asset.path) || currentValue.includes(assetId))
-          : currentValue === asset.path || currentValue === assetId;
+          ? Array.isArray(currentValue) &&
+            currentValue.some((value) => typeof value === "string" && candidateValues.has(value))
+          : typeof currentValue === "string" && candidateValues.has(currentValue);
         return {
           name: field.name,
           fieldName: field.name,
@@ -785,7 +779,7 @@ export const AssetLibrary = () => {
         };
       });
     },
-    [selectedElement, selectedModule],
+    [assetRecords, selectedElement, selectedModule],
   );
 
   const applyAssetToSelectedElement = async (asset: AssetEntry, fieldName: string) => {
@@ -796,25 +790,11 @@ export const AssetLibrary = () => {
       valueToWrite = asset.path;
     } else {
       try {
-        const registry = await loadAssetRegistry(currentStem);
-        let record = findAssetByPath(registry, asset.path);
-        if (!record) {
-          record = {
-            id: generateAssetId(asset.path),
-            path: asset.path,
-            kind: asset.kind,
-            scope: asset.scope,
-            stem: asset.stem,
-            sizeBytes: asset.size,
-            mtimeMs: asset.mtime,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            metadata: {},
-            label: asset.label,
-          };
-          registry.push(record);
-          await saveAssetRegistry(currentStem, registry);
-        }
+        const record = await ensureAssetRecord(currentStem, {
+          path: asset.path,
+          kind: asset.kind,
+          label: asset.label,
+        });
         valueToWrite = record.id;
       } catch {
         valueToWrite = asset.path;
@@ -849,9 +829,24 @@ export const AssetLibrary = () => {
   );
 
   const actionAssetUsageCount = useMemo(
-    () => (actionAsset ? assetUsageCounts[actionAsset.path] ?? 0 : 0),
+    () => (actionAsset ? (assetUsageCounts[actionAsset.path] ?? 0) : 0),
     [actionAsset, assetUsageCounts],
   );
+
+  const hasTimelineAssetIds = useMemo(() => {
+    for (const element of elements) {
+      for (const value of Object.values(element.props ?? {})) {
+        if (typeof value === "string" && isValidAssetId(value)) return true;
+        if (
+          Array.isArray(value) &&
+          value.some((item) => typeof item === "string" && isValidAssetId(item))
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [elements]);
 
   const onTileDragStart = (e: AssetEntry, ev: React.DragEvent<HTMLButtonElement>) => {
     ev.dataTransfer.setData(
@@ -939,9 +934,13 @@ export const AssetLibrary = () => {
   };
 
   const deleteAsset = async (asset: AssetEntry) => {
-    const usageCount = countAssetReferences(elements, asset.path);
-    const warning =
-      usageCount > 0
+    const usageCount = assetUsageCounts[asset.path] ?? 0;
+    const hasRegistryRecord = assetRecords.some((record) => record.path === asset.path);
+    const hasIncompleteUsageResolution =
+      assetRegistryError !== null || (hasTimelineAssetIds && !hasRegistryRecord);
+    const warning = hasIncompleteUsageResolution
+      ? `${asset.label} may still be referenced by timeline elements, but the current registry data is incomplete so the usage count may be wrong. Delete it anyway?`
+      : usageCount > 0
         ? `${asset.label} is currently referenced by ${usageCount} timeline element${usageCount === 1 ? "" : "s"}. Delete it anyway?`
         : `Delete ${asset.label}?`;
     if (!window.confirm(warning)) return;
@@ -956,6 +955,13 @@ export const AssetLibrary = () => {
       throw new Error(text);
     }
     await refreshEntries();
+    if (currentStem) {
+      try {
+        await runAssetReconcile();
+      } catch (err) {
+        setReconcileError(String((err as Error)?.message ?? err));
+      }
+    }
     setActionAsset(null);
   };
 
@@ -1014,6 +1020,20 @@ export const AssetLibrary = () => {
       ? `${filtered.length} media item${filtered.length === 1 ? "" : "s"}`
       : `${filtered.length} of ${entries?.length ?? 0} shown`;
 
+  const handleRunReconcile = async () => {
+    if (!currentStem || reconcilePending) return;
+    setReconcilePending(true);
+    setReconcileError(null);
+    try {
+      await runAssetReconcile();
+      await refreshEntries();
+    } catch (err) {
+      setReconcileError(String((err as Error)?.message ?? err));
+    } finally {
+      setReconcilePending(false);
+    }
+  };
+
   return (
     <div
       onDragOver={handleOsDragOver}
@@ -1031,12 +1051,20 @@ export const AssetLibrary = () => {
       }}
     >
       {uploading > 0 && (
-        <div style={{
-          position: "absolute", top: 4, right: 8,
-          fontSize: 9, color: "#aaa",
-          background: "#1a1a1a", border: "1px solid #333",
-          padding: "2px 6px", borderRadius: 3, zIndex: 2,
-        }}>
+        <div
+          style={{
+            position: "absolute",
+            top: 4,
+            right: 8,
+            fontSize: 9,
+            color: "#aaa",
+            background: "#1a1a1a",
+            border: "1px solid #333",
+            padding: "2px 6px",
+            borderRadius: 3,
+            zIndex: 2,
+          }}
+        >
           Uploading {uploading}…
         </div>
       )}
@@ -1063,12 +1091,23 @@ export const AssetLibrary = () => {
               borderRadius: 6,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 10, color: "#d7deea", fontWeight: 700, letterSpacing: "0.06em" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <div
+                style={{ fontSize: 10, color: "#d7deea", fontWeight: 700, letterSpacing: "0.06em" }}
+              >
                 IMPORT MEDIA
               </div>
               <div style={{ fontSize: 9, color: "#7f8aa0" }}>
-                {counts.total > 0 ? `${counts.global} lib · ${counts.project} proj` : "empty library"}
+                {counts.total > 0
+                  ? `${counts.global} lib · ${counts.project} proj`
+                  : "empty library"}
               </div>
             </div>
             <div style={{ display: "flex", gap: 4 }}>
@@ -1089,7 +1128,11 @@ export const AssetLibrary = () => {
                 }}
                 disabled={!currentStem}
                 onClick={() => setImportScope("project")}
-                title={currentStem ? `Import into ${currentStem}` : "Load a project to import project-local media"}
+                title={
+                  currentStem
+                    ? `Import into ${currentStem}`
+                    : "Load a project to import project-local media"
+                }
               >
                 Project
               </button>
@@ -1106,7 +1149,9 @@ export const AssetLibrary = () => {
               }}
             >
               <strong style={{ color: "#fff" }}>Destination:</strong>{" "}
-              {importScope === "project" && currentStem ? `project ${currentStem}` : "shared library"}
+              {importScope === "project" && currentStem
+                ? `project ${currentStem}`
+                : "shared library"}
             </div>
             <button
               type="button"
@@ -1131,20 +1176,81 @@ export const AssetLibrary = () => {
             </div>
           </div>
           <div style={{ display: "flex", gap: 3, marginBottom: 4 }}>
-            <button type="button" style={segBtn(kindFilter === "all")} onClick={() => setKindFilter("all")}>All</button>
-            <button type="button" style={segBtn(kindFilter === "image")} onClick={() => setKindFilter("image")}>Img</button>
-            <button type="button" style={segBtn(kindFilter === "gif")} onClick={() => setKindFilter("gif")}>GIF</button>
-            <button type="button" style={segBtn(kindFilter === "video")} onClick={() => setKindFilter("video")}>Vid</button>
+            <button
+              type="button"
+              style={segBtn(kindFilter === "all")}
+              onClick={() => setKindFilter("all")}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              style={segBtn(kindFilter === "image")}
+              onClick={() => setKindFilter("image")}
+            >
+              Img
+            </button>
+            <button
+              type="button"
+              style={segBtn(kindFilter === "gif")}
+              onClick={() => setKindFilter("gif")}
+            >
+              GIF
+            </button>
+            <button
+              type="button"
+              style={segBtn(kindFilter === "video")}
+              onClick={() => setKindFilter("video")}
+            >
+              Vid
+            </button>
           </div>
           <div style={{ display: "flex", gap: 3, marginBottom: 6 }}>
-            <button type="button" style={segBtn(scopeFilter === "all")} onClick={() => setScopeFilter("all")}>Any scope</button>
-            <button type="button" style={segBtn(scopeFilter === "global")} onClick={() => setScopeFilter("global")} title="Library — shared across all projects">Library</button>
-            <button type="button" style={segBtn(scopeFilter === "project")} onClick={() => setScopeFilter("project")}>Project</button>
+            <button
+              type="button"
+              style={segBtn(scopeFilter === "all")}
+              onClick={() => setScopeFilter("all")}
+            >
+              Any scope
+            </button>
+            <button
+              type="button"
+              style={segBtn(scopeFilter === "global")}
+              onClick={() => setScopeFilter("global")}
+              title="Library — shared across all projects"
+            >
+              Library
+            </button>
+            <button
+              type="button"
+              style={segBtn(scopeFilter === "project")}
+              onClick={() => setScopeFilter("project")}
+            >
+              Project
+            </button>
           </div>
           <div style={{ display: "flex", gap: 3, marginBottom: 6 }}>
-            <button type="button" style={segBtn(sortMode === "recent")} onClick={() => setSortMode("recent")}>Recent</button>
-            <button type="button" style={segBtn(sortMode === "name")} onClick={() => setSortMode("name")}>Name</button>
-            <button type="button" style={segBtn(sortMode === "size")} onClick={() => setSortMode("size")}>Size</button>
+            <button
+              type="button"
+              style={segBtn(sortMode === "recent")}
+              onClick={() => setSortMode("recent")}
+            >
+              Recent
+            </button>
+            <button
+              type="button"
+              style={segBtn(sortMode === "name")}
+              onClick={() => setSortMode("name")}
+            >
+              Name
+            </button>
+            <button
+              type="button"
+              style={segBtn(sortMode === "size")}
+              onClick={() => setSortMode("size")}
+            >
+              Size
+            </button>
           </div>
           <input
             type="text"
@@ -1177,7 +1283,8 @@ export const AssetLibrary = () => {
                 lineHeight: 1.45,
               }}
             >
-              <strong style={{ color: "#edf3fb" }}>Selected element:</strong> {selectedElement.label}
+              <strong style={{ color: "#edf3fb" }}>Selected element:</strong>{" "}
+              {selectedElement.label}
               {" · "}
               {selectedElementCompatibleKinds.size > 0
                 ? "Use Apply on compatible assets to replace or append media directly."
@@ -1185,9 +1292,124 @@ export const AssetLibrary = () => {
             </div>
           )}
 
-          {error && (
-            <div style={{ color: "#f66", fontSize: 10, marginBottom: 6 }}>
-              {error}
+          {currentStem && (
+            <div
+              style={{
+                marginBottom: 8,
+                padding: "9px 10px",
+                background: "#10151d",
+                border: "1px solid #283444",
+                borderRadius: 6,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#d7deea",
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  PROJECT REGISTRY
+                </div>
+                <div style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  onClick={() => void handleRunReconcile()}
+                  disabled={reconcilePending}
+                  style={{
+                    ...segBtn(false),
+                    flex: "0 0 auto",
+                    padding: "4px 8px",
+                    opacity: reconcilePending ? 0.7 : 1,
+                    cursor: reconcilePending ? "progress" : "pointer",
+                  }}
+                  title={`Refresh missing asset status for ${currentStem}`}
+                >
+                  {reconcilePending ? "Running…" : "Run Reconcile"}
+                </button>
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#b9c7db",
+                  background: "#0d1218",
+                  border: "1px solid #202a36",
+                  borderRadius: 4,
+                  padding: "6px 7px",
+                  lineHeight: 1.45,
+                }}
+              >
+                {missingAssetRecords.length === 0
+                  ? "No missing records in the loaded registry."
+                  : `${missingAssetRecords.length} missing record${missingAssetRecords.length === 1 ? "" : "s"} in ${currentStem}. Read-only for now; reconcile refreshes status from disk.`}
+              </div>
+              {reconcileError && (
+                <div style={{ color: "#f88", fontSize: 10 }}>
+                  Reconcile failed: {reconcileError}
+                </div>
+              )}
+              {missingAssetRecords.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    maxHeight: 160,
+                    overflowY: "auto",
+                  }}
+                >
+                  {missingAssetRecords.map((record) => (
+                    <div
+                      key={record.id}
+                      style={{
+                        padding: "7px 8px",
+                        background: "#0d1117",
+                        border: "1px solid #273241",
+                        borderRadius: 4,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: "#eef3fa",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {record.label?.trim() || record.path.split("/").pop() || record.path}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 9,
+                          color: "#8e9cb1",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {record.path}
+                      </div>
+                      <div style={{ fontSize: 9, color: "#74839a" }}>
+                        {record.kind.toUpperCase()} · {assetScopeLabel(record.scope, record.stem)} ·
+                        missing since {formatMissingSince(record.missingSince)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && <div style={{ color: "#f66", fontSize: 10, marginBottom: 6 }}>{error}</div>}
+
+          {assetRegistryError && (
+            <div style={{ color: "#f88", fontSize: 10, marginBottom: 6 }}>
+              Registry load failed: {assetRegistryError}
             </div>
           )}
 
@@ -1212,9 +1434,7 @@ export const AssetLibrary = () => {
           )}
 
           {entries && entries.length > 0 && (
-            <div style={{ fontSize: 9, color: "#667286", marginBottom: 8 }}>
-              {filterSummary}
-            </div>
+            <div style={{ fontSize: 9, color: "#667286", marginBottom: 8 }}>{filterSummary}</div>
           )}
 
           <div
@@ -1224,7 +1444,7 @@ export const AssetLibrary = () => {
               gap: 4,
             }}
           >
-            {filtered.map((e) => (
+            {filtered.map((e) =>
               (() => {
                 const insertion = resolveAssetInsertion(e);
                 const meta = metaMap[e.path];
@@ -1234,7 +1454,9 @@ export const AssetLibrary = () => {
                 const canApplyToSelected = selectedElementCompatibleKinds.has(e.kind);
                 const secondaryLabel = [
                   dimensionLabel,
-                  e.kind === "video" && meta?.durationSec ? formatAssetDuration(meta.durationSec) : "",
+                  e.kind === "video" && meta?.durationSec
+                    ? formatAssetDuration(meta.durationSec)
+                    : "",
                   formatAssetBytes(e.size),
                 ]
                   .filter(Boolean)
@@ -1340,7 +1562,10 @@ export const AssetLibrary = () => {
                               lineHeight: 1,
                               padding: "3px 4px",
                               borderRadius: 999,
-                              background: e.scope === "global" ? "rgba(42, 74, 122, 0.88)" : "rgba(32, 98, 74, 0.88)",
+                              background:
+                                e.scope === "global"
+                                  ? "rgba(42, 74, 122, 0.88)"
+                                  : "rgba(32, 98, 74, 0.88)",
                               color: "#fff",
                               border: "1px solid rgba(255,255,255,0.15)",
                               letterSpacing: "0.04em",
@@ -1354,7 +1579,12 @@ export const AssetLibrary = () => {
                             src={assetUrlFor(e)}
                             muted
                             preload="metadata"
-                            style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                              pointerEvents: "none",
+                            }}
                           />
                         ) : (
                           <img
@@ -1368,7 +1598,12 @@ export const AssetLibrary = () => {
                                 img.src = assetUrlFor(e);
                               }
                             }}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", pointerEvents: "none" }}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                              pointerEvents: "none",
+                            }}
                           />
                         )}
                       </div>
@@ -1415,18 +1650,22 @@ export const AssetLibrary = () => {
                     >
                       <button
                         type="button"
-                        onClick={() => (canApplyToSelected ? quickApplyAsset(e) : setActionAsset(e))}
+                        onClick={() =>
+                          canApplyToSelected ? quickApplyAsset(e) : setActionAsset(e)
+                        }
                         style={{
                           ...segBtn(canApplyToSelected),
                           padding: "4px 6px",
                           flex: 1,
                           opacity: canApplyToSelected ? 1 : 0.65,
                         }}
-                        title={canApplyToSelected
-                          ? `Apply ${e.label} to the selected element`
-                          : selectedElement
-                            ? "Selected element cannot use this media kind"
-                            : "Select an element to enable direct apply"}
+                        title={
+                          canApplyToSelected
+                            ? `Apply ${e.label} to the selected element`
+                            : selectedElement
+                              ? "Selected element cannot use this media kind"
+                              : "Select an element to enable direct apply"
+                        }
                       >
                         Apply
                       </button>
@@ -1445,13 +1684,16 @@ export const AssetLibrary = () => {
                     </div>
                   </div>
                 );
-              })()
-            ))}
+              })(),
+            )}
           </div>
 
           {entries && entries.length > 0 && (
             <div style={{ fontSize: 9, color: "#555", marginTop: 8, lineHeight: 1.4 }}>
-              Click a preview to add the default media element at the playhead. Apply updates the selected element when it accepts that media kind. Manage exposes copy, delete, and module-specific insert actions. Shift+click copies the path. Drag onto a timeline track for precise placement.
+              Click a preview to add the default media element at the playhead. Apply updates the
+              selected element when it accepts that media kind. Manage exposes copy, delete, and
+              module-specific insert actions. Shift+click copies the path. Drag onto a timeline
+              track for precise placement.
             </div>
           )}
         </>
@@ -1461,7 +1703,11 @@ export const AssetLibrary = () => {
           asset={actionAsset}
           modules={compatibleModulesByKind[actionAsset.kind]}
           usageCount={actionAssetUsageCount}
-          selectedElementLabel={selectedElement ? `${selectedElement.label} (${selectedModule?.label ?? selectedElement.type})` : null}
+          selectedElementLabel={
+            selectedElement
+              ? `${selectedElement.label} (${selectedModule?.label ?? selectedElement.type})`
+              : null
+          }
           selectedElementTargets={selectedElementTargets}
           onAddModule={(moduleId) => void addElementWithModule(actionAsset, moduleId)}
           onApplySelected={(fieldName) => void applyAssetToSelectedElement(actionAsset, fieldName)}

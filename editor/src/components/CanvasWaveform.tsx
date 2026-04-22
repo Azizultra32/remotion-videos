@@ -3,8 +3,9 @@
 // lifted from motion-canvas packages/core/src/media/AudioResourceManager.ts
 // (decode via AudioContext, extract peaks, draw to <canvas>).
 //
-// v1 scope: full-track waveform overview, click-to-seek, device-pixel-ratio
-// aware. The editor timeline below owns zoom/pan; this canvas stays fixed.
+// v1 scope: full-track waveform overview, click-to-seek, deterministic
+// fixed-DPR sizing. The editor timeline below owns zoom/pan; this canvas
+// stays fixed.
 
 import { useEffect, useRef, useState } from "react";
 import { extractPeaks, normalizePeaks } from "../utils/audioPeaks";
@@ -36,7 +37,7 @@ const drawWaveform = (
 ) => {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = 1;
   const targetW = Math.max(1, Math.floor(cssWidth * dpr));
   const targetH = Math.max(1, Math.floor(cssHeight * dpr));
   if (canvas.width !== targetW || canvas.height !== targetH) {

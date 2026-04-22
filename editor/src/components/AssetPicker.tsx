@@ -1,7 +1,13 @@
+import type { MediaFieldDefinition } from "@compositions/elements/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useProjectAssetRegistry } from "../hooks/useProjectAssetRegistry";
+import { ensureAssetRecord, findAssetById } from "../lib/assetRecordStore";
 import { useEditorStore } from "../store";
-import { stemFromAudioSrc } from "../utils/url";
+import { generateAssetId, isValidAssetId } from "../types/assetRecord";
 import {
+  type EditorAssetEntry as AssetEntry,
+  type AssetKind,
+  type AssetSortMode,
   assetKindLabel,
   assetMediaHint,
   assetPickerAccept,
@@ -13,19 +19,15 @@ import {
   formatAssetBytes,
   formatAssetDuration,
   formatAssetTimestamp,
-  type AssetKind,
-  type AssetSortMode,
-  type EditorAssetEntry as AssetEntry,
 } from "../utils/assets";
-import { isValidAssetId } from "../types/assetRecord";
-import { loadAssetRegistry, saveAssetRegistry, findAssetByPath, findAssetById } from "../lib/assetRecordStore";
-import { generateAssetId } from "../types/assetRecord";
+import { stemFromAudioSrc } from "../utils/url";
 
 export type AssetPickerKind = AssetKind;
 
 type Props = {
   kind: AssetPickerKind;
   multi: boolean;
+  role?: MediaFieldDefinition["role"];
   initial: string[];
   onCommit: (paths: string[]) => void;
   onCancel: () => void;
@@ -128,43 +130,24 @@ async function pathsToAssetIds(
   entriesByPath: Record<string, AssetEntry>,
   currentStem: string,
 ): Promise<string[]> {
-  const registry = await loadAssetRegistry(currentStem);
   const assetIds: string[] = [];
-  let registryChanged = false;
 
   for (const path of paths) {
     const entry = entriesByPath[path];
     if (!entry) continue;
 
-    let record = findAssetByPath(registry, path);
-    if (!record) {
-      record = {
-        id: generateAssetId(path),
-        path,
-        kind: entry.kind,
-        scope: entry.scope,
-        stem: entry.stem,
-        sizeBytes: entry.size,
-        mtimeMs: entry.mtime,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        metadata: {},
-        label: entry.label,
-      };
-      registry.push(record);
-      registryChanged = true;
-    }
+    const record = await ensureAssetRecord(currentStem, {
+      path,
+      kind: entry.kind,
+      label: entry.label,
+    });
     assetIds.push(record.id);
-  }
-
-  if (registryChanged) {
-    await saveAssetRegistry(currentStem, registry);
   }
 
   return assetIds;
 }
 
-export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props) => {
+export const AssetPicker = ({ kind, multi, role, initial, onCommit, onCancel }: Props) => {
   const [entries, setEntries] = useState<AssetEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -181,6 +164,7 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
   const prevHashRef = useRef<string>("");
   const currentStem = useEditorStore((s) => stemFromAudioSrc(s.audioSrc));
   const elements = useEditorStore((s) => s.elements);
+  const { assetRecords } = useProjectAssetRegistry();
 
   useEffect(() => {
     setSelected(initial);
@@ -194,23 +178,17 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
     if (!entries || !initialResolved) return;
     const hasAssetIds = selected.some((s) => isValidAssetId(s));
     if (!hasAssetIds) return;
+    if (!currentStem) return;
 
-    (async () => {
-      if (!currentStem) return;
-      try {
-        const registry = await loadAssetRegistry(currentStem);
-        const resolved = selected.map((s) => {
-          if (!isValidAssetId(s)) return s;
-          const record = findAssetById(registry, s);
-          return record?.path ?? s;
-        });
-        setSelected(resolved);
-        setActivePath(resolved[0] ?? null);
-      } catch {
-        // Leave as-is if registry unavailable
-      }
-    })();
-  }, [entries, initialResolved, currentStem]);
+    const resolved = selected.map((s) => {
+      if (!isValidAssetId(s)) return s;
+      const record = findAssetById(assetRecords, s);
+      return record?.path ?? s;
+    });
+    if (arraysEqual(resolved, selected)) return;
+    setSelected(resolved);
+    setActivePath(resolved[0] ?? null);
+  }, [assetRecords, entries, initialResolved, currentStem, selected]);
 
   useEffect(() => {
     if (!currentStem && importScope === "project") setImportScope("global");
@@ -311,33 +289,60 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
     if (nextPath !== activePath) setActivePath(nextPath);
   }, [activePath, entriesByPath, filtered, selected]);
 
-  const activeAsset = activePath ? entriesByPath[activePath] ?? null : null;
+  const activeAsset = activePath ? (entriesByPath[activePath] ?? null) : null;
   const activeMeta = useActiveAssetMeta(activeAsset);
 
   const assetUsageCounts = useMemo(() => {
     const next: Record<string, number> = {};
+    const isAssetPath = (value: string) =>
+      value.startsWith("assets/") || value.startsWith("projects/");
+    const idToPath = new Map<string, string>();
+    for (const record of assetRecords) {
+      idToPath.set(record.id, record.path);
+      for (const alias of record.aliases ?? []) {
+        idToPath.set(alias, record.path);
+      }
+    }
     for (const element of elements) {
       for (const value of Object.values(element.props ?? {})) {
         if (typeof value === "string") {
           next[value] = (next[value] ?? 0) + 1;
+          const resolvedPath = idToPath.get(value);
+          if (resolvedPath) {
+            next[resolvedPath] = (next[resolvedPath] ?? 0) + 1;
+          }
+          if (isAssetPath(value) && !isValidAssetId(value)) {
+            const derivedId = generateAssetId(value);
+            next[derivedId] = (next[derivedId] ?? 0) + 1;
+          }
           continue;
         }
         if (Array.isArray(value)) {
           for (const item of value) {
-            if (typeof item === "string") next[item] = (next[item] ?? 0) + 1;
+            if (typeof item === "string") {
+              next[item] = (next[item] ?? 0) + 1;
+              const resolvedPath = idToPath.get(item);
+              if (resolvedPath) {
+                next[resolvedPath] = (next[resolvedPath] ?? 0) + 1;
+              }
+              if (isAssetPath(item) && !isValidAssetId(item)) {
+                const derivedId = generateAssetId(item);
+                next[derivedId] = (next[derivedId] ?? 0) + 1;
+              }
+            }
           }
         }
       }
     }
     return next;
-  }, [elements]);
+  }, [assetRecords, elements]);
 
   const toggle = (path: string) => {
     setActivePath(path);
     if (multi) {
-      setSelected((current) => (
-        current.includes(path) ? current.filter((item) => item !== path) : [...current, path]
-      ));
+      setSelected((current) =>
+        current.includes(path) ? current.filter((item) => item !== path) : [...current, path],
+      );
       return;
     }
     setSelected([path]);
@@ -443,29 +448,43 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
   };
 
   const selectionUnchanged = arraysEqual(selected, initial);
+  const isCollection = multi && role === "collection";
   const commitLabel =
     !multi && selectionUnchanged && selected.length > 0
       ? "Done"
-      : multi
-        ? `Use ${selected.length} selected`
-        : `Use this ${assetKindLabel(kind)}`;
+      : isCollection
+        ? `Use ${selected.length} in collection`
+        : multi
+          ? `Use ${selected.length} selected`
+          : `Use this ${assetKindLabel(kind)}`;
 
   const selectedAssetEntries = useMemo(
-    () => selected.map((path) => entriesByPath[path]).filter((entry): entry is AssetEntry => Boolean(entry)),
+    () =>
+      selected
+        .map((path) => entriesByPath[path])
+        .filter((entry): entry is AssetEntry => Boolean(entry)),
     [entriesByPath, selected],
   );
 
   const selectionSummary = multi
-    ? `${selected.length} ${mediaLabel(kind, selected.length || 2)} selected`
-    : selectedAssetEntries[0]?.label ?? `(no ${assetKindLabel(kind)} chosen)`;
+    ? isCollection
+      ? `${selected.length} ${mediaLabel(kind, selected.length || 2)} in collection`
+      : `${selected.length} ${mediaLabel(kind, selected.length || 2)} selected`
+    : (selectedAssetEntries[0]?.label ?? `(no ${assetKindLabel(kind)} chosen)`);
+
+  const pickerTitle = isCollection
+    ? `Edit ${mediaLabel(kind, 2)} collection`
+    : `Pick ${mediaLabel(kind, multi ? 2 : 1)}`;
 
   const activeIsSelected = activeAsset ? selected.includes(activeAsset.path) : false;
-  const activeUsageCount = activeAsset ? assetUsageCounts[activeAsset.path] ?? 0 : 0;
+  const activeUsageCount = activeAsset ? (assetUsageCounts[activeAsset.path] ?? 0) : 0;
   const activeDimensionLabel =
     activeMeta?.width && activeMeta.height ? `${activeMeta.width}×${activeMeta.height}` : "";
   const activeMetaLabel = [
     activeDimensionLabel,
-    activeAsset?.kind === "video" && activeMeta?.durationSec ? formatAssetDuration(activeMeta.durationSec) : "",
+    activeAsset?.kind === "video" && activeMeta?.durationSec
+      ? formatAssetDuration(activeMeta.durationSec)
+      : "",
     activeAsset ? formatAssetBytes(activeAsset.size) : "",
   ]
     .filter(Boolean)
@@ -483,8 +502,14 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      tabIndex={-1}
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onCancel();
       }}
       onDragOver={(ev) => {
         if (ev.dataTransfer.types.includes("application/x-mv-asset")) return;
@@ -555,15 +580,21 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
             gap: 10,
           }}
         >
-          <div style={{ fontSize: 11, color: "#94a0b3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            Pick {mediaLabel(kind, multi ? 2 : 1)}
+          <div
+            style={{
+              fontSize: 11,
+              color: "#94a0b3",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
+            {pickerTitle}
           </div>
           <div style={{ fontSize: 11, color: "#dbe4f2" }}>
-            {filtered.length} shown{entries ? ` · ${entries.filter((entry) => entry.kind === kind).length} total` : ""}
+            {filtered.length} shown
+            {entries ? ` · ${entries.filter((entry) => entry.kind === kind).length} total` : ""}
           </div>
-          <div style={{ fontSize: 10, color: "#7d8ba0" }}>
-            {selectionSummary}
-          </div>
+          <div style={{ fontSize: 10, color: "#7d8ba0" }}>{selectionSummary}</div>
           <div style={{ flex: 1 }} />
           <button
             type="button"
@@ -572,11 +603,7 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
           >
             Refresh
           </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            style={{ ...segBtn(false), fontSize: 10 }}
-          >
+          <button type="button" onClick={onCancel} style={{ ...segBtn(false), fontSize: 10 }}>
             Close
           </button>
         </div>
@@ -626,13 +653,20 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                   opacity: currentStem ? 1 : 0.5,
                   cursor: currentStem ? "pointer" : "not-allowed",
                 }}
-                title={currentStem ? `Import into project ${currentStem}` : "Load a project to import project-local media"}
+                title={
+                  currentStem
+                    ? `Import into project ${currentStem}`
+                    : "Load a project to import project-local media"
+                }
               >
                 Project
               </button>
             </div>
             <div style={{ fontSize: 10, color: "#93a2b7" }}>
-              Destination: {importScope === "project" && currentStem ? `project ${currentStem}` : "shared library"}
+              Destination:{" "}
+              {importScope === "project" && currentStem
+                ? `project ${currentStem}`
+                : "shared library"}
             </div>
             <div style={{ flex: 1 }} />
             <button
@@ -650,14 +684,50 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <div style={{ display: "flex", gap: 6 }}>
-              <button type="button" onClick={() => setScopeFilter("all")} style={segBtn(scopeFilter === "all")}>All scopes</button>
-              <button type="button" onClick={() => setScopeFilter("global")} style={segBtn(scopeFilter === "global")}>Library</button>
-              <button type="button" onClick={() => setScopeFilter("project")} style={segBtn(scopeFilter === "project")}>Project</button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter("all")}
+                style={segBtn(scopeFilter === "all")}
+              >
+                All scopes
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter("global")}
+                style={segBtn(scopeFilter === "global")}
+              >
+                Library
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter("project")}
+                style={segBtn(scopeFilter === "project")}
+              >
+                Project
+              </button>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
-              <button type="button" onClick={() => setSortMode("recent")} style={segBtn(sortMode === "recent")}>Recent</button>
-              <button type="button" onClick={() => setSortMode("name")} style={segBtn(sortMode === "name")}>Name</button>
-              <button type="button" onClick={() => setSortMode("size")} style={segBtn(sortMode === "size")}>Size</button>
+              <button
+                type="button"
+                onClick={() => setSortMode("recent")}
+                style={segBtn(sortMode === "recent")}
+              >
+                Recent
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortMode("name")}
+                style={segBtn(sortMode === "name")}
+              >
+                Name
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortMode("size")}
+                style={segBtn(sortMode === "size")}
+              >
+                Size
+              </button>
             </div>
             <input
               type="text"
@@ -677,7 +747,9 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
             />
           </div>
 
-          <div style={{ fontSize: 10, color: dropActive ? "#d8ebff" : "#8fa0b7", lineHeight: 1.45 }}>
+          <div
+            style={{ fontSize: 10, color: dropActive ? "#d8ebff" : "#8fa0b7", lineHeight: 1.45 }}
+          >
             {dropActive
               ? `Drop files to import into ${importScope === "project" && currentStem ? `project ${currentStem}` : "the shared library"}.`
               : assetMediaHint(kind)}
@@ -694,21 +766,25 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
         >
           <div style={{ padding: 12, overflowY: "auto" }}>
             {error && (
-              <div style={{ color: "#ff8c8c", fontSize: 11, marginBottom: 10 }}>
-                {error}
-              </div>
+              <div style={{ color: "#ff8c8c", fontSize: 11, marginBottom: 10 }}>{error}</div>
             )}
-            {!entries && !error && (
-              <div style={{ color: "#8d98aa", fontSize: 11 }}>Loading…</div>
-            )}
+            {!entries && !error && <div style={{ color: "#8d98aa", fontSize: 11 }}>Loading…</div>}
             {entries && filtered.length === 0 && (
-              <div style={{ color: "#8d98aa", fontSize: 11, fontStyle: "italic", padding: "12px 4px" }}>
+              <div
+                style={{ color: "#8d98aa", fontSize: 11, fontStyle: "italic", padding: "12px 4px" }}
+              >
                 {entries.some((entry) => entry.kind === kind)
                   ? "No matches for the current filters."
                   : `No ${mediaLabel(kind, 2)} found. ${assetMediaHint(kind)}`}
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))", gap: 10 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
+                gap: 10,
+              }}
+            >
               {filtered.map((entry) => {
                 const isSelected = selected.includes(entry.path);
                 const usageCount = assetUsageCounts[entry.path] ?? 0;
@@ -724,7 +800,11 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                           return;
                         }
                         try {
-                          const assetIds = await pathsToAssetIds([entry.path], entriesByPath, currentStem);
+                          const assetIds = await pathsToAssetIds(
+                            [entry.path],
+                            entriesByPath,
+                            currentStem,
+                          );
                           onCommit(assetIds);
                         } catch {
                           onCommit([entry.path]);
@@ -733,7 +813,8 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                     }}
                     style={{
                       border: `1px solid ${activePath === entry.path ? "#4b78b7" : isSelected ? "#3d648f" : "#2a3240"}`,
-                      background: activePath === entry.path ? "#152131" : isSelected ? "#111a27" : "#131821",
+                      background:
+                        activePath === entry.path ? "#152131" : isSelected ? "#111a27" : "#131821",
                       borderRadius: 8,
                       padding: 6,
                       cursor: "pointer",
@@ -744,8 +825,25 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                     }}
                     title={`${entry.path}\n${formatAssetBytes(entry.size)} · ${formatAssetTimestamp(entry.mtime)}${usageCount > 0 ? `\nUsed in timeline: ${usageCount}` : ""}`}
                   >
-                    <div style={{ position: "relative", background: "#000", borderRadius: 5, aspectRatio: "16 / 9", overflow: "hidden" }}>
-                      <div style={{ position: "absolute", top: 6, left: 6, display: "flex", gap: 4, zIndex: 1 }}>
+                    <div
+                      style={{
+                        position: "relative",
+                        background: "#000",
+                        borderRadius: 5,
+                        aspectRatio: "16 / 9",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 6,
+                          left: 6,
+                          display: "flex",
+                          gap: 4,
+                          zIndex: 1,
+                        }}
+                      >
                         <span
                           style={{
                             fontSize: 8,
@@ -781,7 +879,10 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                             fontSize: 8,
                             padding: "3px 5px",
                             borderRadius: 999,
-                            background: entry.scope === "global" ? "rgba(42, 74, 122, 0.88)" : "rgba(32, 98, 74, 0.88)",
+                            background:
+                              entry.scope === "global"
+                                ? "rgba(42, 74, 122, 0.88)"
+                                : "rgba(32, 98, 74, 0.88)",
                             border: "1px solid rgba(255,255,255,0.15)",
                             color: "#fff",
                           }}
@@ -812,13 +913,37 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                       )}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <div style={{ fontSize: 11, color: "#eaf0fb", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#eaf0fb",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
                         {entry.label}
                       </div>
-                      <div style={{ fontSize: 10, color: "#7f8da3", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: "#7f8da3",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
                         {assetScopeLabel(entry.scope, entry.stem)}
                       </div>
-                      <div style={{ fontSize: 10, color: "#7f8da3", display: "flex", justifyContent: "space-between", gap: 6 }}>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: "#7f8da3",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 6,
+                        }}
+                      >
                         <span>{formatAssetBytes(entry.size)}</span>
                         <span>{isSelected ? "selected" : "click to select"}</span>
                       </div>
@@ -840,13 +965,29 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
               gap: 12,
             }}
           >
-            <div style={{ fontSize: 11, color: "#dce5f1", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "#dce5f1",
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
               Asset Details
             </div>
 
             {activeAsset ? (
               <>
-                <div style={{ background: "#050608", border: "1px solid #202733", borderRadius: 8, overflow: "hidden", aspectRatio: "1 / 1" }}>
+                <div
+                  style={{
+                    background: "#050608",
+                    border: "1px solid #202733",
+                    borderRadius: 8,
+                    overflow: "hidden",
+                    aspectRatio: "1 / 1",
+                  }}
+                >
                   {activeAsset.kind === "video" ? (
                     <video
                       src={assetUrlFor(activeAsset)}
@@ -893,11 +1034,26 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                     lineHeight: 1.45,
                   }}
                 >
-                  <div><strong style={{ color: "#edf3fb" }}>Kind:</strong> {assetKindLabel(activeAsset.kind)}</div>
-                  <div><strong style={{ color: "#edf3fb" }}>Scope:</strong> {assetScopeLabel(activeAsset.scope, activeAsset.stem)}</div>
-                  <div><strong style={{ color: "#edf3fb" }}>Details:</strong> {activeMetaLabel || formatAssetBytes(activeAsset.size)}</div>
-                  <div><strong style={{ color: "#edf3fb" }}>Modified:</strong> {formatAssetTimestamp(activeAsset.mtime)}</div>
-                  <div><strong style={{ color: "#edf3fb" }}>Used in timeline:</strong> {activeUsageCount}</div>
+                  <div>
+                    <strong style={{ color: "#edf3fb" }}>Kind:</strong>{" "}
+                    {assetKindLabel(activeAsset.kind)}
+                  </div>
+                  <div>
+                    <strong style={{ color: "#edf3fb" }}>Scope:</strong>{" "}
+                    {assetScopeLabel(activeAsset.scope, activeAsset.stem)}
+                  </div>
+                  <div>
+                    <strong style={{ color: "#edf3fb" }}>Details:</strong>{" "}
+                    {activeMetaLabel || formatAssetBytes(activeAsset.size)}
+                  </div>
+                  <div>
+                    <strong style={{ color: "#edf3fb" }}>Modified:</strong>{" "}
+                    {formatAssetTimestamp(activeAsset.mtime)}
+                  </div>
+                  <div>
+                    <strong style={{ color: "#edf3fb" }}>Used in timeline:</strong>{" "}
+                    {activeUsageCount}
+                  </div>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -921,7 +1077,15 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                       cursor: "pointer",
                     }}
                   >
-                    {multi ? (activeIsSelected ? "Remove From Selection" : "Add To Selection") : "Select This Asset"}
+                    {multi
+                      ? isCollection
+                        ? activeIsSelected
+                          ? "Remove From Collection"
+                          : "Add To Collection"
+                        : activeIsSelected
+                          ? "Remove From Selection"
+                          : "Add To Selection"
+                      : "Select This Asset"}
                   </button>
 
                   {multi && (
@@ -938,7 +1102,7 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                         cursor: "pointer",
                       }}
                     >
-                      Use Only This Asset
+                      {isCollection ? "Use Only This In Collection" : "Use Only This Asset"}
                     </button>
                   )}
 
@@ -1000,9 +1164,17 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                 }}
               >
                 <div style={{ fontSize: 11, color: "#dce5f1", fontWeight: 700 }}>
-                  Current Selection
+                  {isCollection ? "Current Collection" : "Current Selection"}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 160, overflowY: "auto" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    maxHeight: 160,
+                    overflowY: "auto",
+                  }}
+                >
                   {selectedAssetEntries.map((entry) => (
                     <button
                       key={entry.path}
@@ -1022,12 +1194,16 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                         textAlign: "left",
                       }}
                     >
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {entry.label}
                       </span>
-                      <span style={{ color: "#8ea0b8" }}>
-                        {formatAssetBytes(entry.size)}
-                      </span>
+                      <span style={{ color: "#8ea0b8" }}>{formatAssetBytes(entry.size)}</span>
                     </button>
                   ))}
                 </div>
@@ -1055,11 +1231,7 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
               Clear ({selected.length})
             </button>
           )}
-          <button
-            type="button"
-            onClick={onCancel}
-            style={{ ...segBtn(false), fontSize: 10 }}
-          >
+          <button type="button" onClick={onCancel} style={{ ...segBtn(false), fontSize: 10 }}>
             Cancel
           </button>
           <button
@@ -1089,7 +1261,11 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
               cursor: selected.length > 0 ? "pointer" : "not-allowed",
               opacity: selected.length > 0 ? 1 : 0.55,
             }}
-            title={!multi && selectionUnchanged ? "The current asset is already applied" : "⌘↩ also commits"}
+            title={
+              !multi && selectionUnchanged
+                ? "The current asset is already applied"
+                : "⌘↩ also commits"
+            }
           >
             {commitLabel}
           </button>

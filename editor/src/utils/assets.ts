@@ -1,5 +1,5 @@
 import type { ElementModule, MediaFieldDefinition } from "@compositions/elements/types";
-import type { AssetEntry as EditorAssetEntry, AssetKind, AssetScope } from "../types/assets";
+import type { AssetKind, AssetScope, AssetEntry as EditorAssetEntry } from "../types/assets";
 
 export type { AssetKind, AssetScope, EditorAssetEntry };
 
@@ -25,17 +25,31 @@ export const findMediaFieldForKind = (
   mediaFields: readonly MediaFieldDefinition[] | undefined,
   kind: AssetKind,
   multi = false,
+  preferredRole?: MediaFieldDefinition["role"],
 ): MediaFieldDefinition | null => {
   if (!mediaFields?.length) return null;
-  return mediaFields.find((field) => field.kind === kind && Boolean(field.multi) === multi) ?? null;
+  const matchingFields = mediaFields.filter(
+    (field) => field.kind === kind && Boolean(field.multi) === multi,
+  );
+  if (matchingFields.length === 0) return null;
+  if (preferredRole) {
+    return (
+      matchingFields.find((field) => field.role === preferredRole) ?? matchingFields[0] ?? null
+    );
+  }
+  return matchingFields[0] ?? null;
 };
 
 export const findMediaFieldsForKind = (
   mediaFields: readonly MediaFieldDefinition[] | undefined,
   kind: AssetKind,
+  preferredRole?: MediaFieldDefinition["role"],
 ): MediaFieldDefinition[] => {
   if (!mediaFields?.length) return [];
-  return mediaFields.filter((field) => field.kind === kind);
+  const matchingFields = mediaFields.filter((field) => field.kind === kind);
+  if (!preferredRole) return matchingFields;
+  const roleMatches = matchingFields.filter((field) => field.role === preferredRole);
+  return roleMatches.length > 0 ? roleMatches : matchingFields;
 };
 
 export const humanizeFieldName = (name: string): string =>
@@ -49,8 +63,12 @@ export const humanizeFieldName = (name: string): string =>
 export const mediaFieldLabel = (field: Pick<MediaFieldDefinition, "name" | "label">): string =>
   field.label?.trim() || humanizeFieldName(field.name);
 
-export const describeMediaFieldAction = (field: Pick<MediaFieldDefinition, "name" | "label" | "multi">): string =>
-  field.multi ? `Append to ${mediaFieldLabel(field)}` : `Replace ${mediaFieldLabel(field)}`;
+export const describeMediaFieldAction = (
+  field: Pick<MediaFieldDefinition, "name" | "label" | "multi" | "role">,
+): string => {
+  if (field.role === "collection") return `Add to ${mediaFieldLabel(field)}`;
+  return field.multi ? `Append to ${mediaFieldLabel(field)}` : `Replace ${mediaFieldLabel(field)}`;
+};
 
 const applyAssetToMediaField = <T extends Record<string, unknown>>(
   currentProps: T,
@@ -78,8 +96,9 @@ const resolvePreferredField = (
   mediaFields: readonly MediaFieldDefinition[] | undefined,
   kind: AssetKind,
   preferredFieldName?: string,
+  preferredFieldRole?: MediaFieldDefinition["role"],
 ): MediaFieldDefinition | null => {
-  const matchingFields = findMediaFieldsForKind(mediaFields, kind);
+  const matchingFields = findMediaFieldsForKind(mediaFields, kind, preferredFieldRole);
   if (matchingFields.length === 0) return null;
   if (preferredFieldName) {
     const explicitField = matchingFields.find((field) => field.name === preferredFieldName);
@@ -92,8 +111,14 @@ export const seededPropsForModuleAsset = <T extends Record<string, unknown>>(
   mod: Pick<ElementModule<T>, "defaults" | "mediaFields">,
   kind: AssetKind,
   path: string,
+  preferredFieldRole?: MediaFieldDefinition["role"],
 ): T & Record<string, unknown> => {
-  const preferredField = resolvePreferredField(mod.mediaFields, kind);
+  const preferredField = resolvePreferredField(
+    mod.mediaFields,
+    kind,
+    undefined,
+    preferredFieldRole,
+  );
   if (preferredField) {
     return applyAssetToMediaField(mod.defaults, preferredField, path);
   }
@@ -106,8 +131,14 @@ export const applyAssetToModuleProps = <T extends Record<string, unknown>>(
   kind: AssetKind,
   path: string,
   preferredFieldName?: string,
+  preferredFieldRole?: MediaFieldDefinition["role"],
 ): T & Record<string, unknown> => {
-  const preferredField = resolvePreferredField(mod.mediaFields, kind, preferredFieldName);
+  const preferredField = resolvePreferredField(
+    mod.mediaFields,
+    kind,
+    preferredFieldName,
+    preferredFieldRole,
+  );
   if (preferredField) {
     return applyAssetToMediaField(currentProps, preferredField, path);
   }
@@ -190,11 +221,10 @@ export const assetUrlFor = (entry: Pick<EditorAssetEntry, "path">): string =>
     ? `/${entry.path}`
     : `/api/projects/${entry.path.replace(/^projects\//, "")}`;
 
-export const assetPreviewUrlFor = (
-  entry: Pick<EditorAssetEntry, "kind" | "path">,
-): string => (entry.kind === "gif"
-  ? `/api/assets/thumb?path=${encodeURIComponent(entry.path)}`
-  : assetUrlFor(entry));
+export const assetPreviewUrlFor = (entry: Pick<EditorAssetEntry, "kind" | "path">): string =>
+  entry.kind === "gif"
+    ? `/api/assets/thumb?path=${encodeURIComponent(entry.path)}`
+    : assetUrlFor(entry);
 
 export const formatAssetBytes = (bytes: number): string => {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -208,7 +238,9 @@ export const formatAssetDuration = (sec: number): string => {
   if (sec < 10) return `${sec.toFixed(1)}s`;
   if (sec < 60) return `${Math.round(sec)}s`;
   const mins = Math.floor(sec / 60);
-  const rem = Math.round(sec % 60).toString().padStart(2, "0");
+  const rem = Math.round(sec % 60)
+    .toString()
+    .padStart(2, "0");
   return `${mins}:${rem}`;
 };
 
@@ -216,14 +248,7 @@ export const formatAssetTimestamp = (mtime: number): string =>
   Number.isFinite(mtime) ? new Date(mtime).toLocaleString() : "Unknown time";
 
 const assetSearchText = (entry: EditorAssetEntry): string =>
-  [
-    entry.path,
-    entry.filename,
-    entry.label,
-    entry.kind,
-    entry.scope,
-    entry.stem ?? "",
-  ]
+  [entry.path, entry.filename, entry.label, entry.kind, entry.scope, entry.stem ?? ""]
     .join(" ")
     .toLowerCase();
 

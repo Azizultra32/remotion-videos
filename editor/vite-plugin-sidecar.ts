@@ -33,6 +33,20 @@ import {
   resolveProjectsDir,
   syncStaticProjectsSymlink,
 } from "../scripts/cli/paths";
+import { probeAsset } from "../scripts/cli/probe-media";
+import {
+  ReconcileAssetsProjectNotFoundError,
+  reconcileAssets,
+} from "../scripts/cli/reconcile-assets-core";
+import {
+  type AssetId,
+  type AssetMetadata,
+  type AssetRecordV2,
+  AssetRegistryFileSchema,
+  createAssetRecord,
+  isValidAssetId,
+  normalizeAssetRegistryFileV2,
+} from "./src/types/assetRecord";
 import type {
   AssetDeleteRequest,
   AssetDeleteResponse,
@@ -102,6 +116,7 @@ const openAnalyzeLogStream = (
 // liveness proxy: if the mtime on the marker hasn't advanced in >60s, any
 // child process writing to it would have died anyway.
 const ORPHAN_STALE_MS = 60_000;
+
 const reconcileOrphanStatusFiles = async (projectsDir: string): Promise<void> => {
   let entries: string[];
   try {
@@ -1101,6 +1116,749 @@ const handleAssetsDelete = async (
 };
 
 // ---------------------------------------------------------------------------
+// /api/assets/ensure/:stem  (POST)
+// ---------------------------------------------------------------------------
+//
+// Ensures one canonical record exists in projects/<stem>/assets.json for the
+// given asset path. The read/modify/write happens under the registry lock so
+// concurrent UI writers cannot mint conflicting canonical IDs from stale
+// client-side snapshots.
+
+type EnsureAssetRecordRequest = {
+  path: string;
+  kind?: AssetKind;
+  label?: string;
+};
+
+type EnrichAssetRecordRequest = {
+  ids?: AssetId[];
+  paths?: string[];
+};
+
+type ReconcileAssetsRequest = {
+  dryRun?: boolean;
+};
+
+const loadAssetRegistryForStem = async (registryPath: string) => {
+  let registry = normalizeAssetRegistryFileV2({ version: 2, records: [] });
+
+  try {
+    const content = await fs.readFile(registryPath, "utf8");
+    const parsed = AssetRegistryFileSchema.safeParse(JSON.parse(content));
+    if (!parsed.success) {
+      throw new Error(`invalid registry payload: ${parsed.error.message}`);
+    }
+    registry = normalizeAssetRegistryFileV2(parsed.data);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") throw err;
+  }
+
+  return registry;
+};
+
+const writeAssetRegistryForStem = async (
+  registryPath: string,
+  registry: ReturnType<typeof normalizeAssetRegistryFileV2>,
+): Promise<void> => {
+  const tmp = `${registryPath}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(registry, null, 2), "utf8");
+  await fs.rename(tmp, registryPath);
+};
+
+const withAssetRegistryLock = async <T>(stem: string, operation: () => Promise<T>): Promise<T> => {
+  const prev = ASSETS_REGISTRY_LOCK.get(stem) ?? Promise.resolve();
+  const next = prev.then(operation);
+
+  ASSETS_REGISTRY_LOCK.set(
+    stem,
+    next.then(() => undefined).catch(() => {
+      // swallow — failure is surfaced through `await next` below
+    }),
+  );
+
+  return next;
+};
+
+const sanitizeAssetMetadata = (metadata: AssetMetadata): AssetMetadata => {
+  const sanitized: AssetMetadata = {};
+
+  if (typeof metadata.width === "number" && Number.isFinite(metadata.width) && metadata.width > 0) {
+    sanitized.width = metadata.width;
+  }
+  if (typeof metadata.height === "number" && Number.isFinite(metadata.height) && metadata.height > 0) {
+    sanitized.height = metadata.height;
+  }
+  if (
+    typeof metadata.durationSec === "number" &&
+    Number.isFinite(metadata.durationSec) &&
+    metadata.durationSec > 0
+  ) {
+    sanitized.durationSec = metadata.durationSec;
+  }
+  if (typeof metadata.hasAlpha === "boolean") {
+    sanitized.hasAlpha = metadata.hasAlpha;
+  }
+  if (typeof metadata.fps === "number" && Number.isFinite(metadata.fps) && metadata.fps > 0) {
+    sanitized.fps = metadata.fps;
+  }
+  if (typeof metadata.codec === "string" && metadata.codec.trim().length > 0) {
+    sanitized.codec = metadata.codec.trim();
+  }
+
+  return sanitized;
+};
+
+const hasAssetMetadata = (metadata: AssetMetadata): boolean => Object.keys(metadata).length > 0;
+
+const assetRecordMatchesId = (record: AssetRecordV2, id: string): boolean =>
+  record.id === id || record.aliases?.includes(id as AssetId) === true;
+
+const hashAssetFileSafely = async (fullPath: string): Promise<string | null> => {
+  try {
+    const bytes = await fs.readFile(fullPath);
+    return createHash("sha256").update(bytes).digest("hex");
+  } catch {
+    return null;
+  }
+};
+
+const statAssetRecordSafely = async (
+  record: AssetRecordV2,
+): Promise<{
+  exists: boolean;
+  stat?: import("node:fs").Stats;
+  target?: ReturnType<typeof resolveAssetFsTarget>;
+}> => {
+  const target = resolveAssetFsTarget(record.path);
+  if (!target) return { exists: false };
+
+  try {
+    const stat = await fs.lstat(target.fullPath);
+    if (stat.isSymbolicLink() || !stat.isFile()) return { exists: false, target };
+
+    const realBoundaryRoot = await fs.realpath(target.boundaryRoot).catch(() => null);
+    if (!realBoundaryRoot) return { exists: false, target };
+    if (await hasSymlinkWithinRoot(target.fullPath, target.boundaryRoot)) {
+      return { exists: false, target };
+    }
+
+    const realParentPath = await fs.realpath(path.dirname(target.fullPath)).catch(() => null);
+    if (!realParentPath || !isPathWithinRoot(realParentPath, realBoundaryRoot)) {
+      return { exists: false, target };
+    }
+
+    const realFullPath = await fs.realpath(target.fullPath).catch(() => null);
+    if (!realFullPath || !isPathWithinRoot(realFullPath, realBoundaryRoot)) {
+      return { exists: false, target };
+    }
+
+    return { exists: true, stat, target };
+  } catch {
+    return { exists: false, target };
+  }
+};
+
+const probeAssetMetadataSafely = async (record: AssetRecordV2): Promise<AssetMetadata> => {
+  try {
+    return sanitizeAssetMetadata(await probeAsset(REPO_ROOT, PROJECTS_DIR, record.path, record.kind));
+  } catch {
+    return {};
+  }
+};
+
+const recordNeedsRegistryEnrichment = (record: AssetRecordV2): boolean =>
+  record.status !== "tombstoned" &&
+  (record.status !== "active" || !record.contentHash || record.hashVersion !== "sha256");
+
+const enrichRegistryRecord = async (
+  existing: AssetRecordV2,
+): Promise<{ record: AssetRecordV2; changed: boolean; enriched: boolean }> => {
+  if (existing.status === "tombstoned") {
+    return { record: existing, changed: false, enriched: false };
+  }
+
+  const disk = await statAssetRecordSafely(existing);
+  const now = Date.now();
+
+  if (!disk.exists || !disk.stat || !disk.target) {
+    const candidateRecord = normalizeAssetRegistryFileV2({
+      version: 2,
+      records: [
+        {
+          ...existing,
+          status: "missing",
+          ...(existing.missingSince !== undefined || existing.status === "missing"
+            ? { missingSince: existing.missingSince ?? now }
+            : { missingSince: now }),
+          ...(existing.deletedAt !== undefined || existing.status === "tombstoned"
+            ? { deletedAt: null }
+            : {}),
+          updatedAt: existing.updatedAt,
+        },
+      ],
+    }).records[0];
+    const changed = JSON.stringify(candidateRecord) !== JSON.stringify(existing);
+    const record = changed
+      ? normalizeAssetRegistryFileV2({
+          version: 2,
+          records: [
+            {
+              ...candidateRecord,
+              updatedAt: now,
+            },
+          ],
+        }).records[0]
+      : existing;
+    return { record, changed, enriched: false };
+  }
+
+  const probedMetadata = await probeAssetMetadataSafely(existing);
+  const contentHash = await hashAssetFileSafely(disk.target.fullPath);
+  const candidateRecord = normalizeAssetRegistryFileV2({
+    version: 2,
+    records: [
+      {
+        ...existing,
+        sizeBytes: disk.stat.size,
+        mtimeMs: disk.stat.mtimeMs,
+        metadata: hasAssetMetadata(probedMetadata)
+          ? {
+              ...existing.metadata,
+              ...probedMetadata,
+            }
+          : existing.metadata,
+        contentHash,
+        hashVersion: contentHash ? "sha256" : null,
+        status: "active",
+        ...(existing.missingSince !== undefined || existing.status === "missing"
+          ? { missingSince: null }
+          : {}),
+        ...(existing.deletedAt !== undefined || existing.status === "tombstoned"
+          ? { deletedAt: null }
+          : {}),
+        updatedAt: existing.updatedAt,
+      },
+    ],
+  }).records[0];
+
+  const changed = JSON.stringify(candidateRecord) !== JSON.stringify(existing);
+  const record = changed
+    ? normalizeAssetRegistryFileV2({
+        version: 2,
+        records: [
+          {
+            ...candidateRecord,
+            updatedAt: now,
+          },
+        ],
+      }).records[0]
+    : existing;
+
+  return {
+    record,
+    changed,
+    enriched: hasAssetMetadata(probedMetadata) || Boolean(contentHash),
+  };
+};
+
+const handleAssetsEnsure = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-stem", detail: "stem must be alphanumeric with hyphens/underscores only" }));
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-json", detail: String(err) }));
+    return;
+  }
+
+  const requestBody = body as Partial<EnsureAssetRecordRequest> | null;
+  const requestedPath = typeof requestBody?.path === "string" ? requestBody.path.trim() : "";
+  const requestedLabel =
+    typeof requestBody?.label === "string" && requestBody.label.trim().length > 0
+      ? requestBody.label.trim()
+      : undefined;
+  const requestedKind = requestBody?.kind;
+
+  if (!requestedPath) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "missing-path" }));
+    return;
+  }
+
+  if (
+    requestedKind !== undefined &&
+    requestedKind !== "image" &&
+    requestedKind !== "video" &&
+    requestedKind !== "gif"
+  ) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-kind" }));
+    return;
+  }
+
+  const resolved = resolveAssetFsTarget(requestedPath);
+  if (!resolved) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-path", path: requestedPath }));
+    return;
+  }
+
+  let stat: import("node:fs").Stats;
+  try {
+    stat = await fs.lstat(resolved.fullPath);
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "asset-not-found", path: resolved.rel }));
+    return;
+  }
+
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-asset-target", path: resolved.rel }));
+    return;
+  }
+
+  let realBoundaryRoot: string;
+  try {
+    realBoundaryRoot = await fs.realpath(resolved.boundaryRoot);
+  } catch {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-asset-target", path: resolved.rel }));
+    return;
+  }
+
+  if (await hasSymlinkWithinRoot(resolved.fullPath, resolved.boundaryRoot)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-asset-target", path: resolved.rel }));
+    return;
+  }
+
+  const realParentPath = await fs.realpath(path.dirname(resolved.fullPath)).catch(() => null);
+  if (!realParentPath || !isPathWithinRoot(realParentPath, realBoundaryRoot)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-asset-target", path: resolved.rel }));
+    return;
+  }
+
+  const realFullPath = await fs.realpath(resolved.fullPath).catch(() => null);
+  if (!realFullPath || !isPathWithinRoot(realFullPath, realBoundaryRoot)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-asset-target", path: resolved.rel }));
+    return;
+  }
+
+  const inferredKind = kindFromFilename(resolved.rel);
+  if (!inferredKind) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "unsupported-kind", path: resolved.rel }));
+    return;
+  }
+
+  if (requestedKind && requestedKind !== inferredKind) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        error: "kind-mismatch",
+        expected: inferredKind,
+        received: requestedKind,
+        path: resolved.rel,
+      }),
+    );
+    return;
+  }
+
+  const isProjectScoped = resolved.rel.startsWith("projects/");
+  const recordStem = isProjectScoped ? resolved.rel.split("/")[1] ?? null : null;
+  const recordScope = isProjectScoped ? "project" : "global";
+  if (recordScope === "project" && recordStem !== stem) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        error: "cross-project-asset",
+        detail: `asset path belongs to project ${recordStem}, not ${stem}`,
+        path: resolved.rel,
+      }),
+    );
+    return;
+  }
+
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a directory");
+  } catch {
+    try {
+      await fs.mkdir(projectDir, { recursive: true });
+    } catch (mkdirErr) {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "project-dir-create-failed", detail: String(mkdirErr) }));
+      return;
+    }
+  }
+
+  try {
+    const result = await withAssetRegistryLock(stem, async () => {
+      const dest = path.join(projectDir, "assets.json");
+      const registry = await loadAssetRegistryForStem(dest);
+
+      const existingIndex = registry.records.findIndex((record) => record.path === resolved.rel);
+      const now = Date.now();
+
+      if (existingIndex >= 0) {
+        const existing = registry.records[existingIndex];
+        const candidateRecord = normalizeAssetRegistryFileV2({
+          version: 2,
+          records: [
+            {
+              ...existing,
+              kind: inferredKind,
+              scope: recordScope,
+              stem: recordStem,
+              sizeBytes: stat.size,
+              mtimeMs: stat.mtimeMs,
+              updatedAt: existing.updatedAt,
+              status: "active",
+              ...(existing.missingSince !== undefined || existing.status === "missing"
+                ? { missingSince: null }
+                : {}),
+              ...(existing.deletedAt !== undefined || existing.status === "tombstoned"
+                ? { deletedAt: null }
+                : {}),
+              ...(requestedLabel !== undefined && existing.label === undefined
+                ? { label: requestedLabel }
+                : {}),
+            },
+          ],
+        }).records[0];
+
+        const changed = JSON.stringify(candidateRecord) !== JSON.stringify(existing);
+        const nextRecord = changed
+          ? normalizeAssetRegistryFileV2({
+              version: 2,
+              records: [
+                {
+                  ...candidateRecord,
+                  updatedAt: now,
+                },
+              ],
+            }).records[0]
+          : existing;
+        if (changed) {
+          registry.records[existingIndex] = nextRecord;
+          await writeAssetRegistryForStem(dest, registry);
+        }
+
+        return { record: nextRecord, changed, count: registry.records.length };
+      }
+
+      const record = createAssetRecord({
+        path: resolved.rel,
+        kind: inferredKind,
+        scope: recordScope,
+        stem: recordStem,
+        sizeBytes: stat.size,
+        mtimeMs: stat.mtimeMs,
+        createdAt: now,
+        updatedAt: now,
+        metadata: {},
+        ...(requestedLabel !== undefined ? { label: requestedLabel } : {}),
+      });
+
+      registry.records.push(record);
+      await writeAssetRegistryForStem(dest, registry);
+
+      return { record, changed: true, count: registry.records.length };
+    });
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "ensure-failed", detail: String(err) }));
+  }
+};
+
+// ---------------------------------------------------------------------------
+// /api/assets/enrich/:stem  (POST)
+// ---------------------------------------------------------------------------
+//
+// Probes metadata + disk facts for one or more existing asset records after
+// canonical identity is already established. This keeps /ensure focused on
+// path -> record identity while giving callers an explicit opt-in enrichment
+// step that does not block record creation.
+
+const handleAssetsEnrich = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-stem", detail: "stem must be alphanumeric with hyphens/underscores only" }));
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-json", detail: String(err) }));
+    return;
+  }
+
+  const requestBody = body as Partial<EnrichAssetRecordRequest> | null;
+  const requestedIds = Array.isArray(requestBody?.ids)
+    ? Array.from(
+        new Set(
+          requestBody.ids
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0),
+        ),
+      )
+    : undefined;
+  const requestedPaths = Array.isArray(requestBody?.paths)
+    ? Array.from(
+        new Set(
+          requestBody.paths
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0),
+        ),
+      )
+    : undefined;
+
+  if (requestedIds && requestedPaths) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "ambiguous-selector", detail: "provide ids or paths, not both" }));
+    return;
+  }
+
+  if (requestedIds?.some((id) => !isValidAssetId(id))) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-ids" }));
+    return;
+  }
+
+  const normalizedRequestedPaths = requestedPaths?.map((requestedPath) => {
+    const resolved = resolveAssetFsTarget(requestedPath);
+    return resolved?.rel ?? null;
+  });
+
+  if (normalizedRequestedPaths?.some((requestedPath) => requestedPath == null)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-paths" }));
+    return;
+  }
+
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a directory");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project-not-found", stem }));
+    return;
+  }
+
+  try {
+    const result = await withAssetRegistryLock(stem, async () => {
+      const dest = path.join(projectDir, "assets.json");
+      const registry = await loadAssetRegistryForStem(dest);
+      const matchingIndexes = registry.records.flatMap((record, index) =>
+        requestedIds
+          ? requestedIds.some((requestedId) => assetRecordMatchesId(record, requestedId))
+            ? [index]
+            : []
+          : normalizedRequestedPaths
+            ? normalizedRequestedPaths.includes(record.path)
+              ? [index]
+              : []
+            : recordNeedsRegistryEnrichment(record)
+              ? [index]
+              : [],
+      );
+
+      let changed = false;
+      let enrichedCount = 0;
+      const records: AssetRecordV2[] = [];
+      for (const index of matchingIndexes) {
+        const result = await enrichRegistryRecord(registry.records[index]);
+        if (result.changed) {
+          registry.records[index] = result.record;
+          changed = true;
+        }
+        if (result.enriched) {
+          enrichedCount += 1;
+        }
+        records.push(result.record);
+      }
+
+      if (changed) {
+        await writeAssetRegistryForStem(dest, registry);
+      }
+
+      const matchedIds = new Set(
+        records.flatMap((record) => [record.id, ...(record.aliases ?? [])]),
+      );
+      const missingIds = requestedIds ? requestedIds.filter((id) => !matchedIds.has(id)) : [];
+      const matchedPaths = new Set(records.map((record) => record.path));
+      const missingPaths = normalizedRequestedPaths
+        ? normalizedRequestedPaths.filter((requestedPath): requestedPath is string =>
+            requestedPath != null && !matchedPaths.has(requestedPath),
+          )
+        : [];
+
+      return {
+        records,
+        record: records[0] ?? null,
+        changed,
+        enriched: enrichedCount > 0,
+        enrichedCount,
+        missingIds,
+        missingPaths,
+        count: registry.records.length,
+      };
+    });
+
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "enrich-failed", detail: String(err) }));
+  }
+};
+
+// ---------------------------------------------------------------------------
+// /api/assets/reconcile/:stem  (POST)
+// ---------------------------------------------------------------------------
+//
+// Runs the shared Node reconcile pass for one project under the existing
+// in-process assets.json lock so concurrent registry writers do not interleave
+// with the disk scan + write sequence.
+
+const handleAssetsReconcile = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        error: "invalid-stem",
+        detail: "stem must be alphanumeric with hyphens/underscores only",
+      }),
+    );
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-json", detail: String(err) }));
+    return;
+  }
+
+  if (body !== null && (typeof body !== "object" || Array.isArray(body))) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-body", detail: "body must be a JSON object" }));
+    return;
+  }
+
+  const requestBody = body as ReconcileAssetsRequest | null;
+  if (requestBody?.dryRun !== undefined && typeof requestBody.dryRun !== "boolean") {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-body", detail: "dryRun must be a boolean" }));
+    return;
+  }
+
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  try {
+    const stat = await fs.stat(projectDir);
+    if (!stat.isDirectory()) throw new Error("not a directory");
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "project-not-found", stem }));
+    return;
+  }
+
+  try {
+    const result = await withAssetRegistryLock(stem, async () =>
+      reconcileAssets({
+        repoRoot: REPO_ROOT,
+        stem,
+        dryRun: requestBody?.dryRun,
+        onWarn: (message) => console.warn(message),
+      }),
+    );
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    if (err instanceof ReconcileAssetsProjectNotFoundError) {
+      res.statusCode = 404;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "project-not-found", stem }));
+      return;
+    }
+
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "reconcile-failed", detail: String(err) }));
+  }
+};
+
+// ---------------------------------------------------------------------------
 // /api/assets/registry/:stem  (GET)
 // ---------------------------------------------------------------------------
 //
@@ -1110,7 +1868,7 @@ const handleAssetsDelete = async (
 // element props after external tools swap underlying files.
 //
 // Security: validates stem is alphanumeric + hyphens only (no path traversal).
-// Returns { version: 1, records: [] } with 200 if the file is missing.
+// Returns { version: 2, records: [] } with 200 if the file is missing.
 
 const handleAssetsRegistryGet = async (
   req: IncomingMessage,
@@ -1139,7 +1897,7 @@ const handleAssetsRegistryGet = async (
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Cache-Control", "no-store");
-      res.end(JSON.stringify({ version: 1, records: [] }));
+      res.end(JSON.stringify({ version: 2, records: [] }));
       return;
     }
     // Other errors (permissions, etc.) are 500s
@@ -1160,11 +1918,25 @@ const handleAssetsRegistryGet = async (
     return;
   }
 
-  // Return the registry as-is (validation happens client-side via Zod)
+  const parsed = AssetRegistryFileSchema.safeParse(registry);
+  if (!parsed.success) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        error: "invalid-registry",
+        detail: parsed.error.flatten(),
+      }),
+    );
+    return;
+  }
+
+  const normalized = normalizeAssetRegistryFileV2(parsed.data);
+
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
-  res.end(JSON.stringify(registry));
+  res.end(JSON.stringify(normalized));
 };
 
 // ---------------------------------------------------------------------------
@@ -1174,7 +1946,7 @@ const handleAssetsRegistryGet = async (
 // Writes projects/<stem>/assets.json atomically. Part of the fresh-memory
 // Phase 1 implementation — persistence layer for the asset identity system.
 //
-// Request body: { version: 1, records: AssetRecord[] }
+// Request body: { version: 1 | 2, records: AssetRecord[] }
 // Security: validates stem and body structure; atomic tmp+rename write.
 
 const handleAssetsRegistryPost = async (
@@ -1204,68 +1976,26 @@ const handleAssetsRegistryPost = async (
     return;
   }
 
-  // Validate body structure: { version: 1, records: AssetRecord[] }
-  if (
-    !body ||
-    typeof body !== "object" ||
-    !("version" in body) ||
-    !("records" in body) ||
-    body.version !== 1 ||
-    !Array.isArray((body as { records: unknown }).records)
-  ) {
+  const parsed = AssetRegistryFileSchema.safeParse(body);
+  if (!parsed.success) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ error: "invalid-body", detail: "expected { version: 1, records: AssetRecord[] }" }));
+    res.end(
+      JSON.stringify({
+        error: "invalid-body",
+        detail: parsed.error.flatten(),
+      }),
+    );
     return;
   }
-
-  const registry = body as { version: 1; records: unknown[] };
-
-  // Validate each record has required fields and correct types
-  const ID_RE = /^ast_[0-9a-f]{16}$/;
-  const VALID_KINDS = new Set(["image", "video", "gif"]);
-  const VALID_SCOPES = new Set(["global", "project"]);
-  for (let i = 0; i < registry.records.length; i++) {
-    const r = registry.records[i];
-    if (!r || typeof r !== "object") {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}] is not an object` }));
-      return;
-    }
-    const rec = r as Record<string, unknown>;
-    if (typeof rec.id !== "string" || !ID_RE.test(rec.id)) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}].id must match ast_<16-hex-chars>` }));
-      return;
-    }
-    if (typeof rec.path !== "string" || rec.path.length === 0) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}].path must be a non-empty string` }));
-      return;
-    }
-    if (typeof rec.kind !== "string" || !VALID_KINDS.has(rec.kind)) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}].kind must be image|video|gif` }));
-      return;
-    }
-    if (typeof rec.scope !== "string" || !VALID_SCOPES.has(rec.scope)) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ error: "invalid-record", detail: `records[${i}].scope must be global|project` }));
-      return;
-    }
-  }
+  const registry = normalizeAssetRegistryFileV2(parsed.data);
 
   // Ensure project directory exists
   const projectDir = path.join(PROJECTS_DIR, stem);
   try {
     const st = await fs.stat(projectDir);
     if (!st.isDirectory()) throw new Error("not a directory");
-  } catch (err) {
+  } catch (_err) {
     // Create project directory if it doesn't exist
     try {
       await fs.mkdir(projectDir, { recursive: true });
@@ -3489,6 +4219,9 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/assets/thumb", wrap("GET", handleAssetThumb));
     server.middlewares.use("/api/assets/upload", wrap("POST", handleAssetsUpload));
     server.middlewares.use("/api/assets/delete", wrap("POST", handleAssetsDelete));
+    server.middlewares.use("/api/assets/ensure/", wrap("POST", handleAssetsEnsure));
+    server.middlewares.use("/api/assets/enrich/", wrap("POST", handleAssetsEnrich));
+    server.middlewares.use("/api/assets/reconcile/", wrap("POST", handleAssetsReconcile));
     server.middlewares.use("/api/assets/registry/", wrap("GET", handleAssetsRegistryGet));
     server.middlewares.use("/api/assets/registry/", wrap("POST", handleAssetsRegistryPost));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));

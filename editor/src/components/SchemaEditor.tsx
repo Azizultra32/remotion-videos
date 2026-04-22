@@ -11,16 +11,20 @@
 //   schema.options                is the public array of enum values
 //   wrapper._def.innerType        is the wrapped schema (optional/default/nullable)
 
-import { EASING_NAMES } from "@utils/easing";
 import type { MediaFieldDefinition } from "@compositions/elements/types";
+import { EASING_NAMES } from "@utils/easing";
 import { useEffect, useMemo, useState } from "react";
 import type { z } from "zod";
-import { assetKindLabel, detectAssetKindFromFieldName, type AssetKind } from "../utils/assets";
+import { type AssetKind, assetKindLabel, detectAssetKindFromFieldName } from "../utils/assets";
 import { isEasingField } from "../utils/schemaFields";
 import { AssetPicker } from "./AssetPicker";
 import { ColorField } from "./ColorField";
 import { EasingCurvePreview } from "./EasingCurvePreview";
-import { SharedNumericControl, extractZodConstraints, guessConstraints } from "./SharedNumericControl";
+import {
+  extractZodConstraints,
+  guessConstraints,
+  SharedNumericControl,
+} from "./SharedNumericControl";
 import { Vector2Field } from "./Vector2Field";
 
 // Asset-field detection is shared in ../utils/assets so SchemaEditor and the
@@ -79,22 +83,34 @@ type AssetFieldProps = {
   label: string;
   kind: AssetKind;
   multi: boolean;
+  role?: MediaFieldDefinition["role"];
   value: unknown;
   onChange: (v: unknown) => void;
 };
 
-const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onChange }) => {
+const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, role, value, onChange }) => {
   const [open, setOpen] = useState(false);
   const current: string[] = multi
-    ? Array.isArray(value) ? (value as string[]) : []
-    : typeof value === "string" && value ? [value] : [];
+    ? Array.isArray(value)
+      ? (value as string[])
+      : []
+    : typeof value === "string" && value
+      ? [value]
+      : [];
   const summary = multi
-    ? `${current.length} ${assetKindLabel(kind)}${current.length === 1 ? "" : "s"} selected`
-    : current[0] ?? `(no ${assetKindLabel(kind)} chosen)`;
+    ? role === "collection"
+      ? `${current.length} ${assetKindLabel(kind)}${current.length === 1 ? "" : "s"} in collection`
+      : `${current.length} ${assetKindLabel(kind)}${current.length === 1 ? "" : "s"} selected`
+    : (current[0] ?? `(no ${assetKindLabel(kind)} chosen)`);
+  const buttonLabel =
+    role === "collection"
+      ? `Edit ${assetKindLabel(kind)} collection`
+      : `Pick ${assetKindLabel(kind)}${multi ? "s" : ""}`;
   return (
     <Row label={label}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <div
+        <button
+          type="button"
           style={{
             ...fieldStyle,
             flex: 1,
@@ -103,12 +119,13 @@ const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onCh
             textOverflow: "ellipsis",
             cursor: "pointer",
             color: current.length > 0 ? "#fff" : "#888",
+            textAlign: "left",
           }}
           onClick={() => setOpen(true)}
-          title={multi ? current.join("\n") : current[0] ?? ""}
+          title={multi ? current.join("\n") : (current[0] ?? "")}
         >
           {summary}
-        </div>
+        </button>
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -123,13 +140,17 @@ const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onCh
             whiteSpace: "nowrap",
           }}
         >
-          Pick {assetKindLabel(kind)}{multi ? "s" : ""}
+          {buttonLabel}
         </button>
       </div>
       {multi && current.length > 0 && (
-        <div style={{ fontSize: 10, color: "#888", marginTop: 2, maxHeight: 60, overflowY: "auto" }}>
+        <div
+          style={{ fontSize: 10, color: "#888", marginTop: 2, maxHeight: 60, overflowY: "auto" }}
+        >
           {current.map((p) => (
-            <div key={p} style={{ fontFamily: "monospace" }}>{p}</div>
+            <div key={p} style={{ fontFamily: "monospace" }}>
+              {p}
+            </div>
           ))}
         </div>
       )}
@@ -137,6 +158,7 @@ const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onCh
         <AssetPicker
           kind={kind}
           multi={multi}
+          role={role}
           initial={current}
           onCommit={(paths) => {
             onChange(multi ? paths : (paths[0] ?? ""));
@@ -149,7 +171,14 @@ const AssetField: React.FC<AssetFieldProps> = ({ label, kind, multi, value, onCh
   );
 };
 
-const Field: React.FC<FieldProps> = ({ name, schema, value, mediaFields, defaultValue, onChange }) => {
+const Field: React.FC<FieldProps> = ({
+  name,
+  schema,
+  value,
+  mediaFields,
+  defaultValue,
+  onChange,
+}) => {
   const inner = unwrap(schema);
   const tn = defType(inner);
   const prettyName = name.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
@@ -157,16 +186,31 @@ const Field: React.FC<FieldProps> = ({ name, schema, value, mediaFields, default
   const declaredMediaField = mediaFields?.find((field) => field.name === name) ?? null;
   const assetKind = declaredMediaField?.kind ?? detectAssetKindFromFieldName(name);
   const multi = declaredMediaField?.multi ?? false;
+  const role = declaredMediaField?.role;
   if (assetKind && tn === "string" && !multi) {
     return (
-      <AssetField label={prettyName} kind={assetKind} multi={false} value={value} onChange={onChange} />
+      <AssetField
+        label={prettyName}
+        kind={assetKind}
+        multi={false}
+        role={role}
+        value={value}
+        onChange={onChange}
+      />
     );
   }
   if (assetKind && tn === "array" && (multi || !declaredMediaField)) {
     const innerElt = unwrap(inner._def?.element);
     if (defType(innerElt) === "string") {
       return (
-        <AssetField label={prettyName} kind={assetKind} multi={true} value={value} onChange={onChange} />
+        <AssetField
+          label={prettyName}
+          kind={assetKind}
+          multi={true}
+          role={role}
+          value={value}
+          onChange={onChange}
+        />
       );
     }
   }
@@ -413,7 +457,7 @@ const groupFields = (keys: string[]): { title: string; keys: string[] }[] => {
   const weak: string[] = [];
   for (const [prefix, group] of buckets) {
     if (group.length >= 3) {
-      const title = SECTION_TITLES[prefix] ?? (prefix.charAt(0).toUpperCase() + prefix.slice(1));
+      const title = SECTION_TITLES[prefix] ?? prefix.charAt(0).toUpperCase() + prefix.slice(1);
       strong.push({ title, keys: group });
     } else {
       weak.push(...group);
@@ -524,9 +568,7 @@ const CollapsibleSection: React.FC<{
         </span>
         {title}
       </button>
-      {open && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{children}</div>
-      )}
+      {open && <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{children}</div>}
     </div>
   );
 };
@@ -551,19 +593,10 @@ export const SchemaEditor: React.FC<Props> = ({
   // Detect x/y and widthPct/heightPct pairs on THIS schema. Anchor
   // renders as a Vector2Field; sibling is removed from the visible set
   // so the normal loop/grouping doesn't double-render it.
-  const allKeysSig = allKeys.join("|");
-  const pairMap = useMemo(
-    () => detectVectorPairs(allKeys),
-    // biome-ignore lint/correctness/useExhaustiveDependencies: allKeysSig
-    // is the stringified identity of allKeys; the only real dependency.
-    [allKeysSig],
-  );
+  const pairMap = useMemo(() => detectVectorPairs(allKeys), [allKeys]);
 
   const visibleKeys = useMemo(
-    () =>
-      allKeys.filter(
-        (k) => !hiddenFields?.has(k) && !pairMap.siblings.has(k),
-      ),
+    () => allKeys.filter((k) => !hiddenFields?.has(k) && !pairMap.siblings.has(k)),
     [allKeys, hiddenFields, pairMap],
   );
   const groups = useMemo(() => groupFields(visibleKeys), [visibleKeys]);
@@ -636,11 +669,7 @@ export const SchemaEditor: React.FC<Props> = ({
             {g.keys.map(renderField)}
           </div>
         ) : (
-          <CollapsibleSection
-            key={g.title}
-            title={g.title}
-            persistKey={persistKey ?? "_default"}
-          >
+          <CollapsibleSection key={g.title} title={g.title} persistKey={persistKey ?? "_default"}>
             {g.keys.map(renderField)}
           </CollapsibleSection>
         ),

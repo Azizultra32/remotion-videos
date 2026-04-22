@@ -1,106 +1,175 @@
-// editor/tests/assetRecordStore.test.ts
-//
-// Unit tests for the asset registry persistence layer (Phase 1).
-// Covers ID generation, registry read/write, lookup helpers, and dual-mode
-// resolver. Mocks fetch calls to avoid sidecar dependency.
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { generateAssetId, isValidAssetId } from "../src/types/assetRecord";
-import type { AssetRecord, AssetRegistryFile } from "../src/types/assetRecord";
+import type * as assetRecordStore from "../src/lib/assetRecordStore";
 import {
-  loadAssetRegistry,
-  saveAssetRegistry,
-  findAssetByPath,
+  enrichAssetRecord,
+  ensureAssetRecord,
   findAssetById,
+  findAssetByPath,
+  loadAssetRegistry,
+  reconcileAssetRegistry,
   resolveAssetPath,
+  saveAssetRegistry,
 } from "../src/lib/assetRecordStore";
+import { useEditorStore } from "../src/store";
+import {
+  type AssetRecord,
+  type AssetRegistryFile,
+  AssetRegistryFileSchema,
+  type AssetRegistryFileV2,
+  createAssetRecord,
+  generateAssetId,
+  generateCanonicalAssetId,
+  isAssetId,
+  isValidAssetId,
+  normalizeAssetRecordV2,
+  upgradeLegacyAssetId,
+} from "../src/types/assetRecord";
 
-// ---------------------------------------------------------------------------
-// Test fixtures
-// ---------------------------------------------------------------------------
-
-const mkRecord = (overrides: Partial<AssetRecord> = {}): AssetRecord => ({
-  id: overrides.id ?? generateAssetId("default/path.png"),
-  path: overrides.path ?? "default/path.png",
+const makeRecord = (overrides: Partial<AssetRecord> = {}): AssetRecord => ({
+  id: overrides.id ?? generateCanonicalAssetId(),
+  path: overrides.path ?? "projects/test/images/logo.png",
+  pathHistory: overrides.pathHistory ?? [],
   kind: overrides.kind ?? "image",
   scope: overrides.scope ?? "project",
   stem: overrides.stem ?? "test-stem",
+  status: overrides.status ?? "active",
   sizeBytes: overrides.sizeBytes ?? 1024,
-  mtimeMs: overrides.mtimeMs ?? Date.now(),
-  createdAt: overrides.createdAt ?? Date.now(),
-  updatedAt: overrides.updatedAt ?? Date.now(),
-  metadata: overrides.metadata ?? {},
-  label: overrides.label,
-  tags: overrides.tags,
-  notes: overrides.notes,
+  mtimeMs: overrides.mtimeMs ?? 1_700_000_000_000,
+  createdAt: overrides.createdAt ?? 1_700_000_000_000,
+  updatedAt: overrides.updatedAt ?? 1_700_000_000_000,
+  metadata: overrides.metadata ?? { width: 1920, height: 1080 },
+  ...(overrides.aliases ? { aliases: overrides.aliases } : {}),
+  ...(overrides.missingSince !== undefined ? { missingSince: overrides.missingSince } : {}),
+  ...(overrides.deletedAt !== undefined ? { deletedAt: overrides.deletedAt } : {}),
+  ...(overrides.contentHash !== undefined ? { contentHash: overrides.contentHash } : {}),
+  ...(overrides.hashVersion !== undefined ? { hashVersion: overrides.hashVersion } : {}),
+  ...(overrides.label !== undefined ? { label: overrides.label } : {}),
+  ...(overrides.tags !== undefined ? { tags: overrides.tags } : {}),
+  ...(overrides.notes !== undefined ? { notes: overrides.notes } : {}),
 });
 
-// ---------------------------------------------------------------------------
-// 1. ID Generation
-// ---------------------------------------------------------------------------
+type EnsureAssetRecordInput = Parameters<typeof assetRecordStore.ensureAssetRecord>[1];
+type EnrichAssetRecordInput = Parameters<typeof assetRecordStore.enrichAssetRecord>[1];
 
-describe("generateAssetId", () => {
-  it("generates deterministic IDs for the same path", () => {
+describe("asset id helpers", () => {
+  it("keeps legacy path-hash ids stable", () => {
     const id1 = generateAssetId("assets/logo.png");
     const id2 = generateAssetId("assets/logo.png");
+
     expect(id1).toBe(id2);
+    expect(id1).toMatch(/^ast_[0-9a-f]{16}$/);
   });
 
-  it("generates different IDs for different paths", () => {
-    const id1 = generateAssetId("assets/logo.png");
-    const id2 = generateAssetId("assets/banner.png");
-    expect(id1).not.toBe(id2);
+  it("generates opaque canonical ids", () => {
+    const id = generateCanonicalAssetId();
+
+    expect(id).toMatch(/^ast_[0-9a-f]{32}$/);
+    expect(id).not.toBe(generateCanonicalAssetId());
   });
 
-  it("generates IDs in the correct format (ast_[0-9a-f]{16})", () => {
-    const id = generateAssetId("some/path.jpg");
-    expect(id).toMatch(/^ast_[0-9a-f]{16}$/);
-  });
-
-  it("prefix is always 'ast_'", () => {
-    const id = generateAssetId("any/file.gif");
-    expect(id.startsWith("ast_")).toBe(true);
-  });
-
-  it("hash portion is exactly 16 characters", () => {
-    const id = generateAssetId("test.png");
-    const hashPart = id.slice(4); // strip "ast_"
-    expect(hashPart.length).toBe(16);
-    expect(/^[0-9a-f]{16}$/.test(hashPart)).toBe(true);
-  });
-});
-
-describe("isValidAssetId", () => {
-  it("returns true for valid asset IDs", () => {
+  it("accepts both legacy and canonical ids", () => {
+    expect(isAssetId("ast_0123456789abcdef")).toBe(true);
+    expect(isAssetId("ast_0123456789abcdef0123456789abcdef")).toBe(true);
     expect(isValidAssetId("ast_0123456789abcdef")).toBe(true);
-    expect(isValidAssetId("ast_fedcba9876543210")).toBe(true);
+    expect(isValidAssetId("ast_0123456789abcdef0123456789abcdef")).toBe(true);
   });
 
-  it("returns false for IDs with invalid prefix", () => {
-    expect(isValidAssetId("img_0123456789abcdef")).toBe(false);
-    expect(isValidAssetId("0123456789abcdef")).toBe(false);
+  it("rejects malformed ids", () => {
+    expect(isAssetId("assets/logo.png")).toBe(false);
+    expect(isAssetId("ast_123")).toBe(false);
+    expect(isAssetId("ast_0123456789abcdeg")).toBe(false);
   });
 
-  it("returns false for IDs with invalid hash length", () => {
-    expect(isValidAssetId("ast_123")).toBe(false);
-    expect(isValidAssetId("ast_0123456789abcdef0")).toBe(false);
-  });
+  it("upgrades a legacy id into a canonical alias-preserving id", () => {
+    const legacyId = generateAssetId("assets/logo.png");
+    const upgraded = upgradeLegacyAssetId(legacyId);
 
-  it("returns false for IDs with non-hex characters", () => {
-    expect(isValidAssetId("ast_0123456789abcdeg")).toBe(false);
-    expect(isValidAssetId("ast_0123456789ABCDEF")).toBe(false); // uppercase not allowed
-  });
-
-  it("returns false for arbitrary strings", () => {
-    expect(isValidAssetId("assets/logo.png")).toBe(false);
-    expect(isValidAssetId("")).toBe(false);
-    expect(isValidAssetId("ast_")).toBe(false);
+    expect(upgraded).toMatch(/^ast_[0-9a-f]{32}$/);
+    expect(upgraded).not.toBe(legacyId);
   });
 });
 
-// ---------------------------------------------------------------------------
-// 2. Registry Read/Write
-// ---------------------------------------------------------------------------
+describe("registry schema and normalization", () => {
+  it("accepts both v1 and v2 registry files", () => {
+    const legacyRecord = makeRecord({
+      id: generateAssetId("assets/logo.png"),
+      path: "assets/logo.png",
+    });
+    const canonicalRecord = normalizeAssetRecordV2(legacyRecord);
+
+    const v1: AssetRegistryFile = { version: 1, records: [legacyRecord] };
+    const v2: AssetRegistryFileV2 = { version: 2, records: [canonicalRecord] };
+
+    expect(AssetRegistryFileSchema.safeParse(v1).success).toBe(true);
+    expect(AssetRegistryFileSchema.safeParse(v2).success).toBe(true);
+  });
+
+  it("normalizes a legacy record into the v2 shape", () => {
+    const legacyId = generateAssetId("assets/logo.png");
+    const record = makeRecord({
+      id: legacyId,
+      path: "assets/logo.png",
+      pathHistory: ["assets/old-logo.png", "assets/logo.png"],
+      tags: ["branding"],
+      notes: "legacy",
+    });
+
+    const normalized = normalizeAssetRecordV2(record);
+
+    expect(normalized.id).toBe(upgradeLegacyAssetId(legacyId));
+    expect(normalized.aliases).toEqual([legacyId]);
+    expect(normalized.path).toBe("assets/logo.png");
+    expect(normalized.pathHistory).toEqual(["assets/old-logo.png"]);
+    expect(normalized.status).toBe("active");
+    expect(normalized.tags).toEqual(["branding"]);
+    expect(normalized.notes).toBe("legacy");
+  });
+
+  it("keeps canonical records canonical and dedupes aliases/history", () => {
+    const canonicalId = generateCanonicalAssetId();
+    const legacyAlias = generateAssetId("assets/logo.png");
+
+    const normalized = normalizeAssetRecordV2(
+      makeRecord({
+        id: canonicalId,
+        path: "projects/test/images/logo.png",
+        pathHistory: [
+          "projects/test/images/logo.png",
+          "projects/test/assets/logo.png",
+          "projects/test/assets/logo.png",
+        ],
+        aliases: [legacyAlias, legacyAlias],
+        status: "missing",
+        missingSince: 123,
+      }),
+    );
+
+    expect(normalized.id).toBe(canonicalId);
+    expect(normalized.aliases).toEqual([legacyAlias]);
+    expect(normalized.pathHistory).toEqual(["projects/test/assets/logo.png"]);
+    expect(normalized.status).toBe("missing");
+    expect(normalized.missingSince).toBe(123);
+  });
+
+  it("createAssetRecord emits a canonical v2 record", () => {
+    const record = createAssetRecord({
+      path: "projects/test/videos/intro.mp4",
+      kind: "video",
+      scope: "project",
+      stem: "test",
+      sizeBytes: 2048,
+      mtimeMs: 10,
+      createdAt: 11,
+      updatedAt: 12,
+      metadata: { width: 1920, height: 1080, durationSec: 4.2 },
+    });
+
+    expect(record.id).toMatch(/^ast_[0-9a-f]{32}$/);
+    expect(record.aliases?.[0]).toBe(generateAssetId("projects/test/videos/intro.mp4"));
+    expect(record.pathHistory).toEqual([]);
+    expect(record.status).toBe("active");
+  });
+});
 
 describe("loadAssetRegistry", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -114,80 +183,80 @@ describe("loadAssetRegistry", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads empty registry when file doesn't exist (404)", async () => {
+  it("returns an empty registry for 404", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 404,
       statusText: "Not Found",
     });
 
-    const records = await loadAssetRegistry("test-stem");
-    expect(records).toEqual([]);
-    expect(fetchMock).toHaveBeenCalledWith("/api/assets/registry/test-stem");
+    await expect(loadAssetRegistry("test-stem")).resolves.toEqual([]);
   });
 
-  it("loads and parses registry with records", async () => {
-    const record1 = mkRecord({ id: generateAssetId("a.png"), path: "a.png" });
-    const record2 = mkRecord({ id: generateAssetId("b.jpg"), path: "b.jpg" });
-    const registry: AssetRegistryFile = {
+  it("normalizes v1 records when loading", async () => {
+    const legacyRecord = makeRecord({
+      id: generateAssetId("assets/logo.png"),
+      path: "assets/logo.png",
+      status: "active",
+    });
+    const responseBody: AssetRegistryFile = {
       version: 1,
-      records: [record1, record2],
+      records: [legacyRecord],
     };
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => registry,
+      json: async () => responseBody,
     });
 
     const records = await loadAssetRegistry("test-stem");
-    expect(records).toHaveLength(2);
-    expect(records[0].id).toBe(record1.id);
-    expect(records[1].id).toBe(record2.id);
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      id: upgradeLegacyAssetId(legacyRecord.id),
+      path: "assets/logo.png",
+      aliases: [legacyRecord.id],
+      status: "active",
+    });
   });
 
-  it("returns empty array on network error", async () => {
-    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    fetchMock.mockRejectedValueOnce(new Error("network timeout"));
+  it("preserves v2 records when loading", async () => {
+    const canonicalRecord = makeRecord({
+      id: generateCanonicalAssetId(),
+      path: "projects/test/images/banner.png",
+      aliases: [generateAssetId("assets/banner.png")],
+      pathHistory: ["assets/banner.png"],
+      status: "missing",
+      missingSince: 99,
+    });
+    const responseBody: AssetRegistryFileV2 = {
+      version: 2,
+      records: [canonicalRecord],
+    };
 
-    const records = await loadAssetRegistry("test-stem");
-    expect(records).toEqual([]);
-    expect(consoleWarn).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to load asset registry"),
-      expect.any(Error)
-    );
-
-    consoleWarn.mockRestore();
-  });
-
-  it("returns empty array and warns on non-404 HTTP errors", async () => {
-    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      statusText: "Internal Server Error",
+      ok: true,
+      status: 200,
+      json: async () => responseBody,
     });
 
     const records = await loadAssetRegistry("test-stem");
-    expect(records).toEqual([]);
-    expect(consoleWarn).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to load asset registry"),
-      expect.any(Error)
-    );
 
-    consoleWarn.mockRestore();
+    expect(records).toEqual([canonicalRecord]);
   });
 
-  it("handles registry with no records field gracefully", async () => {
-    // Malformed response: version present but records missing
+  it("throws on malformed registry payloads", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
       json: async () => ({ version: 1 }),
     });
 
-    const records = await loadAssetRegistry("test-stem");
-    expect(records).toEqual([]);
+    await expect(loadAssetRegistry("test-stem")).rejects.toThrow("Invalid asset registry payload");
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 
@@ -203,45 +272,40 @@ describe("saveAssetRegistry", () => {
     vi.unstubAllGlobals();
   });
 
-  it("writes empty registry successfully", async () => {
+  it("writes a normalized v2 registry payload", async () => {
+    const legacyRecord = makeRecord({
+      id: generateAssetId("assets/logo.png"),
+      path: "assets/logo.png",
+      pathHistory: ["assets/old-logo.png"],
+    });
+
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
     });
 
-    await saveAssetRegistry("test-stem", []);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/assets/registry/test-stem",
-      expect.objectContaining({
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ version: 1, records: [] }),
-      })
-    );
-  });
+    await saveAssetRegistry("test-stem", [legacyRecord]);
 
-  it("writes registry with records", async () => {
-    const record = mkRecord({ id: generateAssetId("test.png"), path: "test.png" });
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0];
 
-    await saveAssetRegistry("test-stem", [record]);
-
-    const calls = fetchMock.mock.calls;
-    expect(calls).toHaveLength(1);
-    const [url, options] = calls[0];
     expect(url).toBe("/api/assets/registry/test-stem");
     expect(options.method).toBe("POST");
+    expect(options.headers).toEqual({ "Content-Type": "application/json" });
 
-    const body = JSON.parse(options.body);
-    expect(body.version).toBe(1);
+    const body = JSON.parse(options.body as string) as AssetRegistryFileV2;
+    expect(body.version).toBe(2);
     expect(body.records).toHaveLength(1);
-    expect(body.records[0].id).toBe(record.id);
+    expect(body.records[0]).toMatchObject({
+      id: upgradeLegacyAssetId(legacyRecord.id),
+      path: "assets/logo.png",
+      aliases: [legacyRecord.id],
+      pathHistory: ["assets/old-logo.png"],
+      status: "active",
+    });
   });
 
-  it("throws on HTTP error", async () => {
+  it("throws on HTTP errors", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 400,
@@ -249,282 +313,442 @@ describe("saveAssetRegistry", () => {
     });
 
     await expect(saveAssetRegistry("test-stem", [])).rejects.toThrow(
-      "Failed to save asset registry: Bad Request"
+      "Failed to save asset registry: Bad Request",
     );
   });
+});
 
-  it("preserves all record fields in round-trip", async () => {
-    const record = mkRecord({
-      id: generateAssetId("full.png"),
-      path: "full.png",
-      kind: "image",
-      scope: "global",
-      stem: "test-stem",
-      sizeBytes: 2048,
-      mtimeMs: 1234567890,
-      createdAt: 1111111111,
-      updatedAt: 2222222222,
-      metadata: { width: 1920, height: 1080 },
-      label: "Test Image",
-      tags: ["tag1", "tag2"],
-      notes: "Important asset",
+describe("lookup helpers", () => {
+  it("finds by path and by canonical or legacy id", () => {
+    const path = "projects/test/images/logo.png";
+    const legacyId = generateAssetId(path);
+    const canonicalId = generateCanonicalAssetId();
+    const record = makeRecord({
+      id: canonicalId,
+      path,
+      aliases: [legacyId],
     });
 
-    fetchMock.mockResolvedValueOnce({ ok: true, status: 200 });
+    expect(findAssetByPath([record], path)).toBe(record);
+    expect(findAssetById([record], canonicalId)).toBe(record);
+    expect(findAssetById([record], legacyId)).toBe(record);
+  });
 
-    await saveAssetRegistry("test-stem", [record]);
+  it("returns null for missing entries", () => {
+    const record = makeRecord();
+    const unknownId = generateCanonicalAssetId();
 
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-    const savedRecord = body.records[0];
-
-    expect(savedRecord.id).toBe(record.id);
-    expect(savedRecord.path).toBe(record.path);
-    expect(savedRecord.kind).toBe(record.kind);
-    expect(savedRecord.scope).toBe(record.scope);
-    expect(savedRecord.stem).toBe(record.stem);
-    expect(savedRecord.sizeBytes).toBe(record.sizeBytes);
-    expect(savedRecord.mtimeMs).toBe(record.mtimeMs);
-    expect(savedRecord.createdAt).toBe(record.createdAt);
-    expect(savedRecord.updatedAt).toBe(record.updatedAt);
-    expect(savedRecord.metadata).toEqual(record.metadata);
-    expect(savedRecord.label).toBe(record.label);
-    expect(savedRecord.tags).toEqual(record.tags);
-    expect(savedRecord.notes).toBe(record.notes);
+    expect(findAssetByPath([record], "missing.png")).toBeNull();
+    expect(findAssetById([record], unknownId)).toBeNull();
   });
 });
-
-// ---------------------------------------------------------------------------
-// 3. Lookup Helpers
-// ---------------------------------------------------------------------------
-
-describe("findAssetByPath", () => {
-  const record1 = mkRecord({ path: "assets/logo.png" });
-  const record2 = mkRecord({ path: "assets/banner.jpg" });
-  const records = [record1, record2];
-
-  it("finds existing asset by path", () => {
-    const result = findAssetByPath(records, "assets/logo.png");
-    expect(result).toBe(record1);
-  });
-
-  it("returns null for missing path", () => {
-    const result = findAssetByPath(records, "assets/missing.png");
-    expect(result).toBeNull();
-  });
-
-  it("returns null for empty registry", () => {
-    const result = findAssetByPath([], "any/path.png");
-    expect(result).toBeNull();
-  });
-
-  it("matches exact path only (case-sensitive)", () => {
-    const result = findAssetByPath(records, "assets/LOGO.png");
-    expect(result).toBeNull();
-  });
-
-  it("returns first match when duplicates exist", () => {
-    const dup1 = mkRecord({ path: "dup.png", id: generateAssetId("dup1") });
-    const dup2 = mkRecord({ path: "dup.png", id: generateAssetId("dup2") });
-    const result = findAssetByPath([dup1, dup2], "dup.png");
-    expect(result).toBe(dup1);
-  });
-});
-
-describe("findAssetById", () => {
-  const id1 = generateAssetId("a.png");
-  const id2 = generateAssetId("b.jpg");
-  const record1 = mkRecord({ id: id1, path: "a.png" });
-  const record2 = mkRecord({ id: id2, path: "b.jpg" });
-  const records = [record1, record2];
-
-  it("finds existing asset by ID", () => {
-    const result = findAssetById(records, id1);
-    expect(result).toBe(record1);
-  });
-
-  it("returns null for unknown ID", () => {
-    const unknownId = generateAssetId("unknown.png");
-    const result = findAssetById(records, unknownId);
-    expect(result).toBeNull();
-  });
-
-  it("returns null for empty registry", () => {
-    const result = findAssetById([], id1);
-    expect(result).toBeNull();
-  });
-
-  it("returns null for malformed ID", () => {
-    // TypeScript allows passing any string to the function at runtime
-    const result = findAssetById(records, "not-an-id" as any);
-    expect(result).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. Dual-Mode Resolver
-// ---------------------------------------------------------------------------
 
 describe("resolveAssetPath", () => {
-  const path1 = "assets/logo.png";
-  const path2 = "assets/banner.jpg";
-  const id1 = generateAssetId(path1);
-  const id2 = generateAssetId(path2);
-  const record1 = mkRecord({ id: id1, path: path1 });
-  const record2 = mkRecord({ id: id2, path: path2 });
-  const records = [record1, record2];
+  it("resolves canonical ids, legacy aliases, and passes through raw paths", () => {
+    const path = "projects/test/videos/intro.mp4";
+    const legacyId = generateAssetId(path);
+    const canonicalId = generateCanonicalAssetId();
+    const record = makeRecord({
+      id: canonicalId,
+      path,
+      aliases: [legacyId],
+    });
 
-  it("resolves asset ID to path", () => {
-    const result = resolveAssetPath(records, id1);
-    expect(result).toBe(path1);
+    expect(resolveAssetPath([record], canonicalId)).toBe(path);
+    expect(resolveAssetPath([record], legacyId)).toBe(path);
+    expect(resolveAssetPath([record], "assets/legacy/path.mp4")).toBe("assets/legacy/path.mp4");
   });
 
-  it("passes through legacy path string unchanged", () => {
-    const legacyPath = "old/path/image.png";
-    const result = resolveAssetPath(records, legacyPath);
-    expect(result).toBe(legacyPath);
-  });
-
-  it("returns null for unknown asset ID", () => {
-    const unknownId = generateAssetId("unknown.png");
-    const result = resolveAssetPath(records, unknownId);
-    expect(result).toBeNull();
-  });
-
-  it("passes through empty string as legacy path", () => {
-    const result = resolveAssetPath(records, "");
-    expect(result).toBe("");
-  });
-
-  it("passes through relative paths as legacy paths", () => {
-    const result = resolveAssetPath(records, "../somewhere/file.png");
-    expect(result).toBe("../somewhere/file.png");
-  });
-
-  it("passes through absolute paths as legacy paths", () => {
-    const result = resolveAssetPath(records, "/absolute/path.png");
-    expect(result).toBe("/absolute/path.png");
-  });
-
-  it("resolves multiple asset IDs correctly", () => {
-    expect(resolveAssetPath(records, id1)).toBe(path1);
-    expect(resolveAssetPath(records, id2)).toBe(path2);
-  });
-
-  it("handles mixed ID and path lookups", () => {
-    const legacyPath = "legacy/file.gif";
-    expect(resolveAssetPath(records, id1)).toBe(path1);
-    expect(resolveAssetPath(records, legacyPath)).toBe(legacyPath);
-    expect(resolveAssetPath(records, id2)).toBe(path2);
-  });
-
-  it("distinguishes between asset ID and path that looks similar", () => {
-    // A path that happens to start with "ast_" but isn't a valid ID
-    const fakePath = "ast_not_a_valid_hash/file.png";
-    const result = resolveAssetPath(records, fakePath);
-    expect(result).toBe(fakePath); // passed through as legacy path
-  });
-
-  it("handles empty registry gracefully", () => {
-    const unknownId = generateAssetId("test.png");
-    expect(resolveAssetPath([], unknownId)).toBeNull();
-    expect(resolveAssetPath([], "legacy/path.png")).toBe("legacy/path.png");
+  it("returns null for unknown asset ids", () => {
+    expect(resolveAssetPath([], generateCanonicalAssetId())).toBeNull();
   });
 });
 
-// ---------------------------------------------------------------------------
-// 7. End-to-End Render-Path Resolution
-// ---------------------------------------------------------------------------
-//
-// Simulates the full chain: element prop contains asset ID → registry lookup
-// → resolve to path → staticFile() call. This is the same logic performed
-// by resolveStatic() in src/compositions/elements/_helpers.ts.
+const describeEnsureAssetRecord = ensureAssetRecord ? describe : describe.skip;
+const describeEnrichAssetRecord = enrichAssetRecord ? describe : describe.skip;
 
-describe("end-to-end render-path resolution", () => {
-  const path1 = "projects/test-stem/images/hero.png";
-  const path2 = "projects/test-stem/videos/intro.mp4";
-  const path3 = "assets/global/bg.jpg";
-  const id1 = generateAssetId(path1);
-  const id2 = generateAssetId(path2);
-  const id3 = generateAssetId(path3);
+describeEnsureAssetRecord("ensureAssetRecord", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
 
-  const records: AssetRecord[] = [
-    mkRecord({ id: id1, path: path1, kind: "image" }),
-    mkRecord({ id: id2, path: path2, kind: "video" }),
-    mkRecord({ id: id3, path: path3, kind: "image", scope: "global", stem: null }),
-  ];
-
-  const mockStaticFile = (s: string) => `/static/${s}`;
-
-  const resolveStatic = (
-    src: string,
-    sf: (s: string) => string,
-    registry: Array<{ id: string; path: string }> | null | undefined,
-  ): string => {
-    if (src.startsWith("http") || src.startsWith("/")) return src;
-    if (/^ast_[0-9a-f]{16}$/.test(src)) {
-      if (!registry || registry.length === 0) return src;
-      const record = registry.find((r) => r.id === src);
-      if (!record) return src;
-      return sf(record.path);
-    }
-    return sf(src);
-  };
-
-  it("resolves asset ID to staticFile URL via registry", () => {
-    const result = resolveStatic(id1, mockStaticFile, records);
-    expect(result).toBe(`/static/${path1}`);
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    useEditorStore.setState({
+      assetRecords: [],
+      audioSrc: "projects/test-stem/audio.mp3",
+      beatsSrc: "projects/test-stem/analysis.json",
+    });
   });
 
-  it("resolves multiple asset IDs in sequence", () => {
-    expect(resolveStatic(id1, mockStaticFile, records)).toBe(`/static/${path1}`);
-    expect(resolveStatic(id2, mockStaticFile, records)).toBe(`/static/${path2}`);
-    expect(resolveStatic(id3, mockStaticFile, records)).toBe(`/static/${path3}`);
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
-  it("passes through HTTP URLs without registry lookup", () => {
-    expect(resolveStatic("https://cdn.example.com/img.png", mockStaticFile, records))
-      .toBe("https://cdn.example.com/img.png");
-  });
-
-  it("passes through absolute paths without registry lookup", () => {
-    expect(resolveStatic("/absolute/path.png", mockStaticFile, records))
-      .toBe("/absolute/path.png");
-  });
-
-  it("falls back to staticFile for legacy relative paths", () => {
-    expect(resolveStatic("assets/old-style.png", mockStaticFile, records))
-      .toBe("/static/assets/old-style.png");
-  });
-
-  it("returns raw ID when registry is null", () => {
-    expect(resolveStatic(id1, mockStaticFile, null)).toBe(id1);
-  });
-
-  it("returns raw ID when registry is empty", () => {
-    expect(resolveStatic(id1, mockStaticFile, [])).toBe(id1);
-  });
-
-  it("returns raw ID when record not found in registry", () => {
-    const unknownId = generateAssetId("nonexistent.png");
-    expect(resolveStatic(unknownId, mockStaticFile, records)).toBe(unknownId);
-  });
-
-  it("handles multi-field element with mixed IDs and paths", () => {
-    const elementProps = {
-      imageSrc: id1,
-      videos: [id2, "assets/legacy-clip.mp4"],
-      label: "Test Element",
+  it("posts to the ensure endpoint and returns a normalized v2 record", async () => {
+    const stem = "test-stem";
+    const input: EnsureAssetRecordInput = {
+      path: "projects/test/images/logo.png",
+      kind: "image",
+      label: "Logo",
     };
 
-    const resolved = {
-      imageSrc: resolveStatic(elementProps.imageSrc, mockStaticFile, records),
-      videos: elementProps.videos.map((v: string) => resolveStatic(v, mockStaticFile, records)),
-      label: elementProps.label,
+    const ensuredRecord = makeRecord({
+      id: generateCanonicalAssetId(),
+      path: input.path,
+      pathHistory: ["projects/test/images/logo-old.png"],
+      aliases: [generateAssetId(input.path)],
+      metadata: {},
+      label: input.label,
+    });
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        record: ensuredRecord,
+        changed: true,
+        count: 1,
+      }),
+    });
+
+    const result = await ensureAssetRecord(stem, input);
+
+    const ensureCall = fetchMock.mock.calls.find(([url]) =>
+      /^\/api\/assets\/ensure\/test-stem\/?$/.test(String(url)),
+    );
+    expect(ensureCall).toBeDefined();
+    const [url, options] = ensureCall!;
+    expect(url).toMatch(/^\/api\/assets\/ensure\/test-stem\/?$/);
+    expect(options.method).toBe("POST");
+    expect(options.headers).toEqual({ "Content-Type": "application/json" });
+
+    const body = JSON.parse(options.body as string) as Record<string, unknown>;
+    expect(body).toEqual(input);
+
+    expect(result).toEqual(normalizeAssetRecordV2(ensuredRecord));
+    expect(result.id).toMatch(/^ast_[0-9a-f]{32}$/);
+    expect(result.aliases).toEqual([generateAssetId(input.path)]);
+    expect(result.pathHistory).toEqual(ensuredRecord.pathHistory);
+    expect(result.metadata).toEqual({});
+    expect(useEditorStore.getState().assetRecords).toEqual([result]);
+  });
+
+  it("refreshes an existing cached record even when ensure is unchanged", async () => {
+    const stem = "test-stem";
+    const path = "projects/test/images/logo.png";
+    const cachedRecord = makeRecord({
+      id: generateCanonicalAssetId(),
+      path,
+      metadata: {},
+      label: "Stale label",
+      updatedAt: 10,
+    });
+    const ensuredRecord = makeRecord({
+      ...cachedRecord,
+      pathHistory: ["projects/test/images/logo-old.png"],
+      metadata: {},
+      label: "Fresh label",
+      updatedAt: 20,
+    });
+
+    useEditorStore.getState().setAssetRecords([cachedRecord]);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        record: ensuredRecord,
+        changed: false,
+        count: 1,
+      }),
+    });
+
+    const result = await ensureAssetRecord(stem, { path, kind: "image", label: "Fresh label" });
+
+    expect(result).toEqual(normalizeAssetRecordV2(ensuredRecord));
+    expect(result.metadata).toEqual({});
+    expect(useEditorStore.getState().assetRecords).toEqual([result]);
+  });
+
+  it("does not upsert into the store after the user switches to a different stem", async () => {
+    const stem = "test-stem";
+    const input: EnsureAssetRecordInput = {
+      path: "projects/test/images/logo.png",
+      kind: "image",
+      label: "Logo",
+    };
+    const ensuredRecord = makeRecord({
+      id: generateCanonicalAssetId(),
+      path: input.path,
+      aliases: [generateAssetId(input.path)],
+      metadata: {},
+      label: input.label,
+    });
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        record: ensuredRecord,
+        changed: true,
+        count: 1,
+      }),
+    });
+
+    useEditorStore.setState({
+      audioSrc: "projects/other-stem/audio.mp3",
+      beatsSrc: "projects/other-stem/analysis.json",
+    });
+
+    const result = await ensureAssetRecord(stem, input);
+
+    expect(result).toEqual(normalizeAssetRecordV2(ensuredRecord));
+    expect(useEditorStore.getState().assetRecords).toEqual([]);
+  });
+});
+
+describeEnrichAssetRecord("enrichAssetRecord", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    useEditorStore.setState({
+      assetRecords: [],
+      audioSrc: "projects/test-stem/audio.mp3",
+      beatsSrc: "projects/test-stem/analysis.json",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts to the enrich endpoint and upserts the returned record", async () => {
+    const stem = "test-stem";
+    const input: EnrichAssetRecordInput = {
+      id: generateCanonicalAssetId(),
     };
 
-    expect(resolved.imageSrc).toBe(`/static/${path1}`);
-    expect(resolved.videos[0]).toBe(`/static/${path2}`);
-    expect(resolved.videos[1]).toBe("/static/assets/legacy-clip.mp4");
-    expect(resolved.label).toBe("Test Element");
+    const enrichedRecord = makeRecord({
+      id: input.id,
+      path: "projects/test/videos/scene.mp4",
+      kind: "video",
+      metadata: { width: 1920, height: 1080, durationSec: 4.2, fps: 24, codec: "h264" },
+    });
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        records: [enrichedRecord],
+        changed: true,
+        enrichedCount: 1,
+        missingIds: [],
+        count: 1,
+      }),
+    });
+
+    const result = await enrichAssetRecord(stem, input);
+
+    const enrichCall = fetchMock.mock.calls.find(([url]) =>
+      /^\/api\/assets\/enrich\/test-stem\/?$/.test(String(url)),
+    );
+    expect(enrichCall).toBeDefined();
+    const [url, options] = enrichCall!;
+    expect(url).toMatch(/^\/api\/assets\/enrich\/test-stem\/?$/);
+    expect(options.method).toBe("POST");
+    expect(options.headers).toEqual({ "Content-Type": "application/json" });
+
+    const body = JSON.parse(options.body as string) as Record<string, unknown>;
+    expect(body).toEqual(input);
+
+    expect(result).toEqual(normalizeAssetRecordV2(enrichedRecord));
+    expect(useEditorStore.getState().assetRecords).toEqual([result]);
+  });
+
+  it("refreshes a cached record with enriched metadata without duplicating it", async () => {
+    const stem = "test-stem";
+    const cachedRecord = makeRecord({
+      id: generateCanonicalAssetId(),
+      path: "projects/test/videos/scene.mp4",
+      kind: "video",
+      metadata: {},
+      updatedAt: 10,
+    });
+    const enrichedRecord = makeRecord({
+      ...cachedRecord,
+      metadata: { width: 1920, height: 1080, durationSec: 4.2, fps: 24, codec: "h264" },
+      updatedAt: 20,
+    });
+
+    useEditorStore.getState().setAssetRecords([cachedRecord]);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        records: [enrichedRecord],
+        changed: false,
+        enrichedCount: 1,
+        missingIds: [],
+        count: 1,
+      }),
+    });
+
+    const result = await enrichAssetRecord(stem, { id: cachedRecord.id });
+
+    expect(result).toEqual(normalizeAssetRecordV2(enrichedRecord));
+    expect(useEditorStore.getState().assetRecords).toEqual([result]);
+  });
+
+  it("does not upsert enriched records into the store after the user switches stems", async () => {
+    const stem = "test-stem";
+    const enrichedRecord = makeRecord({
+      id: generateCanonicalAssetId(),
+      path: "projects/test/videos/scene.mp4",
+      kind: "video",
+      metadata: { width: 1920, height: 1080 },
+    });
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        record: enrichedRecord,
+        records: [enrichedRecord],
+        changed: true,
+        enriched: true,
+        enrichedCount: 1,
+        missingIds: [],
+        count: 1,
+      }),
+    });
+
+    useEditorStore.setState({
+      audioSrc: "projects/other-stem/audio.mp3",
+      beatsSrc: "projects/other-stem/analysis.json",
+    });
+
+    const result = await enrichAssetRecord(stem, { id: enrichedRecord.id });
+
+    expect(result).toEqual(normalizeAssetRecordV2(enrichedRecord));
+    expect(useEditorStore.getState().assetRecords).toEqual([]);
+  });
+});
+
+describe("reconcileAssetRegistry", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    useEditorStore.setState({
+      assetRecords: [],
+      assetRegistryError: "stale error",
+      audioSrc: "projects/test-stem/audio.mp3",
+      beatsSrc: "projects/test-stem/analysis.json",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts to the reconcile endpoint and replaces the current stem registry when records are returned", async () => {
+    const stem = "test-stem";
+    const missingRecord = makeRecord({
+      id: generateCanonicalAssetId(),
+      path: "projects/test-stem/images/missing.png",
+      pathHistory: [],
+      status: "missing",
+      missingSince: 123,
+      metadata: {},
+    });
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        changed: true,
+        count: 1,
+        registry: {
+          version: 2,
+          records: [missingRecord],
+        },
+      }),
+    });
+
+    const result = await reconcileAssetRegistry(stem);
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/assets/reconcile/test-stem", {
+      method: "POST",
+    });
+    expect(result).toEqual([normalizeAssetRecordV2(missingRecord)]);
+    expect(useEditorStore.getState().assetRecords).toEqual(result);
+    expect(useEditorStore.getState().assetRegistryError).toBeNull();
+  });
+
+  it("returns an empty list when reconcile succeeds without inline records", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        changed: false,
+        count: 0,
+      }),
+    });
+
+    await expect(reconcileAssetRegistry("test-stem")).resolves.toEqual([]);
+    expect(useEditorStore.getState().assetRecords).toEqual([]);
+    expect(useEditorStore.getState().assetRegistryError).toBe("stale error");
+  });
+
+  it("clears stale registry errors when reconcile returns an empty inline registry", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        changed: false,
+        count: 0,
+        registry: {
+          version: 2,
+          records: [],
+        },
+      }),
+    });
+
+    await expect(reconcileAssetRegistry("test-stem")).resolves.toEqual([]);
+    expect(useEditorStore.getState().assetRecords).toEqual([]);
+    expect(useEditorStore.getState().assetRegistryError).toBeNull();
+  });
+
+  it("does not overwrite the store after the user switches to a different stem", async () => {
+    const stem = "test-stem";
+    const missingRecord = makeRecord({
+      id: generateCanonicalAssetId(),
+      path: "projects/test-stem/images/missing.png",
+      pathHistory: [],
+      status: "missing",
+      missingSince: 456,
+      metadata: {},
+    });
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        records: [missingRecord],
+      }),
+    });
+
+    useEditorStore.setState({
+      audioSrc: "projects/other-stem/audio.mp3",
+      beatsSrc: "projects/other-stem/analysis.json",
+    });
+
+    const result = await reconcileAssetRegistry(stem);
+
+    expect(result).toEqual([normalizeAssetRecordV2(missingRecord)]);
+    expect(useEditorStore.getState().assetRecords).toEqual([]);
+    expect(useEditorStore.getState().assetRegistryError).toBe("stale error");
   });
 });

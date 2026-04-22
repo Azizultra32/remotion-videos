@@ -3,6 +3,9 @@ import { useMemo } from "react";
 import { staticFile } from "remotion";
 import { resolveStatic } from "../compositions/elements/_helpers";
 
+const SILENT_WAV_DATA_URI =
+  "data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==";
+
 export type FFTBands = {
   bins: number[];
   bass: number;
@@ -20,13 +23,13 @@ const db = (v: number) => {
 };
 
 export type UseFFTArgs = {
-  src: string;
+  src: string | null;
   frame: number;
   fps: number;
   numberOfSamples?: number;
   windowInSeconds?: number;
   smoothing?: boolean;
-  assetRegistry?: Array<{ id: string; path: string }> | null;
+  assetRegistry?: Array<{ id: string; path: string; aliases?: string[] }> | null;
 };
 
 export const useFFT = ({
@@ -39,7 +42,7 @@ export const useFFT = ({
   assetRegistry,
 }: UseFFTArgs): FFTBands | null => {
   const resolved = useMemo(
-    () => resolveStatic(src, staticFile, assetRegistry),
+    () => (src ? resolveStatic(src, staticFile, assetRegistry) : SILENT_WAV_DATA_URI),
     [src, assetRegistry],
   );
 
@@ -51,7 +54,7 @@ export const useFFT = ({
   });
 
   return useMemo(() => {
-    if (!audioData) return null;
+    if (!src || !audioData) return null;
     const raw = visualizeAudio({
       fps,
       frame,
@@ -70,5 +73,5 @@ export const useFFT = ({
       mid: avg(bins.slice(third, third * 2)),
       highs: avg(bins.slice(third * 2)),
     };
-  }, [audioData, dataOffsetInSeconds, frame, fps, numberOfSamples, smoothing]);
+  }, [audioData, dataOffsetInSeconds, frame, fps, numberOfSamples, smoothing, src]);
 };

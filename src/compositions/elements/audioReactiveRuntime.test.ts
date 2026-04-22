@@ -167,6 +167,13 @@ describe("audioReactiveRuntime", () => {
         root.render(React.createElement(Probe));
       });
 
+      expect(useFFTMock).toHaveBeenCalledWith({
+        src: null,
+        frame: 15,
+        fps: 30,
+        numberOfSamples: 256,
+        assetRegistry: null,
+      });
       expect(container.querySelector('[data-testid="reactive"]')?.textContent).toBe(
         JSON.stringify({
           bass: 0,

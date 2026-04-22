@@ -42,7 +42,7 @@ export const useReactiveBands = ({
   numberOfSamples?: number;
 }): ReactiveBandState => {
   const fft = useFFT({
-    src: ctx.audioSrc ?? "",
+    src: ctx.audioSrc,
     frame: ctx.frame,
     fps: ctx.fps,
     numberOfSamples,

@@ -12,5 +12,42 @@ export const gaussian = (t: number, peak: number, sigma: number) =>
 
 export const FONT_STACK = "'Helvetica Neue', Helvetica, Inter, system-ui, sans-serif";
 
-export const resolveStatic = (src: string, staticFile: (s: string) => string): string =>
-  src.startsWith("http") || src.startsWith("/") ? src : staticFile(src);
+/**
+ * Resolve a static asset path, handling asset IDs, HTTP URLs, and local paths.
+ * Asset IDs (ast_...) are resolved via the asset registry passed in assetRegistry.
+ * HTTP URLs and absolute paths (/...) pass through.
+ * Relative paths go through staticFile().
+ *
+ * @param src - Source path (asset ID, URL, or relative path)
+ * @param staticFile - Remotion's staticFile() function
+ * @param assetRegistry - Optional asset registry from RenderCtx
+ * @returns Resolved URL/path
+ */
+export const resolveStatic = (
+  src: string,
+  staticFile: (s: string) => string,
+  assetRegistry?: Array<{ id: string; path: string }> | null,
+): string => {
+  // HTTP URLs and absolute paths pass through
+  if (src.startsWith("http") || src.startsWith("/")) return src;
+
+  // Asset IDs: resolve via registry if available
+  if (/^ast_[0-9a-f]{16}$/.test(src)) {
+    if (!assetRegistry || assetRegistry.length === 0) {
+      console.warn(`[resolveStatic] asset ID ${src} requires assetRegistry in RenderCtx`);
+      return src; // Will fail visibly at render time
+    }
+
+    const record = assetRegistry.find((r) => r.id === src);
+    if (!record) {
+      console.warn(`[resolveStatic] asset ID not found in registry: ${src}`);
+      return src;
+    }
+
+    // Found the record, now resolve the path through staticFile
+    return staticFile(record.path);
+  }
+
+  // Legacy relative paths
+  return staticFile(src);
+};

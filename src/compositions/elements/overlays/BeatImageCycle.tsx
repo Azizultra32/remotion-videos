@@ -2,6 +2,7 @@ import type React from "react";
 import { useMemo } from "react";
 import { Img, staticFile } from "remotion";
 import { z } from "zod";
+import { resolveStatic } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Beat-cycling image: advances through a list of images on every Nth beat /
@@ -36,9 +37,6 @@ const defaults: Props = {
   fadeSec: 0.1,
 };
 
-const resolvePath = (p: string): string =>
-  p.startsWith("http") || p.startsWith("/") ? p : staticFile(p);
-
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { images, triggerOn, everyN, fit, x, y, widthPct, heightPct, fadeSec } = element.props;
 
@@ -68,8 +66,8 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   }, [images.length, beatArr, tSec, everyN]);
 
   if (images.length === 0) return null;
-  const currentSrc = resolvePath(images[currentIdx]);
-  const prevSrc = prevIdx >= 0 ? resolvePath(images[prevIdx]) : null;
+  const currentSrc = resolveStatic(images[currentIdx], staticFile, ctx.assetRegistry);
+  const prevSrc = prevIdx >= 0 ? resolveStatic(images[prevIdx], staticFile, ctx.assetRegistry) : null;
 
   // Cross-fade: current fades in over fadeSec, prev fades out.
   const fadeT = fadeSec > 0 ? Math.min(1, tSinceChange / fadeSec) : 1;

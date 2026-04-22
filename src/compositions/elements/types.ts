@@ -36,6 +36,9 @@ export type RenderCtx = {
   // fallbackSec) from ../../utils/events. Empty array in tests + renders
   // where events.json is absent.
   events: EventMark[];
+  // Asset registry for resolving asset IDs to paths. Null in CLI renders
+  // (mv-render pre-resolves), populated in editor preview.
+  assetRegistry: Array<{ id: string; path: string }> | null;
 };
 
 export type ElementRendererProps<P = Record<string, unknown>> = {

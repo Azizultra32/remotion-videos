@@ -6,6 +6,7 @@ import {
 import type React from "react";
 import { staticFile } from "remotion";
 import { z } from "zod";
+import { resolveStatic } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
@@ -37,9 +38,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   // stable across renders.
   const resolved = !ctx.audioSrc
     ? ""
-    : ctx.audioSrc.startsWith("http") || ctx.audioSrc.startsWith("/")
-      ? ctx.audioSrc
-      : staticFile(ctx.audioSrc);
+    : resolveStatic(ctx.audioSrc, staticFile, ctx.assetRegistry);
   const { audioData, dataOffsetInSeconds } = useWindowedAudioData({
     src: resolved,
     frame: ctx.frame,

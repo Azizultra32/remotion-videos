@@ -1,13 +1,9 @@
 import type React from "react";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { OffthreadVideo, staticFile } from "remotion";
 import { z } from "zod";
+import { resolveStatic } from "../_helpers";
 import type { ElementModule, ElementRendererProps } from "../types";
-
-// Beat-cycling video: advances through a list of video clips on every Nth
-// beat/downbeat/drop. Each clip is an OffthreadVideo. Plays muted by default
-// (master audio track is the composition's audioSrc). Useful for "clip
-// flash" montages synced to rhythm.
 
 const schema = z.object({
   videos: z.array(z.string()),
@@ -18,7 +14,7 @@ const schema = z.object({
   y: z.number().min(-50).max(150),
   widthPct: z.number().min(1).max(200),
   heightPct: z.number().min(1).max(200),
-  startFromSec: z.number().min(0).max(600).step(0.01), // offset into each clip when it becomes active
+  startFromSec: z.number().min(0).max(600).step(0.01),
   muted: z.boolean(),
   volume: z.number().min(0).max(1).step(0.01),
 });
@@ -39,8 +35,25 @@ const defaults: Props = {
   volume: 0,
 };
 
-const resolvePath = (p: string): string =>
-  p.startsWith("http") || p.startsWith("/") ? p : staticFile(p);
+type ClipPlayerProps = {
+  src: string;
+  startFromFrame: number;
+  muted: boolean;
+  volume: number;
+  fit: "cover" | "contain";
+};
+
+const ClipPlayer = memo(function ClipPlayer({ src, startFromFrame, muted, volume, fit }: ClipPlayerProps) {
+  return (
+    <OffthreadVideo
+      src={src}
+      muted={muted}
+      volume={muted ? 0 : volume}
+      startFrom={startFromFrame}
+      style={{ width: "100%", height: "100%", objectFit: fit }}
+    />
+  );
+});
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { videos, triggerOn, everyN, fit, x, y, widthPct, heightPct, startFromSec, muted, volume } =
@@ -72,9 +85,9 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   }, [videos.length, beatArr, tSec, everyN]);
 
   if (videos.length === 0) return null;
-  const src = resolvePath(videos[currentIdx]);
-  // How far into the clip we are (seconds since we switched to this video).
+  const src = resolveStatic(videos[currentIdx], staticFile, ctx.assetRegistry);
   const tInClip = Math.max(0, tSec - clipStartSec);
+  const startFromFrame = Math.max(0, Math.round((startFromSec + tInClip) * ctx.fps));
 
   const wrap: React.CSSProperties = {
     position: "absolute",
@@ -88,16 +101,13 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
 
   return (
     <div style={wrap}>
-      <OffthreadVideo
+      <ClipPlayer
+        key={currentIdx}
         src={src}
+        startFromFrame={startFromFrame}
         muted={muted}
-        volume={muted ? 0 : volume}
-        // `startFrom` accepts seconds of how far to skip into the source.
-        // We want the playhead position within the source = startFromSec +
-        // (time since this clip became active). OffthreadVideo handles the
-        // rest — at render time it decodes the right frame.
-        startFrom={Math.max(0, Math.round((startFromSec + tInClip) * ctx.fps))}
-        style={{ width: "100%", height: "100%", objectFit: fit }}
+        volume={volume}
+        fit={fit}
       />
     </div>
   );

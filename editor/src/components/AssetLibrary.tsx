@@ -36,6 +36,8 @@ import {
 } from "../utils/assets";
 import type { TimelineElement } from "../types";
 import { stemFromAudioSrc } from "../utils/url";
+import { generateAssetId, isValidAssetId } from "../types/assetRecord";
+import { loadAssetRegistry, saveAssetRegistry, findAssetByPath } from "../lib/assetRecordStore";
 
 const POLL_MS = 2000;
 
@@ -53,14 +55,15 @@ const countAssetReferences = (
   elements: readonly TimelineElement[],
   assetPath: string,
 ): number => {
+  const assetId = generateAssetId(assetPath);
   let count = 0;
   for (const element of elements) {
     for (const value of Object.values(element.props ?? {})) {
-      if (value === assetPath) {
+      if (value === assetPath || value === assetId) {
         count += 1;
         continue;
       }
-      if (Array.isArray(value) && value.includes(assetPath)) {
+      if (Array.isArray(value) && (value.includes(assetPath) || value.includes(assetId))) {
         count += 1;
       }
     }
@@ -596,15 +599,38 @@ export const AssetLibrary = () => {
 
   const assetUsageCounts = useMemo(() => {
     const next: Record<string, number> = {};
+    const idToPath = new Map<string, string>();
+    for (const element of elements) {
+      for (const value of Object.values(element.props ?? {})) {
+        if (typeof value === "string" && isValidAssetId(value)) {
+          idToPath.set(value, value);
+        }
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            if (typeof item === "string" && isValidAssetId(item)) {
+              idToPath.set(item, item);
+            }
+          }
+        }
+      }
+    }
+    const normalizeKey = (s: string): string => {
+      if (isValidAssetId(s)) return s;
+      return s;
+    };
     for (const element of elements) {
       for (const value of Object.values(element.props ?? {})) {
         if (typeof value === "string") {
-          next[value] = (next[value] ?? 0) + 1;
+          const key = normalizeKey(value);
+          next[key] = (next[key] ?? 0) + 1;
           continue;
         }
         if (Array.isArray(value)) {
           for (const item of value) {
-            if (typeof item === "string") next[item] = (next[item] ?? 0) + 1;
+            if (typeof item === "string") {
+              const key = normalizeKey(item);
+              next[key] = (next[key] ?? 0) + 1;
+            }
           }
         }
       }
@@ -617,7 +643,7 @@ export const AssetLibrary = () => {
     [selectedModule],
   );
 
-  const addElementForAsset = (e: AssetEntry) => {
+  const addElementForAsset = async (e: AssetEntry) => {
     const state = useEditorStore.getState();
     const insertion = resolveAssetInsertion(e);
     const modId = insertion.moduleId;
@@ -626,6 +652,47 @@ export const AssetLibrary = () => {
       setError(`element module ${modId} not found`);
       return;
     }
+
+    // Generate/lookup asset ID for this path
+    const { generateAssetId } = await import("../types/assetRecord");
+    const { loadAssetRegistry, saveAssetRegistry, findAssetByPath } = await import("../lib/assetRecordStore");
+
+    if (!currentStem) {
+      setError("No current project loaded. Cannot create asset record.");
+      return;
+    }
+
+    let assetId: string;
+    try {
+      const registry = await loadAssetRegistry(currentStem);
+      let record = findAssetByPath(registry, e.path);
+
+      if (!record) {
+        assetId = generateAssetId(e.path);
+        record = {
+          id: assetId as `ast_${string}`,
+          path: e.path,
+          kind: e.kind,
+          scope: e.scope,
+          stem: e.stem,
+          sizeBytes: e.size,
+          mtimeMs: e.mtime,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          metadata: {},
+          label: e.label,
+        };
+        registry.push(record);
+        await saveAssetRegistry(currentStem, registry);
+      } else {
+        assetId = record.id;
+      }
+    } catch (err) {
+      console.error("Failed to create/lookup asset record:", err);
+      setError(`Failed to create asset record: ${String(err)}`);
+      return;
+    }
+
     const el: TimelineElement = {
       id: newId(),
       label: `${mod.label}: ${e.label}`,
@@ -633,7 +700,7 @@ export const AssetLibrary = () => {
       trackIndex: mod.defaultTrack,
       startSec: Math.max(0, state.currentTimeSec),
       durationSec: mod.defaultDurationSec,
-      props: seededPropsForModuleAsset(mod, e.kind, e.path),
+      props: seededPropsForModuleAsset(mod, e.kind, assetId),
     };
     state.addElement(el);
     state.selectElement(el.id);
@@ -647,13 +714,55 @@ export const AssetLibrary = () => {
     }
   };
 
-  const addElementWithModule = (asset: AssetEntry, moduleId: string) => {
+  const addElementWithModule = async (asset: AssetEntry, moduleId: string) => {
     const state = useEditorStore.getState();
     const mod = ELEMENT_REGISTRY[moduleId];
     if (!mod) {
       setError(`element module ${moduleId} not found`);
       return;
     }
+
+    // Generate/lookup asset ID for this path
+    const { generateAssetId } = await import("../types/assetRecord");
+    const { loadAssetRegistry, saveAssetRegistry, findAssetByPath } = await import("../lib/assetRecordStore");
+
+    if (!currentStem) {
+      setError("No current project loaded. Cannot create asset record.");
+      return;
+    }
+
+    let assetId: ReturnType<typeof generateAssetId>;
+    try {
+      const registry = await loadAssetRegistry(currentStem);
+      const record = findAssetByPath(registry, asset.path);
+
+      if (!record) {
+        // Create new record
+        assetId = generateAssetId(asset.path);
+        const newRecord = {
+          id: assetId,
+          path: asset.path,
+          kind: asset.kind,
+          scope: asset.scope,
+          stem: asset.stem,
+          sizeBytes: asset.size,
+          mtimeMs: asset.mtime,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          metadata: {},
+          label: asset.label,
+        };
+        registry.push(newRecord);
+        await saveAssetRegistry(currentStem, registry);
+      } else {
+        assetId = record.id;
+      }
+    } catch (err) {
+      console.error("Failed to create/lookup asset record:", err);
+      setError(`Failed to create asset record: ${String(err)}`);
+      return;
+    }
+
     const el: TimelineElement = {
       id: newId(),
       label: `${mod.label}: ${asset.label}`,
@@ -661,7 +770,7 @@ export const AssetLibrary = () => {
       trackIndex: mod.defaultTrack,
       startSec: Math.max(0, state.currentTimeSec),
       durationSec: mod.defaultDurationSec,
-      props: seededPropsForModuleAsset(mod, asset.kind, asset.path),
+      props: seededPropsForModuleAsset(mod, asset.kind, assetId),
     };
     state.addElement(el);
     state.selectElement(el.id);
@@ -671,11 +780,12 @@ export const AssetLibrary = () => {
   const selectedElementTargetsForAsset = useCallback(
     (asset: AssetEntry | null): SelectedElementAssetTarget[] => {
       if (!asset || !selectedElement || !selectedModule) return [];
+      const assetId = generateAssetId(asset.path);
       return findMediaFieldsForKind(selectedModule.mediaFields, asset.kind).map((field) => {
         const currentValue = selectedElement.props[field.name];
         const alreadyHasAsset = field.multi
-          ? Array.isArray(currentValue) && currentValue.includes(asset.path)
-          : currentValue === asset.path;
+          ? Array.isArray(currentValue) && (currentValue.includes(asset.path) || currentValue.includes(assetId))
+          : currentValue === asset.path || currentValue === assetId;
         return {
           name: field.name,
           fieldName: field.name,
@@ -688,13 +798,44 @@ export const AssetLibrary = () => {
     [selectedElement, selectedModule],
   );
 
-  const applyAssetToSelectedElement = (asset: AssetEntry, fieldName: string) => {
+  const applyAssetToSelectedElement = async (asset: AssetEntry, fieldName: string) => {
     if (!selectedElement || !selectedModule) return;
+
+    let valueToWrite: string;
+    if (!currentStem) {
+      valueToWrite = asset.path;
+    } else {
+      try {
+        const registry = await loadAssetRegistry(currentStem);
+        let record = findAssetByPath(registry, asset.path);
+        if (!record) {
+          record = {
+            id: generateAssetId(asset.path),
+            path: asset.path,
+            kind: asset.kind,
+            scope: asset.scope,
+            stem: asset.stem,
+            sizeBytes: asset.size,
+            mtimeMs: asset.mtime,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: {},
+            label: asset.label,
+          };
+          registry.push(record);
+          await saveAssetRegistry(currentStem, registry);
+        }
+        valueToWrite = record.id;
+      } catch {
+        valueToWrite = asset.path;
+      }
+    }
+
     const nextProps = applyAssetToModuleProps(
       selectedModule,
       selectedElement.props,
       asset.kind,
-      asset.path,
+      valueToWrite,
       fieldName,
     );
     useEditorStore.getState().updateElement(selectedElement.id, { props: nextProps });
@@ -709,7 +850,7 @@ export const AssetLibrary = () => {
       setActionAsset(asset);
       return;
     }
-    applyAssetToSelectedElement(asset, firstTarget.fieldName);
+    void applyAssetToSelectedElement(asset, firstTarget.fieldName);
   };
 
   const selectedElementTargets = useMemo(
@@ -1131,7 +1272,7 @@ export const AssetLibrary = () => {
                           void copyPath(e);
                           return;
                         }
-                        addElementForAsset(e);
+                        void addElementForAsset(e);
                       }}
                       onDragStart={(ev) => onTileDragStart(e, ev)}
                       title={`${e.path}\n${formatAssetBytes(e.size)} · ${new Date(e.mtime).toLocaleString()}\nClick: add ${insertion.intentLabel} at playhead\nShift+click: copy path\nDrag: drop ${e.kind.toUpperCase()} onto a timeline track`}
@@ -1332,8 +1473,8 @@ export const AssetLibrary = () => {
           usageCount={actionAssetUsageCount}
           selectedElementLabel={selectedElement ? `${selectedElement.label} (${selectedModule?.label ?? selectedElement.type})` : null}
           selectedElementTargets={selectedElementTargets}
-          onAddModule={(moduleId) => addElementWithModule(actionAsset, moduleId)}
-          onApplySelected={(fieldName) => applyAssetToSelectedElement(actionAsset, fieldName)}
+          onAddModule={(moduleId) => void addElementWithModule(actionAsset, moduleId)}
+          onApplySelected={(fieldName) => void applyAssetToSelectedElement(actionAsset, fieldName)}
           onCopyPath={() => void copyPath(actionAsset)}
           onDeleteAsset={() => {
             void deleteAsset(actionAsset).catch((err) => {

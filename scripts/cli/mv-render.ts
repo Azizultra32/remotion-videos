@@ -28,6 +28,7 @@ import {
   resetCustomElementsBarrel,
 } from "./custom-elements-barrel";
 import { resolveAudioPath, resolveProjectDir, resolveProjectsDir } from "./paths";
+import { readAssetsJson, resolveAssetPath, isAssetId } from "./asset-registry";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -39,6 +40,52 @@ type Args = {
   propsFile?: string;
   dryRun?: boolean;
 };
+
+/**
+ * Recursively walk through an object and resolve any asset IDs to actual paths.
+ *
+ * @param obj - Object to walk (element props, timeline, etc.)
+ * @param assetRecords - Asset registry records from assets.json
+ * @param stem - Project stem (for logging)
+ * @returns The same object with asset IDs replaced by resolved paths
+ */
+function resolveAssetIds(
+  obj: unknown,
+  assetRecords: Array<{ id: string; path: string }>,
+  stem: string
+): unknown {
+  if (obj === null || obj === undefined) return obj;
+
+  // String: check if it's an asset ID
+  if (typeof obj === "string") {
+    if (isAssetId(obj)) {
+      const resolved = resolveAssetPath(assetRecords, obj);
+      if (resolved === null) {
+        console.warn(`[mv:render] asset ID not found in registry: ${obj} (project=${stem})`);
+        return obj; // Keep the ID, will fail visibly at render time
+      }
+      return resolved;
+    }
+    return obj;
+  }
+
+  // Array: recurse on each element
+  if (Array.isArray(obj)) {
+    return obj.map((item) => resolveAssetIds(item, assetRecords, stem));
+  }
+
+  // Object: recurse on each property
+  if (typeof obj === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = resolveAssetIds(value, assetRecords, stem);
+    }
+    return result;
+  }
+
+  // Primitive (number, boolean, etc.)
+  return obj;
+}
 
 const parseArgs = (): Args => {
   const a: Args = {};
@@ -76,7 +123,9 @@ if (!args.project) {
   process.exit(1);
 }
 
-const stem = args.project;
+// Wrap main logic in async IIFE for await support (asset registry loading)
+(async () => {
+const stem = args.project!;
 const composition = args.composition ?? "MusicVideo";
 const isMusicVideo = composition === "MusicVideo";
 
@@ -195,6 +244,25 @@ if (isMusicVideo) {
 
 const fps = args.fps ?? timeline.fps ?? 24;
 
+// Load asset registry if it exists. Asset IDs in element props need to be
+// resolved to actual paths BEFORE passing to Remotion. Missing assets.json
+// is fine — legacy projects use direct paths instead of asset IDs.
+const projectsDir = resolveProjectsDir(repoRoot);
+let assetRecords: Array<{ id: string; path: string }> = [];
+try {
+  const { records } = await readAssetsJson(projectsDir, stem);
+  assetRecords = records;
+  if (records.length > 0) {
+    console.log(`[mv:render] loaded ${records.length} asset records from assets.json`);
+  }
+} catch (err) {
+  // assets.json missing or corrupt — skip resolution, proceed with legacy paths
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code !== "ENOENT") {
+    console.warn(`[mv:render] failed to load assets.json (continuing with legacy paths):`, err);
+  }
+}
+
 const outDir = resolve(repoRoot, "out");
 mkdirSync(outDir, { recursive: true });
 const outBase = isMusicVideo ? `${stem}-${Date.now()}.mp4` : `${composition}-${Date.now()}.mp4`;
@@ -205,11 +273,19 @@ const outPath = args.out ? resolve(args.out) : resolve(outDir, outBase);
 let inputProps: unknown;
 let propsSource = "defaultProps from Root.tsx";
 if (isMusicVideo) {
+  // Resolve asset IDs in timeline elements before passing to Remotion.
+  // This walks through all element props recursively and replaces any
+  // ast_<hash> strings with the actual path from assets.json.
+  const rawElements = Array.isArray(timeline.elements) ? timeline.elements : [];
+  const resolvedElements = assetRecords.length > 0
+    ? resolveAssetIds(rawElements, assetRecords, stem)
+    : rawElements;
+
   inputProps = {
     audioSrc: audioStaticSrc,
     beatsSrc: `projects/${stem}/analysis.json`,
     fps,
-    elements: Array.isArray(timeline.elements) ? timeline.elements : [],
+    elements: resolvedElements,
   };
   propsSource = "built from timeline.json";
 }
@@ -371,4 +447,8 @@ child.on("close", (code) => {
   // the editor) would otherwise import stale project modules by path.
   safeReset();
   process.exit(code ?? 1);
+});
+})().catch((err) => {
+  console.error("[mv:render] fatal error:", err);
+  process.exit(1);
 });

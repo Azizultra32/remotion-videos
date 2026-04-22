@@ -12,7 +12,8 @@
 // Suggests next steps at the end (run mv:analyze, pick the track in editor).
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
-import { ensureProjectsDir, resolveProjectDir } from "./paths";
+import { ensureProjectsDir, resolveProjectDir, resolveProjectsDir } from "./paths";
+import { writeAssetsJsonSync } from "./asset-registry";
 
 const repoRoot = resolve(__dirname, "..", "..");
 
@@ -87,6 +88,10 @@ const starterTimeline = {
   elements: [],
 };
 writeFileSync(timelinePath, `${JSON.stringify(starterTimeline, null, 2)}\n`);
+
+// Create empty asset registry for Phase 1 asset identity system
+const projectsDir = resolveProjectsDir(repoRoot);
+writeAssetsJsonSync(projectsDir, stem, { version: 1, records: [] });
 
 // Seed the per-project custom-elements/ dir with a ready-to-activate example.
 // Writing as `.tsx.example` so the renderer's barrel scan (filters `*.tsx`)
@@ -165,6 +170,7 @@ writeFileSync(examplePath, exampleBody);
 console.log(`scaffolded projects/${stem}/`);
 console.log(`  audio:          projects/${stem}/audio${audioExt} (copy of ${audioSource})`);
 console.log(`  timeline:       projects/${stem}/timeline.json (empty)`);
+console.log(`  assets:         projects/${stem}/assets.json (empty registry)`);
 console.log(`  analysis:       projects/${stem}/analysis/ (empty, awaiting mv:analyze)`);
 console.log(`  custom-elements: projects/${stem}/custom-elements/${exampleModuleName}.tsx.example`);
 console.log("");

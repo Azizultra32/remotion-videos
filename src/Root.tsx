@@ -357,7 +357,7 @@ export const RemotionRoot: React.FC = () => {
         id="VideoWithTitle"
         component={VideoWithTitle}
         schema={videoWithTitleSchema}
-        durationInFrames={175704}
+        durationInFrames={7200}
         fps={24}
         width={848}
         height={480}
@@ -367,7 +367,7 @@ export const RemotionRoot: React.FC = () => {
         id="PublicCut"
         component={PublicCut}
         schema={publicCutSchema}
-        durationInFrames={175704}
+        durationInFrames={7200}
         fps={24}
         width={848}
         height={480}
@@ -407,7 +407,7 @@ export const RemotionRoot: React.FC = () => {
         id="AudioShaderViz"
         component={AudioShaderViz}
         schema={audioShaderVizSchema}
-        durationInFrames={14400}
+        durationInFrames={1800}
         fps={30}
         width={1920}
         height={1080}

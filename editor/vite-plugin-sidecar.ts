@@ -170,6 +170,8 @@ const TIMELINE_LOCK = new Map<string, Promise<void>>();
 // Separate lock for events.json writes — orthogonal to timeline.json, so
 // parallel saves of both for the same stem are safe.
 const EVENTS_LOCK = new Map<string, Promise<void>>();
+// Separate lock for assets.json writes — orthogonal to timeline/events.
+const ASSETS_REGISTRY_LOCK = new Map<string, Promise<void>>();
 
 const STEM_RE = /^[a-z0-9_-]+$/i;
 
@@ -1096,6 +1098,174 @@ const handleAssetsDelete = async (
     deletedAt: Date.now(),
   };
   res.end(JSON.stringify(response));
+};
+
+// ---------------------------------------------------------------------------
+// /api/assets/registry/:stem  (GET)
+// ---------------------------------------------------------------------------
+//
+// Reads projects/<stem>/assets.json and returns the full registry for that
+// project. Part of the fresh-memory Phase 1 implementation — the registry
+// maps asset IDs to source paths + metadata. Used by the editor to resolve
+// element props after external tools swap underlying files.
+//
+// Security: validates stem is alphanumeric + hyphens only (no path traversal).
+// Returns { version: 1, records: [] } with 200 if the file is missing.
+
+const handleAssetsRegistryGet = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  // Connect strips "/api/assets/registry/"; req.url is "/<stem>"
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+
+  // Validate stem: alphanumeric + hyphens/underscores only, no path traversal
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-stem", detail: "stem must be alphanumeric with hyphens/underscores only" }));
+    return;
+  }
+
+  const registryPath = path.join(PROJECTS_DIR, stem, "assets.json");
+
+  let content: string;
+  try {
+    content = await fs.readFile(registryPath, "utf8");
+  } catch (err) {
+    // If the file doesn't exist, return an empty registry with 200
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-store");
+      res.end(JSON.stringify({ version: 1, records: [] }));
+      return;
+    }
+    // Other errors (permissions, etc.) are 500s
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "read-failed", detail: String(err) }));
+    return;
+  }
+
+  // Parse and validate the registry structure
+  let registry: unknown;
+  try {
+    registry = JSON.parse(content);
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "parse-failed", detail: String(err) }));
+    return;
+  }
+
+  // Return the registry as-is (validation happens client-side via Zod)
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(registry));
+};
+
+// ---------------------------------------------------------------------------
+// /api/assets/registry/:stem  (POST)
+// ---------------------------------------------------------------------------
+//
+// Writes projects/<stem>/assets.json atomically. Part of the fresh-memory
+// Phase 1 implementation — persistence layer for the asset identity system.
+//
+// Request body: { version: 1, records: AssetRecord[] }
+// Security: validates stem and body structure; atomic tmp+rename write.
+
+const handleAssetsRegistryPost = async (
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> => {
+  // Extract stem from URL (Connect strips "/api/assets/registry/")
+  const raw = (req.url ?? "").split("?")[0];
+  const stem = decodeURIComponent(raw.replace(/^\/+/, ""));
+
+  // Validate stem: alphanumeric + hyphens/underscores only, no path traversal
+  if (!STEM_RE.test(stem)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-stem", detail: "stem must be alphanumeric with hyphens/underscores only" }));
+    return;
+  }
+
+  // Read and validate request body
+  let body: unknown;
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-json", detail: String(err) }));
+    return;
+  }
+
+  // Validate body structure: { version: 1, records: AssetRecord[] }
+  if (
+    !body ||
+    typeof body !== "object" ||
+    !("version" in body) ||
+    !("records" in body) ||
+    body.version !== 1 ||
+    !Array.isArray((body as { records: unknown }).records)
+  ) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "invalid-body", detail: "expected { version: 1, records: AssetRecord[] }" }));
+    return;
+  }
+
+  const registry = body as { version: 1; records: unknown[] };
+
+  // Ensure project directory exists
+  const projectDir = path.join(PROJECTS_DIR, stem);
+  try {
+    const st = await fs.stat(projectDir);
+    if (!st.isDirectory()) throw new Error("not a directory");
+  } catch (err) {
+    // Create project directory if it doesn't exist
+    try {
+      await fs.mkdir(projectDir, { recursive: true });
+    } catch (mkdirErr) {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "project-dir-create-failed", detail: String(mkdirErr) }));
+      return;
+    }
+  }
+
+  // Serialize writes per-stem (prevent concurrent writes from corrupting the file)
+  const prev = ASSETS_REGISTRY_LOCK.get(stem) ?? Promise.resolve();
+  const next = prev.then(async () => {
+    const dest = path.join(projectDir, "assets.json");
+    const tmp = `${dest}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(registry, null, 2), "utf8");
+    await fs.rename(tmp, dest);
+  });
+  ASSETS_REGISTRY_LOCK.set(
+    stem,
+    next.catch(() => {
+      // swallow — failure is surfaced through `await next` below
+    }),
+  );
+
+  try {
+    await next;
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "write-failed", detail: String(err) }));
+    return;
+  }
+
+  // Success: return the written registry
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(registry));
 };
 
 // ---------------------------------------------------------------------------
@@ -3280,6 +3450,8 @@ export const sidecarPlugin = (): Plugin => ({
     server.middlewares.use("/api/assets/thumb", wrap("GET", handleAssetThumb));
     server.middlewares.use("/api/assets/upload", wrap("POST", handleAssetsUpload));
     server.middlewares.use("/api/assets/delete", wrap("POST", handleAssetsDelete));
+    server.middlewares.use("/api/assets/registry/", wrap("GET", handleAssetsRegistryGet));
+    server.middlewares.use("/api/assets/registry/", wrap("POST", handleAssetsRegistryPost));
     server.middlewares.use("/api/timeline/", wrap("GET", handleTimelineGet));
     server.middlewares.use("/api/storyboard/save", wrap("POST", handleStoryboardSave));
     server.middlewares.use("/api/storyboard/", wrap("GET", handleStoryboardGet));

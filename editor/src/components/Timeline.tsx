@@ -3,6 +3,9 @@ import { useShortcuts, useShortcutSurface } from "../contexts/shortcuts";
 import { useEditorStore } from "../store";
 import type { TimelineElement as TimelineElementType } from "../types";
 import { seededPropsForModuleAsset, type AssetKind } from "../utils/assets";
+import { generateAssetId } from "../types/assetRecord";
+import { loadAssetRegistry, saveAssetRegistry, findAssetByPath } from "../lib/assetRecordStore";
+import { stemFromAudioSrc } from "../utils/url";
 import { snapTime } from "../utils/time";
 import { anchoredZoom, clampViewport } from "../utils/timelineScale";
 import { ELEMENT_REGISTRY } from "@compositions/elements/registry";
@@ -522,10 +525,37 @@ export const Timeline = () => {
                 trackIndex: dropTrack,
                 startSec: snappedSec,
                 durationSec: mod.defaultDurationSec,
-                props: seededPropsForModuleAsset(mod, asset.kind, asset.path),
+                props: seededPropsForModuleAsset(mod, asset.kind, generateAssetId(asset.path)),
               };
               state.addElement(newEl);
               state.selectElement(newEl.id);
+
+              // Ensure the asset record exists in the registry (fire-and-forget).
+              // The ID is deterministic from the path, so the record will match
+              // what we just wrote into the element's props.
+              const stem = stemFromAudioSrc(useEditorStore.getState().audioSrc);
+              if (stem) {
+                void (async () => {
+                  try {
+                    const registry = await loadAssetRegistry(stem);
+                    if (!findAssetByPath(registry, asset.path)) {
+                      registry.push({
+                        id: generateAssetId(asset.path),
+                        path: asset.path,
+                        kind: asset.kind,
+                        scope: asset.path.startsWith("projects/") ? "project" : "global",
+                        stem,
+                        sizeBytes: 0,
+                        mtimeMs: Date.now(),
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        metadata: {},
+                      });
+                      await saveAssetRegistry(stem, registry);
+                    }
+                  } catch { /* non-critical */ }
+                })();
+              }
             }}
             onWheel={(e) => {
               // Timeline interaction model:

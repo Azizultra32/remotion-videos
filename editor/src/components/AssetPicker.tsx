@@ -17,6 +17,9 @@ import {
   type AssetSortMode,
   type EditorAssetEntry as AssetEntry,
 } from "../utils/assets";
+import { isValidAssetId } from "../types/assetRecord";
+import { loadAssetRegistry, saveAssetRegistry, findAssetByPath, findAssetById } from "../lib/assetRecordStore";
+import { generateAssetId } from "../types/assetRecord";
 
 export type AssetPickerKind = AssetKind;
 
@@ -120,10 +123,52 @@ const useActiveAssetMeta = (asset: AssetEntry | null) => {
   return meta;
 };
 
+async function pathsToAssetIds(
+  paths: string[],
+  entriesByPath: Record<string, AssetEntry>,
+  currentStem: string,
+): Promise<string[]> {
+  const registry = await loadAssetRegistry(currentStem);
+  const assetIds: string[] = [];
+  let registryChanged = false;
+
+  for (const path of paths) {
+    const entry = entriesByPath[path];
+    if (!entry) continue;
+
+    let record = findAssetByPath(registry, path);
+    if (!record) {
+      record = {
+        id: generateAssetId(path),
+        path,
+        kind: entry.kind,
+        scope: entry.scope,
+        stem: entry.stem,
+        sizeBytes: entry.size,
+        mtimeMs: entry.mtime,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        metadata: {},
+        label: entry.label,
+      };
+      registry.push(record);
+      registryChanged = true;
+    }
+    assetIds.push(record.id);
+  }
+
+  if (registryChanged) {
+    await saveAssetRegistry(currentStem, registry);
+  }
+
+  return assetIds;
+}
+
 export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props) => {
   const [entries, setEntries] = useState<AssetEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string[]>(initial);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [initialResolved, setInitialResolved] = useState(false);
   const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">("all");
   const [sortMode, setSortMode] = useState<AssetSortMode>("recent");
   const [search, setSearch] = useState("");
@@ -140,7 +185,32 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
   useEffect(() => {
     setSelected(initial);
     setActivePath(initial[0] ?? null);
+    setInitialResolved(true);
   }, [initial]);
+
+  // When entries load, normalize any asset IDs in `selected` back to paths
+  // so the picker UI (which indexes by path) stays consistent.
+  useEffect(() => {
+    if (!entries || !initialResolved) return;
+    const hasAssetIds = selected.some((s) => isValidAssetId(s));
+    if (!hasAssetIds) return;
+
+    (async () => {
+      if (!currentStem) return;
+      try {
+        const registry = await loadAssetRegistry(currentStem);
+        const resolved = selected.map((s) => {
+          if (!isValidAssetId(s)) return s;
+          const record = findAssetById(registry, s);
+          return record?.path ?? s;
+        });
+        setSelected(resolved);
+        setActivePath(resolved[0] ?? null);
+      } catch {
+        // Leave as-is if registry unavailable
+      }
+    })();
+  }, [entries, initialResolved, currentStem]);
 
   useEffect(() => {
     if (!currentStem && importScope === "project") setImportScope("global");
@@ -196,14 +266,34 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
     };
   }, [hashEntries]);
 
+  const entriesByPath = useMemo(
+    () => Object.fromEntries((entries ?? []).map((entry) => [entry.path, entry])),
+    [entries],
+  );
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onCommit(selected);
+    const onKey = async (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCancel();
+        return;
+      }
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        if (!currentStem) {
+          setError("No current project loaded. Cannot create asset records.");
+          return;
+        }
+
+        try {
+          const assetIds = await pathsToAssetIds(selected, entriesByPath, currentStem);
+          onCommit(assetIds);
+        } catch (err) {
+          setError(`Failed to create asset records: ${String(err)}`);
+        }
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [selected, onCommit, onCancel]);
+  }, [selected, onCommit, onCancel, currentStem, entriesByPath]);
 
   const filtered = useMemo(() => {
     if (!entries) return [];
@@ -214,11 +304,6 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
       sort: sortMode,
     });
   }, [entries, kind, scopeFilter, search, sortMode]);
-
-  const entriesByPath = useMemo(
-    () => Object.fromEntries((entries ?? []).map((entry) => [entry.path, entry])),
-    [entries],
-  );
 
   useEffect(() => {
     if (activePath && entriesByPath[activePath]) return;
@@ -632,9 +717,18 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
                     key={entry.path}
                     type="button"
                     onClick={() => toggle(entry.path)}
-                    onDoubleClick={() => {
+                    onDoubleClick={async () => {
                       if (!multi) {
-                        onCommit([entry.path]);
+                        if (!currentStem) {
+                          onCommit([entry.path]);
+                          return;
+                        }
+                        try {
+                          const assetIds = await pathsToAssetIds([entry.path], entriesByPath, currentStem);
+                          onCommit(assetIds);
+                        } catch {
+                          onCommit([entry.path]);
+                        }
                       }
                     }}
                     style={{
@@ -970,12 +1064,23 @@ export const AssetPicker = ({ kind, multi, initial, onCommit, onCancel }: Props)
           </button>
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               if (!multi && selectionUnchanged && selected.length > 0) {
                 onCancel();
                 return;
               }
-              onCommit(selected);
+
+              if (!currentStem) {
+                setError("No current project loaded. Cannot create asset records.");
+                return;
+              }
+
+              try {
+                const assetIds = await pathsToAssetIds(selected, entriesByPath, currentStem);
+                onCommit(assetIds);
+              } catch (err) {
+                setError(`Failed to create asset records: ${String(err)}`);
+              }
             }}
             disabled={selected.length === 0}
             style={{

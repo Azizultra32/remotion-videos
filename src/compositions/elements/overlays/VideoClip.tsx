@@ -40,7 +40,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     muted,
   } = element.props;
   if (!videoSrc) return null;
-  const resolved = resolveStatic(videoSrc, staticFile);
+  const resolved = resolveStatic(videoSrc, staticFile, ctx.assetRegistry);
 
   let brightness = 1;
   if (beatBrightnessBoost > 0) {

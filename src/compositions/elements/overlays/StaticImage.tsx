@@ -40,7 +40,7 @@ const defaults: Props = {
   opacity: 1,
 };
 
-const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
+const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { imageSrc, fit, x, y, widthPct, heightPct, fadeInSec, fadeOutSec, opacity } =
     element.props;
 
@@ -50,7 +50,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element }) => {
   const elementDurationSec = durationInFrames / fps;
 
   if (!imageSrc) return null;
-  const resolved = resolveStatic(imageSrc, staticFile);
+  const resolved = resolveStatic(imageSrc, staticFile, ctx.assetRegistry);
 
   // Fade in: 0 -> 1 over fadeInSec starting at t=0.
   const fadeInOpacity = interpolate(elementLocalSec, [0, Math.max(0.0001, fadeInSec)], [0, 1], {

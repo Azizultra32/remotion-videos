@@ -92,6 +92,19 @@ export const musicVideoSchema = z.object({
   // should fetch from. Falls back to audioSrc when not set. Lets the editor
   // pass the real audio URL to visualizers even when audioSrc is null.
   analysisAudioSrc: z.string().nullable().default(null),
+  // Asset registry for resolving asset IDs (ast_...) to paths.
+  // CLI (mv-render.ts) pre-resolves IDs before passing props, so this is
+  // always null in CLI renders. Editor preview loads the registry and passes
+  // it here so elements can resolve asset IDs in real time.
+  assetRegistry: z
+    .array(
+      z.object({
+        id: z.string(),
+        path: z.string(),
+      }),
+    )
+    .nullable()
+    .default(null),
 });
 
 export type MusicVideoProps = {
@@ -102,6 +115,7 @@ export type MusicVideoProps = {
   events?: EventMark[];
   muteAudioTag?: boolean;
   analysisAudioSrc?: string | null;
+  assetRegistry?: Array<{ id: string; path: string }> | null;
 };
 
 const isActive = (el: TimelineElement, t: number, events: EventMark[]): boolean => {
@@ -117,6 +131,7 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
   events = [],
   muteAudioTag = false,
   analysisAudioSrc = null,
+  assetRegistry = null,
 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -170,6 +185,7 @@ export const MusicVideo: React.FC<MusicVideoProps> = ({
           elementLocalSec,
           elementProgress,
           events,
+          assetRegistry,
         };
         const Renderer = mod.Renderer;
         // Per-element ErrorBoundary — a broken custom element can't brick

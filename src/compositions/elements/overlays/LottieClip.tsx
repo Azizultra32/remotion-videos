@@ -54,7 +54,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   useEffect(() => {
     if (!jsonSrc) return;
     let cancelled = false;
-    const url = resolveStatic(jsonSrc, staticFile);
+    const url = resolveStatic(jsonSrc, staticFile, ctx.assetRegistry);
     fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);

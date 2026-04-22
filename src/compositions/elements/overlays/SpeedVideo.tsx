@@ -47,7 +47,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
     element.props;
 
   if (!videoSrc) return null;
-  const src = resolveStatic(videoSrc, staticFile);
+  const src = resolveStatic(videoSrc, staticFile, ctx.assetRegistry);
 
   const wrap: React.CSSProperties = {
     position: "absolute",

@@ -471,6 +471,25 @@ These are not the full redesign, but they are immediate correctness issues:
 - The project manifest media model is not integrated into the live editor media browser flow.
   - `src/lib/schemas/projectManifest.ts`
 
+### Known issue: BeatVideoCycle choppy playback
+
+Confirmed root cause:
+
+- `src/compositions/elements/overlays/BeatVideoCycle.tsx` drives `OffthreadVideo` with a `startFrom` value that advances every frame while the active clip is playing.
+- That means the renderer is being asked to keep re-seeking the source instead of letting one stable video instance play through the current clip.
+- The playback stutter is coming from that per-frame decode/seek churn in the video element, not from the recent Phase 1 asset-identity work. The asset-record migration changed how media is identified and selected; it did not change `BeatVideoCycle` playback behavior.
+
+Quick mitigation, not a full fix:
+
+- Memoize the active clip and remount only when `currentIdx` changes.
+- Keep the rendered `OffthreadVideo` instance stable within a clip so it does not churn on every frame.
+
+Long-term fix:
+
+- Move beat-driven clip playback into the modulation/render optimization roadmap.
+- The real fix is to separate source switching from per-frame playback state so modulation can schedule clip changes and playback envelopes without forcing seek-heavy rerenders.
+- This belongs with the reusable modulation engine and render-path caching work already outlined above.
+
 ## Recommended implementation sequence
 
 1. Canonical asset index and asset kinds

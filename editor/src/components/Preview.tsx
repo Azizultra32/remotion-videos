@@ -11,9 +11,11 @@
 
 import { defaultMusicVideoProps, MusicVideo, type MusicVideoProps } from "@compositions/MusicVideo";
 import { type CallbackListener, Player, type PlayerRef } from "@remotion/player";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditorStore } from "../store";
-import { toEditorUrl } from "../utils/url";
+import { toEditorUrl, stemFromAudioSrc } from "../utils/url";
+import { loadAssetRegistry } from "../lib/assetRecordStore";
+import type { AssetRecord } from "../types/assetRecord";
 
 export const Preview = () => {
   const playerRef = useRef<PlayerRef>(null);
@@ -27,9 +29,34 @@ export const Preview = () => {
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);
 
+  const [assetRegistry, setAssetRegistry] = useState<AssetRecord[] | null>(null);
+  const currentStem = stemFromAudioSrc(audioSrc);
+
   // Resolve audio URL via the canonical helper (routes projects/<stem>/... to
   // /api/projects/<stem>/... under the sidecar's serving).
   const audioUrl = useMemo(() => toEditorUrl(audioSrc), [audioSrc]);
+
+  // Load asset registry when stem changes
+  useEffect(() => {
+    if (!currentStem) {
+      setAssetRegistry(null);
+      return;
+    }
+
+    let cancelled = false;
+    loadAssetRegistry(currentStem)
+      .then((records) => {
+        if (!cancelled) setAssetRegistry(records);
+      })
+      .catch((err) => {
+        console.error("Failed to load asset registry:", err);
+        if (!cancelled) setAssetRegistry(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStem]);
 
   // Visuals only: force audioSrc=null + muteAudioTag so MusicVideo skips
   // its <Audio> tag. The separate <audio> element below owns playback.
@@ -46,8 +73,9 @@ export const Preview = () => {
       events,
       muteAudioTag: true,
       analysisAudioSrc: audioUrl,
+      assetRegistry: assetRegistry?.map((r) => ({ id: r.id, path: r.path })) ?? null,
     }),
-    [audioUrl, beatsSrc, elements, events],
+    [audioUrl, beatsSrc, elements, events, assetRegistry],
   );
 
   // Transport: isPlaying drives BOTH the Player (visuals) and the <audio>

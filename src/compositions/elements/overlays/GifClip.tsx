@@ -63,7 +63,7 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
         }}
       >
         <Gif
-          src={resolveStatic(gifSrc, staticFile)}
+          src={resolveStatic(gifSrc, staticFile, ctx.assetRegistry)}
           fit={fit}
           playbackRate={playbackRate}
           loopBehavior={loopBehavior}

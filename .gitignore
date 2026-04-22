@@ -16,6 +16,8 @@ brands/*/fonts/
 # (see .gitattributes). Keeping this comment as a navigation marker.
 .DS_Store
 .worktrees/
+.cloudflared/
+.cloudflared-api/
 
 # Python analysis pipeline transients
 __pycache__/

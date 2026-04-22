@@ -2,15 +2,25 @@
 
 You're not at the computer and you need to reach the editor or a rendered MP4. Three working paths, with trade-offs.
 
-## Path 1 — Cloudflare quick tunnel (fastest, no account)
+## Path 1 — `npm run mv:tunnel` (Cloudflare quick tunnel, fastest, no account)
 
-One command to expose `localhost:4000` at a public HTTPS URL:
+Primary repo command:
 
 ```bash
-cloudflared tunnel --url http://localhost:4000
+npm run mv:tunnel
 ```
 
-Reads the URL from stderr after ~5s — look for `https://<random>.trycloudflare.com`.
+This wraps `cloudflared tunnel --url http://127.0.0.1:4000`, prints the
+resulting `https://<random>.trycloudflare.com` URL, and refuses to report
+success until both `/` and `/api/songs` return `200` through the public URL.
+The wrapper now hands `cloudflared` off to a per-user `launchd` job, so the
+public URL stays alive after the shell command itself returns.
+
+Kill it with:
+
+```bash
+npm run mv:tunnel -- --kill
+```
 
 **Use when:** you need editor + MP4 access for a single session from anywhere on the internet. Zero setup.
 
@@ -29,6 +39,10 @@ host … is not allowed."
 **How to test:** `curl -sI https://<random>.trycloudflare.com/api/songs` should
 return `HTTP/2 200`. If you get 403 with "Blocked request", `allowedHosts` was
 reverted — re-apply.
+
+**Lifecycle:** `npm run mv:tunnel` exits after the public URL is healthy; the
+tunnel process keeps running under `launchd` until you explicitly stop it with
+`npm run mv:tunnel -- --kill`.
 
 ## Path 2 — Named cloudflared tunnel (stable URL, free)
 
@@ -86,6 +100,13 @@ a few minutes after copy (sync latency depends on connection).
 **"Blocked request. This host (…) is not allowed."** → Vite's allowlist. Fix:
 `allowedHosts: true` in `editor/vite.config.ts`. Should already be set; if
 reverted, re-apply (engine-locked path, requires `ENGINE_UNLOCK=1`).
+
+**`npm run mv:tunnel` says the editor is not reachable on `http://127.0.0.1:4000`**
+→ Vite isn't up. Run `cd editor && npm run dev` and check `/tmp/mv-vite.log`
+or the terminal you started it from.
+
+**`npm run mv:tunnel` says `cloudflared` is not installed** → install it with
+`brew install cloudflared`.
 
 **Tunnel URL loads but `/api/songs` 500s** → sidecar isn't running because Vite
 didn't start. Run `cd editor && npm run dev` and check stderr.

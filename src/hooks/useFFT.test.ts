@@ -114,4 +114,38 @@ describe("useFFT", () => {
       }),
     );
   });
+
+  it("resolves asset-id audio sources through the asset registry", async () => {
+    useWindowedAudioDataMock.mockReturnValue({
+      audioData: null,
+      dataOffsetInSeconds: 0,
+    });
+
+    const Probe = () => {
+      useFFT({
+        src: "ast_00000000000000bb",
+        frame: 8,
+        fps: 24,
+        assetRegistry: [
+          {
+            id: "ast_00000000000000aa",
+            path: "projects/demo/song.wav",
+            aliases: ["ast_00000000000000bb"],
+          },
+        ],
+      });
+      return null;
+    };
+
+    await act(async () => {
+      root.render(React.createElement(Probe));
+    });
+
+    expect(useWindowedAudioDataMock).toHaveBeenCalledWith({
+      src: "/static/projects/demo/song.wav",
+      frame: 8,
+      fps: 24,
+      windowInSeconds: 3,
+    });
+  });
 });

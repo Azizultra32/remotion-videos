@@ -38,7 +38,7 @@ export type RenderCtx = {
   events: EventMark[];
   // Asset registry for resolving asset IDs to paths. Null in CLI renders
   // (mv-render pre-resolves), populated in editor preview.
-  assetRegistry: Array<{ id: string; path: string }> | null;
+  assetRegistry: Array<{ id: string; path: string; aliases?: string[] }> | null;
 };
 
 export type ElementRendererProps<P = Record<string, unknown>> = {
@@ -52,12 +52,14 @@ export type ElementControlsProps<P = Record<string, unknown>> = {
 };
 
 export type MediaFieldKind = "image" | "video" | "gif";
+export type MediaFieldRole = "source" | "collection";
 
 export type MediaFieldDefinition = {
   name: string;
   kind: MediaFieldKind;
   multi?: boolean;
   label?: string;
+  role?: MediaFieldRole;
 };
 
 export type ElementModule<P = Record<string, unknown>> = {

@@ -102,6 +102,7 @@ export const musicVideoSchema = z.object({
       z.object({
         id: z.string(),
         path: z.string(),
+        aliases: z.array(z.string()).optional(),
       }),
     )
     .nullable()
@@ -116,7 +117,7 @@ export type MusicVideoProps = {
   events?: EventMark[];
   muteAudioTag?: boolean;
   analysisAudioSrc?: string | null;
-  assetRegistry?: Array<{ id: string; path: string }> | null;
+  assetRegistry?: Array<{ id: string; path: string; aliases?: string[] }> | null;
 };
 
 const isActive = (el: TimelineElement, t: number, events: EventMark[]): boolean => {

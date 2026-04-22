@@ -1,7 +1,11 @@
 import type React from "react";
-import { OffthreadVideo, staticFile } from "remotion";
+import { staticFile } from "remotion";
 import { z } from "zod";
-import { expDecay, resolveStatic } from "../_helpers";
+import { resolveStatic } from "../_helpers";
+import { buildMediaEffectStyle } from "../effectStackRuntime";
+import { MediaClip } from "../MediaClip";
+import { secondsToStartFrame } from "../mediaRuntime";
+import { getExponentialTriggerDecay } from "../modulationRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
@@ -46,8 +50,13 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   if (beatBrightnessBoost > 0) {
     const lastBeat = ctx.beats.lastBeatBefore(ctx.absTimeSec);
     if (lastBeat != null && lastBeat >= element.startSec) {
-      brightness =
-        1 + beatBrightnessBoost * expDecay(ctx.absTimeSec - lastBeat, beatBrightnessDecay);
+      brightness = getExponentialTriggerDecay({
+        lastTriggerAt: lastBeat,
+        tSec: ctx.absTimeSec,
+        decay: beatBrightnessDecay,
+        amplitude: beatBrightnessBoost,
+        baseline: 1,
+      });
     }
   }
 
@@ -56,17 +65,22 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
       style={{
         position: "absolute",
         inset: 0,
-        opacity,
-        transform: `scale(${scale})`,
-        filter: brightness !== 1 ? `brightness(${brightness})` : undefined,
         overflow: "hidden",
+        ...buildMediaEffectStyle({
+          opacity,
+          scale,
+          effects: brightness !== 1 ? [{ type: "brightness", amount: brightness }] : [],
+        }),
       }}
     >
-      <OffthreadVideo
-        src={resolved}
-        startFrom={Math.round(videoStartSec * ctx.fps)}
-        muted={muted}
-        style={{ width: "100%", height: "100%", objectFit }}
+      <MediaClip
+        source={{
+          kind: "video",
+          src: resolved,
+          muted,
+          startFromFrame: secondsToStartFrame(videoStartSec, ctx.fps),
+        }}
+        fit={objectFit}
       />
     </div>
   );

@@ -1,7 +1,10 @@
 import type React from "react";
-import { OffthreadVideo, staticFile } from "remotion";
+import { staticFile } from "remotion";
 import { z } from "zod";
 import { resolveStatic } from "../_helpers";
+import { buildMediaEffectStyle } from "../effectStackRuntime";
+import { MediaClip } from "../MediaClip";
+import { getPercentBoxStyle, secondsToStartFrame } from "../mediaRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Speed-adjustable video. A single clip with playbackRate + startFromSec +
@@ -18,11 +21,13 @@ const schema = z.object({
   videoSrc: z.string(),
   playbackRate: z.number().min(0.01).max(100).step(0.05),
   startFromSec: z.number().min(0).max(600).step(0.01),
-  fit: z.enum(["cover", "contain"]),
+  fit: z.enum(["cover", "contain", "fill"]),
   x: z.number().min(-50).max(150),
   y: z.number().min(-50).max(150),
   widthPct: z.number().min(1).max(200),
   heightPct: z.number().min(1).max(200),
+  opacity: z.number().min(0).max(1).step(0.01),
+  scale: z.number().min(0.1).max(5).step(0.01),
   muted: z.boolean(),
   volume: z.number().min(0).max(1).step(0.01),
 });
@@ -38,36 +43,58 @@ const defaults: Props = {
   y: 50,
   widthPct: 100,
   heightPct: 100,
+  opacity: 1,
+  scale: 1,
   muted: true,
   volume: 0,
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { videoSrc, playbackRate, startFromSec, fit, x, y, widthPct, heightPct, muted, volume } =
-    element.props;
+  const {
+    videoSrc,
+    playbackRate,
+    startFromSec,
+    fit,
+    x,
+    y,
+    widthPct,
+    heightPct,
+    opacity,
+    scale,
+    muted,
+    volume,
+  } = element.props;
 
   if (!videoSrc) return null;
   const src = resolveStatic(videoSrc, staticFile, ctx.assetRegistry);
-
-  const wrap: React.CSSProperties = {
-    position: "absolute",
-    left: `${x - widthPct / 2}%`,
-    top: `${y - heightPct / 2}%`,
-    width: `${widthPct}%`,
-    height: `${heightPct}%`,
-    pointerEvents: "none",
-    overflow: "hidden",
-  };
+  const wrap = getPercentBoxStyle({
+    x,
+    y,
+    widthPct,
+    heightPct,
+    overflowHidden: true,
+  });
 
   return (
-    <div style={wrap}>
-      <OffthreadVideo
-        src={src}
-        muted={muted}
-        volume={muted ? 0 : volume}
-        playbackRate={Math.max(0.001, playbackRate)}
-        startFrom={Math.max(0, Math.round(startFromSec * ctx.fps))}
-        style={{ width: "100%", height: "100%", objectFit: fit }}
+    <div
+      style={{
+        ...wrap,
+        ...buildMediaEffectStyle({
+          opacity,
+          scale,
+        }),
+      }}
+    >
+      <MediaClip
+        source={{
+          kind: "video",
+          src,
+          muted,
+          volume: muted ? 0 : volume,
+          playbackRate: Math.max(0.001, playbackRate),
+          startFromFrame: secondsToStartFrame(startFromSec, ctx.fps),
+        }}
+        fit={fit}
       />
     </div>
   );
@@ -77,7 +104,8 @@ export const SpeedVideoModule: ElementModule<Props> = {
   id: "overlay.speedVideo",
   category: "overlay",
   label: "Speed Video",
-  description: "Video clip with adjustable playbackRate + startFromSec. Chain multiple instances on the timeline for beat-ramped speed changes.",
+  description:
+    "Video clip with adjustable playbackRate + startFromSec. Chain multiple instances on the timeline for beat-ramped speed changes.",
   defaultDurationSec: 30,
   defaultTrack: 8,
   schema,

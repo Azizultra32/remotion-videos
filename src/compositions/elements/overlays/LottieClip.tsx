@@ -1,9 +1,14 @@
 import type React from "react";
 import { useEffect, useState } from "react";
-import { AbsoluteFill, delayRender, continueRender, interpolate, staticFile } from "remotion";
+import { AbsoluteFill, continueRender, delayRender, staticFile } from "remotion";
 import { Lottie, type LottieAnimationData } from "@remotion/lottie";
 import { z } from "zod";
 import { resolveStatic } from "../_helpers";
+import {
+  getElementFadeOpacity,
+  getFillMediaStyle,
+  getPercentBoxStyle,
+} from "../mediaRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Lottie animation playback (JSON files from After Effects via Bodymovin
@@ -47,81 +52,86 @@ const defaults: Props = {
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
   const { jsonSrc, x, y, widthPct, heightPct, playbackRate, loop, direction, fadeInSec, fadeOutSec } =
     element.props;
+  const resolvedJsonUrl = jsonSrc
+    ? resolveStatic(jsonSrc, staticFile, ctx.assetRegistry)
+    : "";
 
   const [data, setData] = useState<LottieAnimationData | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [handle] = useState(() => delayRender("Loading Lottie JSON"));
+  const [renderHandle] = useState(() => delayRender("Loading Lottie JSON"));
 
   useEffect(() => {
-    if (!jsonSrc) {
-      continueRender(handle);
+    return () => {
+      continueRender(renderHandle);
+    };
+  }, [renderHandle]);
+
+  useEffect(() => {
+    if (!resolvedJsonUrl) {
+      setData(null);
+      setErr(null);
+      continueRender(renderHandle);
       return;
     }
-    let cancelled = false;
-    const url = resolveStatic(jsonSrc, staticFile, ctx.assetRegistry);
-    fetch(url)
+
+    const loadHandle = delayRender(`Loading Lottie JSON from ${resolvedJsonUrl}`);
+    const controller = new AbortController();
+    let done = false;
+
+    setData(null);
+    setErr(null);
+
+    fetch(resolvedJsonUrl, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
       .then((j: LottieAnimationData) => {
-        if (!cancelled) {
-          setData(j);
-          continueRender(handle);
-        }
+        setData(j);
+        done = true;
+        continueRender(loadHandle);
+        continueRender(renderHandle);
       })
       .catch((e) => {
-        if (!cancelled) {
-          setErr(String(e));
-          continueRender(handle);
+        if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) {
+          continueRender(loadHandle);
+          return;
         }
+
+        setErr(String(e));
+        done = true;
+        continueRender(loadHandle);
+        continueRender(renderHandle);
       });
+
     return () => {
-      cancelled = true;
+      if (!done && !controller.signal.aborted) {
+        controller.abort();
+      }
+
+      continueRender(loadHandle);
+      continueRender(renderHandle);
     };
-  }, [jsonSrc, handle]);
+  }, [renderHandle, resolvedJsonUrl]);
 
-  const localSec = ctx.elementLocalSec;
-  const durationSec = element.durationSec;
-
-  const fadeIn =
-    fadeInSec <= 0
-      ? 1
-      : interpolate(localSec, [0, fadeInSec], [0, 1], {
-          extrapolateLeft: "clamp",
-          extrapolateRight: "clamp",
-        });
-  const fadeOut =
-    fadeOutSec <= 0
-      ? 1
-      : interpolate(
-          localSec,
-          [Math.max(0, durationSec - fadeOutSec), durationSec],
-          [1, 0],
-          { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-        );
-  const opacity = fadeIn * fadeOut;
+  const opacity = getElementFadeOpacity({
+    localSec: ctx.elementLocalSec,
+    durationSec: element.durationSec,
+    fadeInSec,
+    fadeOutSec,
+  });
 
   if (err || !data) return null;
 
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
-      <div
-        style={{
-          position: "absolute",
-          left: `${x - widthPct / 2}%`,
-          top: `${y - heightPct / 2}%`,
-          width: `${widthPct}%`,
-          height: `${heightPct}%`,
-          opacity,
-        }}
-      >
+      <div style={getPercentBoxStyle({ x, y, widthPct, heightPct, opacity })}>
         <Lottie
           animationData={data}
           loop={loop}
           direction={direction}
-          playbackRate={playbackRate}
-          style={{ width: "100%", height: "100%" }}
+          playbackRate={Math.max(0.1, playbackRate)}
+          style={getFillMediaStyle()}
         />
       </div>
     </AbsoluteFill>

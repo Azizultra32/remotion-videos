@@ -1,8 +1,9 @@
 import type React from "react";
-import { AbsoluteFill, interpolate, staticFile } from "remotion";
-import { Gif } from "@remotion/gif";
+import { AbsoluteFill, staticFile } from "remotion";
 import { z } from "zod";
 import { resolveStatic } from "../_helpers";
+import { MediaClip } from "../MediaClip";
+import { getElementFadeOpacity, getPercentBoxStyle } from "../mediaRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 // Animated GIF playback. Uses @remotion/gif which decodes frames ahead
@@ -39,35 +40,40 @@ const defaults: Props = {
 };
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { gifSrc, x, y, widthPct, heightPct, fit, playbackRate, loopBehavior, fadeInSec, fadeOutSec } =
-    element.props;
+  const {
+    gifSrc,
+    x,
+    y,
+    widthPct,
+    heightPct,
+    fit,
+    playbackRate,
+    loopBehavior,
+    fadeInSec,
+    fadeOutSec,
+  } = element.props;
 
   if (!gifSrc) return null;
 
-  const localSec = ctx.elementLocalSec;
-  const durationSec = element.durationSec;
-  const fadeIn = fadeInSec <= 0 ? 1 : interpolate(localSec, [0, fadeInSec], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const fadeOut = fadeOutSec <= 0 ? 1 : interpolate(localSec, [Math.max(0, durationSec - fadeOutSec), durationSec], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const opacity = fadeIn * fadeOut;
+  const opacity = getElementFadeOpacity({
+    localSec: ctx.elementLocalSec,
+    durationSec: element.durationSec,
+    fadeInSec,
+    fadeOutSec,
+  });
+  const wrap = getPercentBoxStyle({ x, y, widthPct, heightPct, opacity });
 
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
-      <div
-        style={{
-          position: "absolute",
-          left: `${x - widthPct / 2}%`,
-          top: `${y - heightPct / 2}%`,
-          width: `${widthPct}%`,
-          height: `${heightPct}%`,
-          opacity,
-        }}
-      >
-        <Gif
-          src={resolveStatic(gifSrc, staticFile, ctx.assetRegistry)}
+      <div style={wrap}>
+        <MediaClip
+          source={{
+            kind: "gif",
+            src: resolveStatic(gifSrc, staticFile, ctx.assetRegistry),
+            playbackRate,
+            loopBehavior,
+          }}
           fit={fit}
-          playbackRate={playbackRate}
-          loopBehavior={loopBehavior}
-          style={{ width: "100%", height: "100%" }}
         />
       </div>
     </AbsoluteFill>

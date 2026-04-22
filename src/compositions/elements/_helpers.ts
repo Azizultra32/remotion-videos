@@ -26,19 +26,19 @@ export const FONT_STACK = "'Helvetica Neue', Helvetica, Inter, system-ui, sans-s
 export const resolveStatic = (
   src: string,
   staticFile: (s: string) => string,
-  assetRegistry?: Array<{ id: string; path: string }> | null,
+  assetRegistry?: Array<{ id: string; path: string; aliases?: string[] }> | null,
 ): string => {
   // HTTP URLs and absolute paths pass through
   if (src.startsWith("http") || src.startsWith("/")) return src;
 
   // Asset IDs: resolve via registry if available
-  if (/^ast_[0-9a-f]{16}$/.test(src)) {
+  if (/^ast_(?:[0-9a-f]{16}|[0-9a-f]{32})$/.test(src)) {
     if (!assetRegistry || assetRegistry.length === 0) {
       console.warn(`[resolveStatic] asset ID ${src} requires assetRegistry in RenderCtx`);
       return src; // Will fail visibly at render time
     }
 
-    const record = assetRegistry.find((r) => r.id === src);
+    const record = assetRegistry.find((r) => r.id === src || r.aliases?.includes(src));
     if (!record) {
       console.warn(`[resolveStatic] asset ID not found in registry: ${src}`);
       return src;

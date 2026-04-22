@@ -91,8 +91,9 @@ const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
 
   // Cross-fade: current fades in over fadeSec, prev fades out.
   const fadeT = fadeSec > 0 ? Math.min(1, tSinceChange / fadeSec) : 1;
-  const currentOpacity = fadeT;
-  const prevOpacity = prevSrc && fadeT < 1 ? 1 - fadeT : 0;
+  const repeatsCurrent = prevIdx >= 0 && prevSrc === currentSrc;
+  const currentOpacity = repeatsCurrent ? 1 : fadeT;
+  const prevOpacity = prevSrc && !repeatsCurrent && fadeT < 1 ? 1 - fadeT : 0;
 
   const wrap: React.CSSProperties = {
     position: "absolute",

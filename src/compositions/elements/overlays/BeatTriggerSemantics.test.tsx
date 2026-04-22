@@ -508,6 +508,31 @@ describe("beat trigger helper contract", () => {
       expect(images).toHaveLength(1);
       expect(images[0]?.getAttribute("data-src")).toBe("/static/accent.png");
     });
+
+    it("does not cross-fade the same image against itself when selection repeats", async () => {
+      await act(async () => {
+        root.render(
+          <BeatImageCycleModule.Renderer
+            ctx={buildCtx({ beats: [0.5], tSec: 0.5 })}
+            element={{
+              ...baseElement,
+              props: {
+                ...BeatImageCycleModule.defaults,
+                fadeSec: 0.25,
+                images: ["solo.png"],
+                triggerOn: "beats",
+              },
+              type: BeatImageCycleModule.id,
+            }}
+          />,
+        );
+      });
+
+      const images = Array.from(container.querySelectorAll('[data-testid="img"]'));
+      expect(images).toHaveLength(1);
+      expect(images[0]?.getAttribute("data-src")).toBe("/static/solo.png");
+      expect(Number(readMockStyle(images[0]).opacity)).toBe(1);
+    });
   });
 
   describe("BeatVideoCycle", () => {

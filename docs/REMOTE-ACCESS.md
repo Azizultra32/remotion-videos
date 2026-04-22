@@ -14,7 +14,9 @@ This wraps `cloudflared tunnel --url http://127.0.0.1:4000`, prints the
 resulting `https://<random>.trycloudflare.com` URL, and refuses to report
 success until both `/` and `/api/songs` return `200` through the public URL.
 The wrapper now hands `cloudflared` off to a per-user `launchd` job, so the
-public URL stays alive after the shell command itself returns.
+public URL stays alive after the shell command itself returns. If the editor
+is not already healthy on `127.0.0.1:4000`, the wrapper also starts a managed
+Vite editor service under `launchd` before exposing the tunnel.
 
 Kill it with:
 
@@ -42,7 +44,8 @@ reverted — re-apply.
 
 **Lifecycle:** `npm run mv:tunnel` exits after the public URL is healthy; the
 tunnel process keeps running under `launchd` until you explicitly stop it with
-`npm run mv:tunnel -- --kill`.
+`npm run mv:tunnel -- --kill`. If the wrapper had to auto-start the editor, the
+same kill command stops that managed editor service too.
 
 ## Path 2 — Named cloudflared tunnel (stable URL, free)
 
@@ -101,9 +104,9 @@ a few minutes after copy (sync latency depends on connection).
 `allowedHosts: true` in `editor/vite.config.ts`. Should already be set; if
 reverted, re-apply (engine-locked path, requires `ENGINE_UNLOCK=1`).
 
-**`npm run mv:tunnel` says the editor is not reachable on `http://127.0.0.1:4000`**
-→ Vite isn't up. Run `cd editor && npm run dev` and check `/tmp/mv-vite.log`
-or the terminal you started it from.
+**`npm run mv:tunnel` says the managed editor did not become healthy**
+→ the wrapper tried to boot the editor for you, but Vite never came up on
+`127.0.0.1:4000`. Check `/tmp/mv-editor.stdout` and `/tmp/mv-editor.stderr`.
 
 **`npm run mv:tunnel` says `cloudflared` is not installed** → install it with
 `brew install cloudflared`.

@@ -1,14 +1,20 @@
 import type React from "react";
 import { memo, useMemo } from "react";
-import { OffthreadVideo, staticFile } from "remotion";
+import { OffthreadVideo, Sequence, staticFile } from "remotion";
 import { z } from "zod";
 import { resolveStatic } from "../_helpers";
+import { getFillMediaStyle, getPercentBoxStyle, secondsToStartFrame } from "../mediaRuntime";
+import { selectTriggeredMedia } from "../mediaSelectionRuntime";
+import { selectTriggerTimes } from "../triggerRuntime";
 import type { ElementModule, ElementRendererProps } from "../types";
 
 const schema = z.object({
   videos: z.array(z.string()),
   triggerOn: z.enum(["beats", "downbeats", "drops"]),
   everyN: z.number().int().min(1).max(32),
+  selectionMode: z.enum(["sequence", "seeded-random", "weighted-random"]),
+  selectionSeed: z.string().max(120),
+  selectionWeights: z.array(z.number().positive().max(1000)).max(64),
   fit: z.enum(["cover", "contain"]),
   x: z.number().min(-50).max(150),
   y: z.number().min(-50).max(150),
@@ -25,6 +31,9 @@ const defaults: Props = {
   videos: [],
   triggerOn: "downbeats",
   everyN: 1,
+  selectionMode: "sequence",
+  selectionSeed: "",
+  selectionWeights: [],
   fit: "cover",
   x: 50,
   y: 50,
@@ -43,72 +52,83 @@ type ClipPlayerProps = {
   fit: "cover" | "contain";
 };
 
-const ClipPlayer = memo(function ClipPlayer({ src, startFromFrame, muted, volume, fit }: ClipPlayerProps) {
+const ClipPlayer = memo(function ClipPlayer({
+  src,
+  startFromFrame,
+  muted,
+  volume,
+  fit,
+}: ClipPlayerProps) {
   return (
     <OffthreadVideo
       src={src}
       muted={muted}
       volume={muted ? 0 : volume}
       startFrom={startFromFrame}
-      style={{ width: "100%", height: "100%", objectFit: fit }}
+      style={getFillMediaStyle(fit)}
     />
   );
 });
 
 const Renderer: React.FC<ElementRendererProps<Props>> = ({ element, ctx }) => {
-  const { videos, triggerOn, everyN, fit, x, y, widthPct, heightPct, startFromSec, muted, volume } =
-    element.props;
-
-  const beatArr =
-    triggerOn === "beats" ? ctx.beats.beats :
-    triggerOn === "downbeats" ? ctx.beats.downbeats :
-    ctx.beats.drops;
+  const {
+    videos,
+    triggerOn,
+    everyN,
+    selectionMode,
+    selectionSeed,
+    selectionWeights,
+    fit,
+    x,
+    y,
+    widthPct,
+    heightPct,
+    startFromSec,
+    muted,
+    volume,
+  } = element.props;
 
   const tSec = ctx.frame / Math.max(1, ctx.fps);
+  const triggerTimes = selectTriggerTimes(ctx.beats, triggerOn);
 
-  const { currentIdx, clipStartSec } = useMemo(() => {
-    if (videos.length === 0 || beatArr.length === 0) {
-      return { currentIdx: 0, clipStartSec: 0 };
-    }
-    let passed = 0;
-    let lastTriggerAt = 0;
-    for (const b of beatArr) {
-      if (b > tSec) break;
-      passed += 1;
-      if (passed % everyN === 0) lastTriggerAt = b;
-    }
-    const stepCount = Math.floor(passed / everyN);
-    return {
-      currentIdx: stepCount % videos.length,
-      clipStartSec: lastTriggerAt,
-    };
-  }, [videos.length, beatArr, tSec, everyN]);
+  const { currentIdx, anchorSec: clipStartSec } = useMemo(
+    () =>
+      selectTriggeredMedia({
+        items: videos,
+        triggerTimes,
+        tSec,
+        everyN,
+        selectionMode,
+        seed: selectionSeed,
+        weights: selectionWeights,
+      }),
+    [videos, triggerTimes, tSec, everyN, selectionMode, selectionSeed, selectionWeights],
+  );
 
   if (videos.length === 0) return null;
   const src = resolveStatic(videos[currentIdx], staticFile, ctx.assetRegistry);
-  const tInClip = Math.max(0, tSec - clipStartSec);
-  const startFromFrame = Math.max(0, Math.round((startFromSec + tInClip) * ctx.fps));
-
-  const wrap: React.CSSProperties = {
-    position: "absolute",
-    left: `${x - widthPct / 2}%`,
-    top: `${y - heightPct / 2}%`,
-    width: `${widthPct}%`,
-    height: `${heightPct}%`,
-    pointerEvents: "none",
-    overflow: "hidden",
-  };
+  const clipStartFrame = secondsToStartFrame(clipStartSec, ctx.fps);
+  const startFromFrame = secondsToStartFrame(startFromSec, ctx.fps);
+  const wrap = getPercentBoxStyle({
+    x,
+    y,
+    widthPct,
+    heightPct,
+    overflowHidden: true,
+  });
 
   return (
     <div style={wrap}>
-      <ClipPlayer
-        key={currentIdx}
-        src={src}
-        startFromFrame={startFromFrame}
-        muted={muted}
-        volume={volume}
-        fit={fit}
-      />
+      <Sequence from={clipStartFrame}>
+        <ClipPlayer
+          key={`${currentIdx}:${clipStartFrame}`}
+          src={src}
+          startFromFrame={startFromFrame}
+          muted={muted}
+          volume={volume}
+          fit={fit}
+        />
+      </Sequence>
     </div>
   );
 };
@@ -117,11 +137,14 @@ export const BeatVideoCycleModule: ElementModule<Props> = {
   id: "overlay.beatVideoCycle",
   category: "overlay",
   label: "Beat Video Cycle",
-  description: "Cycles through a list of video clips on every Nth beat/downbeat/drop. Plays muted by default.",
+  description:
+    "Cycles through a list of video clips on every Nth beat/downbeat/drop. Plays muted by default.",
   defaultDurationSec: 30,
   defaultTrack: 8,
   schema,
   defaults,
-  mediaFields: [{ name: "videos", kind: "video", multi: true }],
+  mediaFields: [
+    { name: "videos", kind: "video", multi: true, role: "collection", label: "Video collection" },
+  ],
   Renderer,
 };

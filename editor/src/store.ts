@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { EditorState } from "./types";
+import type { AssetId, AssetRecord } from "./types/assetRecord";
 import {
   removeEventByName as removeEventMarkPure,
   renameEvent as renameEventMarkPure,
@@ -9,10 +10,16 @@ import {
 } from "./utils/eventsFile";
 import { mergePipelineElements } from "./utils/pipelineElements";
 
+function recordMatchesId(record: AssetRecord, id: AssetId): boolean {
+  return record.id === id || record.aliases?.includes(id) === true;
+}
+
 export const useEditorStore = create<EditorState>()(
   persist(
     (set, get) => ({
       elements: [],
+      assetRecords: [],
+      assetRegistryError: null,
       currentTimeSec: 0,
       isPlaying: false,
       selectedElementId: null,
@@ -39,6 +46,30 @@ export const useEditorStore = create<EditorState>()(
         })),
       setPlaying: (p) => set({ isPlaying: p }),
       addElement: (el) => set((s) => ({ elements: [...s.elements, el] })),
+      setAssetRecords: (records) => set({ assetRecords: records }),
+      upsertAssetRecord: (record) =>
+        set((s) => {
+          const existingIndex = s.assetRecords.findIndex((candidate) =>
+            recordMatchesId(candidate, record.id),
+          );
+          if (existingIndex === -1) {
+            return { assetRecords: [...s.assetRecords, record] };
+          }
+
+          const assetRecords = [...s.assetRecords];
+          assetRecords[existingIndex] = record;
+          return { assetRecords };
+        }),
+      removeAssetRecord: (id) =>
+        set((s) => ({
+          assetRecords: s.assetRecords.filter((record) => !recordMatchesId(record, id)),
+        })),
+      findAssetRecordById: (id) => {
+        return get().assetRecords.find((record) => recordMatchesId(record, id)) ?? null;
+      },
+      findAssetRecordByPath: (path) => {
+        return get().assetRecords.find((record) => record.path === path) ?? null;
+      },
       updateElement: (id, partial) =>
         set((s) => ({
           elements: s.elements.map((e) => (e.id === id ? { ...e, ...partial } : e)),
@@ -71,7 +102,7 @@ export const useEditorStore = create<EditorState>()(
           const body = (await r.json()) as
             | Array<{ stem: string; audioSrc: string; beatsSrc: string }>
             | { songs?: Array<{ stem: string; audioSrc: string; beatsSrc: string }> };
-          const songs = Array.isArray(body) ? body : body.songs ?? [];
+          const songs = Array.isArray(body) ? body : (body.songs ?? []);
           const match = songs.find((s) => s.stem === stem);
           if (!match || !match.audioSrc) return false;
           get().setTrack(match.audioSrc, match.beatsSrc);
@@ -90,6 +121,8 @@ export const useEditorStore = create<EditorState>()(
           audioSrc,
           beatsSrc,
           elements: [],
+          assetRecords: [],
+          assetRegistryError: null,
           currentTimeSec: 0,
           isPlaying: false,
           selectedElementId: null,

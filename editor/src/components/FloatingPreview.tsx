@@ -20,13 +20,12 @@ import {
   type MusicVideoProps,
 } from "@compositions/MusicVideo";
 import { Player, type PlayerRef } from "@remotion/player";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useProjectAssetRegistry } from "../hooks/useProjectAssetRegistry";
 import { useEditorStore } from "../store";
 import { useStorage } from "../hooks/useStorage";
 import { SIDEBAR_COL_WIDTH, DEFAULT_LEFT_MARGIN } from "../constants/layout";
 import { stemFromAudioSrc, toEditorUrl } from "../utils/url";
-import { loadAssetRegistry } from "../lib/assetRecordStore";
-import type { AssetRecord } from "../types/assetRecord";
 import {
   computeDragPosition,
   type Pos,
@@ -50,10 +49,8 @@ const defaultTopCenter = (): Pos => {
 };
 
 export const FloatingPreview = () => {
-  const stem = useEditorStore((s) => {
-    const src = s.audioSrc;
-    return src ? src.replace(/^.*\//, "").replace(/\.[^.]+$/, "") : null;
-  });
+  const audioSrc = useEditorStore((s) => s.audioSrc);
+  const stem = stemFromAudioSrc(audioSrc);
   const [open, setOpen] = useStorage(
     "floatingPreview:open",
     false,
@@ -70,26 +67,16 @@ export const FloatingPreview = () => {
   const elements = useEditorStore((s) => s.elements);
   const events = useEditorStore((s) => s.events);
   const compositionDuration = useEditorStore((s) => s.compositionDuration);
-  const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);
 
   const playerRef = useRef<PlayerRef>(null);
   const audioUrl = useMemo(() => toEditorUrl(audioSrc), [audioSrc]);
 
-  const [assetRegistry, setAssetRegistry] = useState<AssetRecord[] | null>(null);
-  const currentStem = stemFromAudioSrc(audioSrc);
-
-  useEffect(() => {
-    if (!currentStem) {
-      setAssetRegistry(null);
-      return;
-    }
-    let cancelled = false;
-    loadAssetRegistry(currentStem)
-      .then((records) => { if (!cancelled) setAssetRegistry(records); })
-      .catch(() => { if (!cancelled) setAssetRegistry(null); });
-    return () => { cancelled = true; };
-  }, [currentStem]);
+  const { assetRecords, assetRegistryError } = useProjectAssetRegistry();
+  const hasAssetIds = useMemo(
+    () => elements.some((element) => JSON.stringify(element.props ?? {}).includes('"ast_')),
+    [elements],
+  );
 
   const inputProps = useMemo(
     () => ({
@@ -100,9 +87,10 @@ export const FloatingPreview = () => {
       events,
       muteAudioTag: true,
       analysisAudioSrc: audioUrl,
-      assetRegistry: assetRegistry?.map((r) => ({ id: r.id, path: r.path })) ?? null,
+      assetRegistry:
+        assetRecords.map((r) => ({ id: r.id, path: r.path, aliases: r.aliases })),
     }),
-    [audioUrl, beatsSrc, elements, events, assetRegistry],
+    [assetRecords, audioUrl, beatsSrc, elements, events],
   );
 
   // Mirror play/pause
@@ -110,9 +98,13 @@ export const FloatingPreview = () => {
     if (!open) return;
     const p = playerRef.current;
     if (!p) return;
+    const desiredFrame = Math.round(useEditorStore.getState().currentTimeSec * fps);
+    if (Math.abs(p.getCurrentFrame() - desiredFrame) > 2) {
+      p.seekTo(desiredFrame);
+    }
     if (isPlaying) p.play();
     else p.pause();
-  }, [isPlaying, open]);
+  }, [fps, isPlaying, open]);
 
   // Mirror seeks — subscribe imperatively to avoid re-rendering 24 Hz.
   useEffect(() => {
@@ -208,6 +200,25 @@ export const FloatingPreview = () => {
         flexDirection: "column",
       }}
     >
+      {hasAssetIds && assetRegistryError ? (
+        <div
+          style={{
+            position: "absolute",
+            top: HEADER_HEIGHT + 8,
+            left: 8,
+            right: 8,
+            zIndex: 20,
+            padding: "8px 10px",
+            borderRadius: 6,
+            background: "rgba(96, 18, 18, 0.92)",
+            border: "1px solid rgba(255, 160, 160, 0.35)",
+            color: "#ffe3e3",
+            fontSize: 12,
+          }}
+        >
+          Asset registry failed to load. Asset-ID preview resolution may be incomplete.
+        </div>
+      ) : null}
       <div
         onPointerDown={onHeaderPointerDown}
         style={{

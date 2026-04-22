@@ -11,15 +11,16 @@
 
 import { defaultMusicVideoProps, MusicVideo, type MusicVideoProps } from "@compositions/MusicVideo";
 import { type CallbackListener, Player, type PlayerRef } from "@remotion/player";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useProjectAssetRegistry } from "../hooks/useProjectAssetRegistry";
 import { useEditorStore } from "../store";
-import { toEditorUrl, stemFromAudioSrc } from "../utils/url";
-import { loadAssetRegistry } from "../lib/assetRecordStore";
-import type { AssetRecord } from "../types/assetRecord";
+import { shouldHardSeekAudio } from "../utils/previewTransport";
+import { toEditorUrl } from "../utils/url";
 
 export const Preview = () => {
   const playerRef = useRef<PlayerRef>(null);
   const audioElRef = useRef<HTMLAudioElement>(null);
+  const lastPlayerClockTimeSecRef = useRef<number | null>(null);
 
   const fps = useEditorStore((s) => s.fps);
   const isPlaying = useEditorStore((s) => s.isPlaying);
@@ -29,34 +30,15 @@ export const Preview = () => {
   const audioSrc = useEditorStore((s) => s.audioSrc);
   const beatsSrc = useEditorStore((s) => s.beatsSrc);
 
-  const [assetRegistry, setAssetRegistry] = useState<AssetRecord[] | null>(null);
-  const currentStem = stemFromAudioSrc(audioSrc);
+  const { assetRecords, assetRegistryError } = useProjectAssetRegistry();
+  const hasAssetIds = useMemo(
+    () => elements.some((element) => JSON.stringify(element.props ?? {}).includes('"ast_')),
+    [elements],
+  );
 
   // Resolve audio URL via the canonical helper (routes projects/<stem>/... to
   // /api/projects/<stem>/... under the sidecar's serving).
   const audioUrl = useMemo(() => toEditorUrl(audioSrc), [audioSrc]);
-
-  // Load asset registry when stem changes
-  useEffect(() => {
-    if (!currentStem) {
-      setAssetRegistry(null);
-      return;
-    }
-
-    let cancelled = false;
-    loadAssetRegistry(currentStem)
-      .then((records) => {
-        if (!cancelled) setAssetRegistry(records);
-      })
-      .catch((err) => {
-        console.error("Failed to load asset registry:", err);
-        if (!cancelled) setAssetRegistry(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentStem]);
 
   // Visuals only: force audioSrc=null + muteAudioTag so MusicVideo skips
   // its <Audio> tag. The separate <audio> element below owns playback.
@@ -73,9 +55,10 @@ export const Preview = () => {
       events,
       muteAudioTag: true,
       analysisAudioSrc: audioUrl,
-      assetRegistry: assetRegistry?.map((r) => ({ id: r.id, path: r.path })) ?? null,
+      assetRegistry:
+        assetRecords.map((r) => ({ id: r.id, path: r.path, aliases: r.aliases })),
     }),
-    [audioUrl, beatsSrc, elements, events, assetRegistry],
+    [assetRecords, audioUrl, beatsSrc, elements, events],
   );
 
   // Transport: isPlaying drives BOTH the Player (visuals) and the <audio>
@@ -83,7 +66,15 @@ export const Preview = () => {
   useEffect(() => {
     const player = playerRef.current;
     const audioEl = audioElRef.current;
+    const desiredSec = useEditorStore.getState().currentTimeSec;
+    const desiredFrame = Math.round(desiredSec * fps);
     if (isPlaying) {
+      if (player && Math.abs(player.getCurrentFrame() - desiredFrame) > 2) {
+        player.seekTo(desiredFrame);
+      }
+      if (audioEl && Math.abs(audioEl.currentTime - desiredSec) > 0.05) {
+        audioEl.currentTime = desiredSec;
+      }
       player?.play();
       audioEl?.play().catch(() => {});
     } else {
@@ -97,6 +88,15 @@ export const Preview = () => {
   useEffect(() => {
     const unsub = useEditorStore.subscribe((state, prev) => {
       if (state.currentTimeSec === prev.currentTimeSec) return;
+
+      const lastPlayerClockTimeSec = lastPlayerClockTimeSecRef.current;
+      const isPlayerClockUpdate =
+        state.isPlaying &&
+        prev.isPlaying &&
+        lastPlayerClockTimeSec !== null &&
+        Math.abs(lastPlayerClockTimeSec - state.currentTimeSec) <= 0.5 / Math.max(1, fps);
+      if (isPlayerClockUpdate) return;
+
       const player = playerRef.current;
       const audioEl = audioElRef.current;
       const desired = Math.round(state.currentTimeSec * fps);
@@ -104,7 +104,8 @@ export const Preview = () => {
         const actual = player.getCurrentFrame();
         if (Math.abs(desired - actual) > 2) player.seekTo(desired);
       }
-      if (audioEl && Math.abs(audioEl.currentTime - state.currentTimeSec) > 0.25) {
+      const audioDeltaSec = audioEl ? Math.abs(audioEl.currentTime - state.currentTimeSec) : 0;
+      if (audioEl && shouldHardSeekAudio({ state, prev, audioDeltaSec })) {
         audioEl.currentTime = state.currentTimeSec;
       }
     });
@@ -118,7 +119,9 @@ export const Preview = () => {
     const player = playerRef.current;
     if (!player) return;
     const handler: CallbackListener<"frameupdate"> = (e) => {
-      useEditorStore.setState({ currentTimeSec: e.detail.frame / fps });
+      const currentTimeSec = e.detail.frame / fps;
+      lastPlayerClockTimeSecRef.current = currentTimeSec;
+      useEditorStore.setState({ currentTimeSec });
     };
     player.addEventListener("frameupdate", handler);
     return () => player.removeEventListener("frameupdate", handler);
@@ -126,6 +129,25 @@ export const Preview = () => {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {hasAssetIds && assetRegistryError ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            right: 8,
+            zIndex: 20,
+            padding: "8px 10px",
+            borderRadius: 6,
+            background: "rgba(96, 18, 18, 0.92)",
+            border: "1px solid rgba(255, 160, 160, 0.35)",
+            color: "#ffe3e3",
+            fontSize: 12,
+          }}
+        >
+          Asset registry failed to load. Asset-ID preview resolution may be incomplete.
+        </div>
+      ) : null}
       {/* biome-ignore lint/a11y/useMediaCaption: editor preview audio — captions not applicable (raw track playback, no speech content) */}
       {audioUrl && <audio ref={audioElRef} src={audioUrl} preload="auto" />}
       <Player

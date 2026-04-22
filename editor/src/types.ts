@@ -1,4 +1,6 @@
 // src/types.ts
+import type { AssetId, AssetRecord } from "./types/assetRecord";
+
 // ElementType is an opaque string — the canonical values are the ids exported
 // by element modules in src/compositions/elements/**/registry.ts.
 // Legacy values ("text", "image", "effect", "beat-flash") may still appear in
@@ -97,6 +99,8 @@ export type Section = {
 
 export type EditorState = {
   elements: TimelineElement[];
+  assetRecords: AssetRecord[];
+  assetRegistryError: string | null;
   currentTimeSec: number;
   isPlaying: boolean;
   selectedElementId: string | null;
@@ -128,6 +132,11 @@ export type EditorState = {
   setCurrentTime: (t: number | ((prev: number) => number)) => void;
   setPlaying: (p: boolean) => void;
   addElement: (el: TimelineElement) => void;
+  setAssetRecords: (records: AssetRecord[]) => void;
+  upsertAssetRecord: (record: AssetRecord) => void;
+  removeAssetRecord: (id: AssetId) => void;
+  findAssetRecordById: (id: AssetId) => AssetRecord | null;
+  findAssetRecordByPath: (path: string) => AssetRecord | null;
   updateElement: (id: string, partial: Partial<TimelineElement>) => void;
   setElementLocked: (id: string, locked: boolean) => void;
   replacePipelineElements: (stem: string, events: number[]) => void;

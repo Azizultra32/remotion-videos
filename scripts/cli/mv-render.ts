@@ -51,7 +51,7 @@ type Args = {
  */
 function resolveAssetIds(
   obj: unknown,
-  assetRecords: Array<{ id: string; path: string }>,
+  assetRecords: Array<{ id: string; path: string; aliases?: string[] }>,
   stem: string
 ): unknown {
   if (obj === null || obj === undefined) return obj;
@@ -248,7 +248,7 @@ const fps = args.fps ?? timeline.fps ?? 24;
 // resolved to actual paths BEFORE passing to Remotion. Missing assets.json
 // is fine — legacy projects use direct paths instead of asset IDs.
 const projectsDir = resolveProjectsDir(repoRoot);
-let assetRecords: Array<{ id: string; path: string }> = [];
+let assetRecords: Array<{ id: string; path: string; aliases?: string[] }> = [];
 try {
   const { records } = await readAssetsJson(projectsDir, stem);
   assetRecords = records;

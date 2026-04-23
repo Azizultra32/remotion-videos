@@ -91,7 +91,7 @@ writeFileSync(timelinePath, `${JSON.stringify(starterTimeline, null, 2)}\n`);
 
 // Create empty asset registry for Phase 1 asset identity system
 const projectsDir = resolveProjectsDir(repoRoot);
-writeAssetsJsonSync(projectsDir, stem, { version: 1, records: [] });
+writeAssetsJsonSync(projectsDir, stem, { version: 2, records: [] });
 
 // Seed the per-project custom-elements/ dir with a ready-to-activate example.
 // Writing as `.tsx.example` so the renderer's barrel scan (filters `*.tsx`)

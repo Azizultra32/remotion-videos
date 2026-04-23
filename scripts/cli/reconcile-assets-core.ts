@@ -160,8 +160,45 @@ export const formatReconcileAssetsResult = (result: ReconcileAssetsResult): stri
   return lines;
 };
 
+const canonicalizeJson = (
+  value: unknown,
+  key = "",
+  options: { maskUpdatedAt?: boolean } = {},
+): unknown => {
+  if (options.maskUpdatedAt && key === "updatedAt") {
+    return "__updatedAt__";
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => canonicalizeJson(entry, "", options));
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    const input = value as Record<string, unknown>;
+    for (const entryKey of Object.keys(input).sort()) {
+      const next = canonicalizeJson(input[entryKey], entryKey, options);
+      if (next !== undefined) out[entryKey] = next;
+    }
+    return out;
+  }
+  return value;
+};
+
+const canonicalStringify = (
+  value: unknown,
+  options: { maskUpdatedAt?: boolean } = {},
+): string => JSON.stringify(canonicalizeJson(value, "", options));
+
 const stableRegistrySignature = (registry: RegistryFileV2): string =>
-  JSON.stringify(registry, (key, value) => (key === "updatedAt" ? "__updatedAt__" : value));
+  canonicalStringify(registry, { maskUpdatedAt: true });
+
+const comparableRawV2Registry = (registry: RegistryFileV2): RegistryFileV2 => ({
+  version: 2,
+  records: registry.records.map((record) => ({
+    ...record,
+    ...(record.status === "active" ? { missingSince: record.missingSince ?? null } : {}),
+    ...(record.status !== "tombstoned" ? { deletedAt: record.deletedAt ?? null } : {}),
+  })),
+});
 
 const kindFromFilename = (name: string): AssetKind | null => {
   if (/\.gif$/i.test(name)) return "gif";
@@ -493,7 +530,7 @@ const updateRecordFromFile = async (
     contentHash: file.contentHash,
     hashVersion: file.contentHash ? "sha256" : null,
   };
-  const changed = JSON.stringify(record) !== JSON.stringify(nextRecord);
+  const changed = canonicalStringify(record) !== canonicalStringify(nextRecord);
 
   if (!changed) {
     return { moved: false, updated: false, reactivated: false };
@@ -566,13 +603,13 @@ export const reconcileAssets = async (
   }
 
   const assetsPath = join(projectDir, "assets.json");
-  const originalRegistryJson = existsSync(assetsPath) ? readFileSync(assetsPath, "utf8") : null;
   const { raw, registry } = loadRegistry(assetsPath, stem, now());
   const registryBefore = JSON.parse(JSON.stringify(registry)) as RegistryFileV2;
+  const rawRegistry = raw as RawRegistryFile | null;
   const registryBeforeStable =
-    originalRegistryJson == null
-      ? null
-      : stableRegistrySignature(JSON.parse(originalRegistryJson) as RegistryFileV2);
+    rawRegistry != null && typeof rawRegistry === "object" && rawRegistry.version === 2
+      ? stableRegistrySignature(comparableRawV2Registry(raw as RegistryFileV2))
+      : stableRegistrySignature(registryBefore);
   const indexes = buildIndexes(registry);
   const diskFiles = await scanDisk(repoRoot, projectDir, stem);
 
@@ -688,10 +725,9 @@ export const reconcileAssets = async (
     }
   }
 
-  const changed =
-    registryBeforeStable == null
-      ? registry.records.length > 0
-      : registryBeforeStable !== stableRegistrySignature(registry);
+  const needsUpgradeWrite =
+    rawRegistry != null && typeof rawRegistry === "object" && rawRegistry.version !== 2;
+  const changed = needsUpgradeWrite || registryBeforeStable !== stableRegistrySignature(registry);
 
   if (!changed) {
     registry.records.splice(0, registry.records.length, ...registryBefore.records);

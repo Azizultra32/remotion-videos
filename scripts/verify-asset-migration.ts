@@ -119,6 +119,54 @@ const findById = (registry: RegistryFile, id: string): any | null =>
 const findByPath = (registry: RegistryFile, path: string): any | null =>
   registry.records.find((record) => record.path === path) ?? null;
 
+const canonicalizeJson = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalizeJson);
+  if (value && typeof value === "object") {
+    const input = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(input).sort()) {
+      const next = canonicalizeJson(input[key]);
+      if (next !== undefined) out[key] = next;
+    }
+    return out;
+  }
+  return value;
+};
+
+const stableJson = (value: unknown): string => JSON.stringify(canonicalizeJson(value));
+
+const makeNoisyV2Registry = (registry: RegistryFile): RegistryFile => ({
+  version: 2,
+  records: registry.records.map((record) => {
+    const next: Record<string, unknown> = {
+      metadata: Object.fromEntries(Object.entries((record.metadata ?? {}) as Record<string, unknown>).reverse()),
+      updatedAt: record.updatedAt,
+      id: record.id,
+      aliases: record.aliases,
+      path: record.path,
+      pathHistory: record.pathHistory,
+      kind: record.kind,
+      scope: record.scope,
+      stem: record.stem,
+      status: record.status,
+      missingSince: record.status === "missing" ? record.missingSince : undefined,
+      deletedAt: record.status === "tombstoned" ? record.deletedAt : undefined,
+      sizeBytes: record.sizeBytes,
+      mtimeMs: record.mtimeMs,
+      createdAt: record.createdAt,
+      contentHash: record.contentHash,
+      hashVersion: record.hashVersion,
+      label: record.label,
+      tags: record.tags,
+      notes: record.notes,
+    };
+    for (const [key, value] of Object.entries(next)) {
+      if (value === undefined) delete next[key];
+    }
+    return next;
+  }),
+});
+
 const findElement = (
   timeline: { elements: Array<{ id?: string; props: Record<string, unknown> }> },
   id: string,
@@ -406,6 +454,47 @@ try {
     fail("duplicate-content copy was auto-merged instead of receiving a new record");
   }
   ok("duplicate content produced a separate record instead of auto-merging");
+
+  const legacyUpgradeRegistry = {
+    version: 1,
+    records: registryAfterDuplicate.records,
+  };
+  writeFileSync(assetsPath, `${JSON.stringify(legacyUpgradeRegistry, null, 2)}\n`);
+  const legacyUpgradeSnapshot = readFileSync(assetsPath, "utf8");
+  const reconcileLegacyUpgrade = runScript("scripts/cli/mv-reconcile-assets.ts");
+  if (reconcileLegacyUpgrade.status !== 0) {
+    fail(`legacy upgrade reconcile failed:\n${reconcileLegacyUpgrade.stdout}\n${reconcileLegacyUpgrade.stderr}`);
+  }
+  if (!reconcileLegacyUpgrade.stdout.includes("assets.json updated")) {
+    fail(`legacy upgrade reconcile did not report an update:\n${reconcileLegacyUpgrade.stdout}`);
+  }
+  if (readFileSync(assetsPath, "utf8") === legacyUpgradeSnapshot) {
+    fail("legacy v1 reconcile did not rewrite assets.json");
+  }
+  const registryAfterLegacyUpgrade = readRegistry();
+  if (registryAfterLegacyUpgrade.version !== 2) fail("legacy reconcile did not upgrade registry to v2");
+  if (!findById(registryAfterLegacyUpgrade, canonicalId)) {
+    fail("legacy reconcile did not preserve canonical identity");
+  }
+  if (stableJson(registryAfterLegacyUpgrade) !== stableJson(registryAfterDuplicate)) {
+    fail("legacy reconcile changed registry semantics during v2 rewrite");
+  }
+  ok("legacy v1 reconcile still rewrites to canonical v2");
+
+  const v2NoOpRegistry = makeNoisyV2Registry(registryAfterLegacyUpgrade);
+  const v2NoOpSnapshot = `${JSON.stringify(v2NoOpRegistry, null, 2)}\n`;
+  writeFileSync(assetsPath, v2NoOpSnapshot);
+  const reconcileNoOpV2 = runScript("scripts/cli/mv-reconcile-assets.ts");
+  if (reconcileNoOpV2.status !== 0) {
+    fail(`v2 no-op reconcile failed:\n${reconcileNoOpV2.stdout}\n${reconcileNoOpV2.stderr}`);
+  }
+  if (!reconcileNoOpV2.stdout.includes("registry is in sync")) {
+    fail(`v2 no-op reconcile did not report sync:\n${reconcileNoOpV2.stdout}`);
+  }
+  if (readFileSync(assetsPath, "utf8") !== v2NoOpSnapshot) {
+    fail("semantically unchanged v2 reconcile rewrote assets.json");
+  }
+  ok("semantically unchanged v2 reconcile did not rewrite assets.json");
 
   const duplicateSnapshot = readFileSync(assetsPath, "utf8");
   const reconcile6 = runScript("scripts/cli/mv-reconcile-assets.ts");

@@ -29,6 +29,24 @@ set -euo pipefail
 
 BARREL_PATH="src/compositions/elements/_generated-custom-elements.ts"
 
+# --- Fast invariant checks (catch the regressions we've already hit) ---
+
+# No Math.random() in src/ render paths (excludes test files)
+RANDOM_COUNT=$(grep -rn 'Math\.random()' src/ 2>/dev/null | grep -v 'node_modules' | grep -v '.test.' | wc -l | tr -d ' ') || true
+if [ "$RANDOM_COUNT" -gt 0 ]; then
+  cat >&2 <<EOF
+[pre-commit] BLOCKED: Math.random() found in src/ render paths ($RANDOM_COUNT occurrences).
+
+Remotion requires deterministic renders. Use random('seed') from Remotion instead.
+See CLAUDE.md "Locked Architecture — Asset Identity" section.
+
+  grep -rn 'Math\.random()' src/ --include='*.ts' --include='*.tsx' | grep -v '.test.'
+
+Or, for a one-off override:   git commit --no-verify
+EOF
+  exit 1
+fi
+
 # Is the barrel staged for this commit at all? If not, nothing to check.
 if ! git diff --cached --name-only | grep -qx "$BARREL_PATH"; then
   exit 0

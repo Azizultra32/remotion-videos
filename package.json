@@ -24,7 +24,8 @@
     "migrate:assets": "tsx scripts/cli/migrate-timeline-assets.ts",
     "mv:reconcile": "tsx scripts/cli/mv-reconcile-assets.ts",
     "postinstall": "git config core.hooksPath scripts/hooks 2>/dev/null || true",
-    "mv:tunnel": "bash scripts/mv-tunnel.sh"
+    "mv:tunnel": "bash scripts/mv-tunnel.sh",
+    "smoke": "bash scripts/smoke-test.sh"
   },
   "keywords": [],
   "author": "ali",

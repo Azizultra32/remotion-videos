@@ -11,6 +11,33 @@ Create videos by writing React components that render frame-by-frame.
 4. **Register compositions** in `src/Root.tsx` using `<Composition>`.
 5. **Static assets** go in `public/` and are referenced with `staticFile()`.
 
+## Locked Architecture — Do NOT Regress
+
+These design decisions were expensive to reach and must not be undone or worked around. If you think one is wrong, discuss with the user before changing it. The smoke test (`bash scripts/smoke-test.sh`) enforces most of these mechanically.
+
+### Asset Identity
+
+- **`generateAssetId()` is deterministic FNV-1a 64-bit** — same path always produces the same `ast_<16hex>` ID. This is required so the CLI and browser produce the same ID for the same asset, and so `findAssetByPath` works. Do NOT replace with random/timestamp-based generation.
+- **`resolveStatic()` is the ONLY way to resolve asset references in render paths** — every element that loads media (VideoClip, StaticImage, GifClip, BeatVideoCycle, BeatImageCycle, MediaBlendComposite, SpeedVideo, MusicVideo `<Audio>`, `useFFT`) must call `resolveStatic(src, staticFile, ctx.assetRegistry)`. Do NOT bypass it with raw `staticFile()` calls on asset-ID strings.
+- **`assetRegistry` is threaded through `RenderCtx`** — the `ctx.assetRegistry` field must be present and populated for every element render. Elements must not assume `src` props are always paths; they may be `ast_*` IDs.
+- **Canonical v2 IDs are random and opaque** — `generateCanonicalAssetId()` is intentionally non-deterministic (one-time creation, then persisted). The `upgradeLegacyAssetId()` bridge is deterministic FNV-1a. Do NOT make canonical IDs deterministic.
+- **Reconcile is idempotent** — a second reconcile run on unchanged assets must be a byte-identical no-op. The `canonicalStringify` and `comparableRawV2Registry` helpers enforce this. Do NOT replace with naive `JSON.stringify` comparison.
+
+### Preview Transport
+
+- **Source-aware filtering, not delta-based** — the main preview ignores only store updates known to originate from its own `Player.frameupdate`. Do NOT reintroduce "ignore small positive deltas" logic — that broke keyboard nudges, explicit seeks during playback, and floating-preview mirroring.
+- **Audio hard-seeks only on paused scrubs or large jumps** — the `previewTransport.ts` logic is the single source of truth for when to hard-seek the `<audio>` element. Do NOT add generic "seek on every store change" logic.
+
+### Runtime Primitives
+
+- **Elements must use shared runtimes, not inline reimplementation** — new beat-reactive features must import from `triggerRuntime`, `modulationRuntime`, `audioReactiveRuntime`, `mediaRuntime`, `effectStackRuntime`, or `fullscreenShaderRuntime`. Do NOT copy-paste beat-array walking, fade-opacity math, WebGL boilerplate, or trigger-decay formulas into individual elements.
+- **`MediaClip` is the shared media renderer** — elements that render images, GIFs, or videos must delegate to `<MediaClip>` instead of using `<Img>`, `<Gif>`, or `<OffthreadVideo>` directly. This ensures consistent asset resolution and fit behavior.
+- **`mediaFields` declares which props contain asset references** — every element that loads media must declare its media fields (e.g., `mediaFields: [{ name: "gifSrc", kind: "gif" }]`). The migration system and AssetPicker depend on these declarations.
+
+### Smoke Test
+
+Run `bash scripts/smoke-test.sh` before any commit that touches render paths, asset logic, or editor transport. It checks all of the above in <30s.
+
 ## Engine / Project Split (CRITICAL)
 This repo is the **engine** — reusable infrastructure that runs from a fresh clone on any machine. Per-track **project data** (audio, analysis, timelines) is created locally by the user and is NOT tracked in git. Read `OWNERSHIP.md` for the authoritative path tables; `ENGINE.md` for why each engine path is locked.
 

@@ -1,5 +1,18 @@
 # Dirty Tree Buckets After `867b19e`
 
+## Closure Status
+
+All repo-work buckets from this handoff are now closed and committed. This file is historical bookkeeping, not an open task list.
+
+- Bucket 1 closed by `6e97ca4` — `feat(editor): wire asset registry through editor workflows`
+- Bucket 2 closed by `d67fcc9` — `refactor(runtime): extract shared media render primitives`
+- Bucket 3 closed by `6dac6b0`, `e6a4166`, and `ef2a446`
+- Bucket 4 closed by `bbbdbbf` — `refactor(composition): rewire media modules through shared runtimes`
+- Bucket 5 closed by `67b0f39` — `feat(assets): add v2 identity migration tooling`
+- Bucket 6 closed by the Lottie/runtime rewires in `bbbdbbf`
+
+Future work should start from a concrete user-facing bug or a new media-technique request, not from reopening these buckets.
+
 Baseline commit:
 
 - `867b19e` — `fix(preview): stabilize transport and lock beat-video retriggers`
@@ -13,7 +26,7 @@ Purpose:
 
 Status:
 
-- ready-to-commit
+- committed in `6e97ca4`
 
 Files:
 
@@ -46,7 +59,7 @@ Notes:
 
 Status:
 
-- ready-to-commit
+- committed in `d67fcc9`
 
 Files:
 
@@ -90,7 +103,7 @@ Notes:
 
 Status:
 
-- likely ready-to-commit, but should be committed separately from Bucket 2 if possible
+- committed in `6dac6b0`, with follow-ups in `e6a4166` and `ef2a446`
 
 Files:
 
@@ -121,7 +134,7 @@ Notes:
 
 Status:
 
-- partial
+- committed in `bbbdbbf`
 
 Files:
 
@@ -156,7 +169,7 @@ Notes:
 
 Status:
 
-- risky
+- committed in `67b0f39`
 
 Files:
 
@@ -191,7 +204,7 @@ Notes:
 
 Status:
 
-- risky
+- committed in `bbbdbbf`
 
 Files:
 

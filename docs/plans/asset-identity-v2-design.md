@@ -2,27 +2,22 @@
 
 **Author**: Codex
 **Date**: 2026-04-21
-**Status**: Design Locked, Awaiting Implementation
+**Status**: Implemented and Locked
 **Target**: Close Stage 1 with true rename/move-stable asset identity
+**Implemented In**: `67b0f39` (`feat(assets): add v2 identity migration tooling`)
 
 ---
 
-## Executive Summary
+## Implementation Summary
 
-The current Stage 1 work successfully introduced `assets.json`, Zod-backed registry validation, dual-read path-or-ID resolution, migration tooling, and first-pass verification. That work materially improved the editor and render pipeline, but it does **not** yet satisfy the stronger requirement you chose to hold Stage 1 open for:
+Stage 1 is now locked for the stronger asset identity requirement. The implementation in `67b0f39` introduced v2 registry migration and reconcile tooling that satisfies the core guarantees:
 
-- asset identity must survive rename
-- asset identity must survive move
-- asset identity must survive scope changes when the move is unambiguous
-
-Today, the system still treats stored `path` as identity in its deepest contract:
-
-- `generateAssetId(path)` is deterministic from path
-- reconcile derives identity from path
-- migration creates IDs from path
-- write paths create records by path
-
-That means a rename or move still implies identity churn.
+- asset identity survives rename
+- asset identity survives move
+- asset identity survives unambiguous scope changes
+- legacy path-hash IDs are preserved as aliases
+- raw paths, legacy IDs, and canonical IDs can coexist during migration
+- migration and reconcile are verified as idempotent
 
 ### Final Direction
 
@@ -35,13 +30,13 @@ That means a rename or move still implies identity churn.
    - refuse to auto-merge ambiguous duplicates
 5. Migration becomes a **registry upgrade + timeline cutover**, not just path rewriting.
 
-Stage 1 remains open until that model is implemented and verified end to end.
+That model has now been implemented for the CLI/data migration path and verified by `scripts/verify-asset-migration.ts`.
 
 ---
 
 ## Relationship To Existing Docs
 
-This document is the authoritative design and implementation plan for closing the remaining Stage 1 gap.
+This document is the authoritative design record for the Stage 1 asset identity v2 implementation.
 
 It supersedes the rename/move assumptions in:
 
@@ -58,23 +53,25 @@ The broader migration plan still matters for UI and workflow shape. This documen
 
 ## Current State Snapshot
 
-As of 2026-04-21, the repository already has meaningful Stage 1 infrastructure in place.
+As of commit `67b0f39`, the repository has the Stage 1 v2 identity tooling in place.
 
-### What Is Already Working
+### What Is Working
 
 - `projects/<stem>/assets.json` exists as the per-project registry.
 - Registry reads and writes are validated with Zod in both browser-facing and CLI paths.
 - Preview and floating preview reload registry state when the registry changes.
 - Runtime helper resolution can already accept either a raw path or an `ast_*` ID.
-- Migration tooling exists and is verified for the current v1 path-hash model.
-- Reconcile tooling exists and can scan disk state into the registry.
+- Migration tooling upgrades v1 path-hash registries/timelines to v2 canonical opaque IDs.
+- Reconcile tooling preserves identity across rename/move when the match is unambiguous.
+- Missing files are preserved as `missing` records instead of being deleted.
+- Duplicate-content copies receive separate records instead of being auto-merged.
 - Verification scripts exist:
   - `scripts/verify-asset-library.ts`
   - `scripts/verify-asset-migration.ts`
 
-### What Is Still Structurally Wrong
+### Historical Gap This Plan Closed
 
-The identity contract is still path-derived in the current tree:
+Before `67b0f39`, the identity contract was still path-derived in the implementation:
 
 - [editor/src/types/assetRecord.ts](/Users/ali/remotion-videos/editor/src/types/assetRecord.ts:1)
   - `AssetRegistryFile.version` is still `1`
@@ -92,13 +89,13 @@ The identity contract is still path-derived in the current tree:
 
 ### Consequence
 
-The current Stage 1 state is coherent enough to use, but not honest to close under the stronger requirement. Rename/move stability is still missing at the model level, not just in edge-case handling.
+The Stage 1 v2 migration/reconcile path is now coherent enough to lock. Future media technique work should not reopen this bucket unless a concrete regression reproduces against `scripts/verify-asset-migration.ts`.
 
 ---
 
-## Problem Statement
+## Historical Problem Statement
 
-The current system still has three structural problems:
+The pre-v2 system had three structural problems:
 
 1. `generateAssetId(path)` makes identity depend on path.
    - rename => new ID
@@ -109,12 +106,12 @@ The current system still has three structural problems:
    - “old path missing + new path exists” becomes delete/create
    - references churn instead of being preserved
 
-3. The transition story is only partially complete.
+3. The transition story was incomplete.
    - some projects still contain raw path references
    - some timelines and registries contain path-hash `ast_*` IDs
    - future projects must emit opaque canonical IDs
 
-Stage 1 is only closed when all three states can coexist safely while the canonical direction becomes opaque identity.
+Stage 1 closes when all three states can coexist safely while the canonical direction becomes opaque identity.
 
 ---
 
@@ -713,7 +710,7 @@ Deliverable:
 
 ## Verification Gates
 
-Stage 1 can only close when all gates below are green.
+Stage 1 closed when the gates below went green in `67b0f39`.
 
 ### Gate 1: Schema/API
 
@@ -789,7 +786,7 @@ Must prove:
 
 ## Acceptance Criteria
 
-Stage 1 is done only when all of the following are true:
+Stage 1 is done because all of the following are true for the v2 migration/reconcile path:
 
 - canonical IDs are opaque and immutable
 - path-hash IDs are compatibility aliases only
@@ -799,13 +796,13 @@ Stage 1 is done only when all of the following are true:
 - migration and reconcile are idempotent
 - rename/move preservation is proven by automated checks
 
-If any of those are false, Stage 1 is still open.
+If any of those regress, reopen this as a bug against the verifier rather than restarting the design.
 
 ---
 
-## First-Pass Execution Order
+## Implemented Execution Order
 
-This is the recommended order for the implementation pass.
+This is the execution order that landed in `67b0f39`.
 
 1. Lock v2 schema and ID validators.
 2. Add shared dual-read resolver semantics with alias support.
@@ -815,7 +812,7 @@ This is the recommended order for the implementation pass.
 6. Refactor reconcile to preserve identity conservatively.
 7. Switch editor write paths to canonical opaque IDs only.
 8. Expand verification for rename, move, cross-scope move, idempotence, and rollback.
-9. Only then close Stage 1.
+9. Closed Stage 1 by passing `scripts/verify-asset-migration.ts`.
 
 ---
 
@@ -860,10 +857,10 @@ Mitigation:
 
 ## Final Call
 
-For the stronger Stage 1 requirement you chose, the remaining blocker is no longer vague.
+For the stronger Stage 1 requirement you chose, the blocker is no longer open.
 
-It is this:
+The implemented answer is:
 
 **Implement registry v2 with opaque canonical IDs, alias-backed compatibility for legacy path-hash IDs, and conservative identity-preserving reconcile, then prove it with rename/move/idempotence verification.**
 
-That is the next implementation phase. Stage 1 is not honestly closed until it lands.
+That landed in `67b0f39`. Do not reopen Stage 1 unless the verifier fails or a user-visible regression is traced to this identity contract.

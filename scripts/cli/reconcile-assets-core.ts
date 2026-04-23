@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
+  createReadStream,
   existsSync,
   promises as fs,
   readFileSync,
@@ -272,8 +273,11 @@ const writeJsonAtomic = (filePath: string, data: unknown): void => {
 
 const hashFile = async (filePath: string): Promise<string | null> => {
   try {
-    const bytes = await fs.readFile(filePath);
-    return createHash("sha256").update(bytes).digest("hex");
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(filePath)) {
+      hash.update(chunk);
+    }
+    return hash.digest("hex");
   } catch {
     return null;
   }

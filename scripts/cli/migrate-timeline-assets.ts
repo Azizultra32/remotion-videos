@@ -563,15 +563,15 @@ const commitMigrationFiles = (
         writeFileSync(`${assetsPath}.restore.tmp`, originalAssets, "utf8");
         renameSync(`${assetsPath}.restore.tmp`, assetsPath);
       }
-    } catch {
-      // Best-effort rollback only.
+    } catch (rollbackErr) {
+      console.error(`[migration] failed to restore assets.json after write failure: ${String(rollbackErr)}`);
     }
 
     try {
       writeFileSync(`${timelinePath}.restore.tmp`, originalTimeline, "utf8");
       renameSync(`${timelinePath}.restore.tmp`, timelinePath);
-    } catch {
-      // Best-effort rollback only.
+    } catch (rollbackErr) {
+      console.error(`[migration] failed to restore timeline.json after write failure: ${String(rollbackErr)}`);
     }
 
     throw error;

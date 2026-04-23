@@ -202,13 +202,11 @@ function randomHex(bytes: number): string {
   const cryptoApi = getCrypto();
   const buffer = new Uint8Array(bytes);
 
-  if (cryptoApi) {
-    cryptoApi.getRandomValues(buffer);
-  } else {
-    for (let i = 0; i < buffer.length; i += 1) {
-      buffer[i] = Math.floor(Math.random() * 256);
-    }
+  if (!cryptoApi) {
+    throw new Error("crypto.getRandomValues is unavailable; cannot generate canonical asset ID");
   }
+
+  cryptoApi.getRandomValues(buffer);
 
   return Array.from(buffer, (value) => value.toString(16).padStart(2, "0")).join("");
 }

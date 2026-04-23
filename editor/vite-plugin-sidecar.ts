@@ -4121,6 +4121,9 @@ const handleOpenInEditor = async (req: IncomingMessage, res: ServerResponse): Pr
       detached: true,
       stdio: "ignore",
     });
+    child.on("error", (err) => {
+      console.warn(`[sidecar] failed to launch ${editorCmd}: ${String(err)}`);
+    });
     child.unref();
     res.statusCode = 204;
     res.end();

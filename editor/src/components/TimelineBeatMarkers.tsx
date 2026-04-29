@@ -48,7 +48,8 @@ export const TimelineBeatMarkers = ({ beatData, pxPerSec, height }: Props) => {
               top: 0,
               height,
               width: 1,
-              background: isDown ? "rgba(120,180,255,0.22)" : "rgba(120,180,255,0.08)",
+              background: isDown ? "rgba(59,130,246,0.15)" : "rgba(59,130,246,0.05)",
+              borderRight: isDown ? "none" : "1px dotted rgba(59,130,246,0.06)",
             }}
           />
         );

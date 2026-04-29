@@ -128,23 +128,9 @@ export const Preview = () => {
   }, [fps]);
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+    <div className="preview-container" style={{ width: "100%", height: "100%", margin: 6 }}>
       {hasAssetIds && assetRegistryError ? (
-        <div
-          style={{
-            position: "absolute",
-            top: 8,
-            left: 8,
-            right: 8,
-            zIndex: 20,
-            padding: "8px 10px",
-            borderRadius: 6,
-            background: "rgba(96, 18, 18, 0.92)",
-            border: "1px solid rgba(255, 160, 160, 0.35)",
-            color: "#ffe3e3",
-            fontSize: 12,
-          }}
-        >
+        <div className="preview-error-overlay" style={{ inset: "auto 8px auto 8px", top: 8, bottom: "auto", borderRadius: "var(--radius-md)" }}>
           Asset registry failed to load. Asset-ID preview resolution may be incomplete.
         </div>
       ) : null}
@@ -164,23 +150,11 @@ export const Preview = () => {
         style={{ width: "100%", height: "100%" }}
         clickToPlay={false}
         errorFallback={({ error }) => (
-          <div
-            style={{
-              padding: 16,
-              background: "#2a0000",
-              color: "#fff",
-              fontSize: 12,
-              fontFamily: "monospace",
-              width: "100%",
-              height: "100%",
-              overflow: "auto",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            <div style={{ color: "#f66", fontWeight: 600, marginBottom: 8 }}>Composition error</div>
-            {error.message}
+          <div className="preview-error-overlay" style={{ fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", overflow: "auto", alignItems: "flex-start", padding: 20 }}>
+            <div style={{ color: "var(--danger)", fontWeight: 600, marginBottom: 8, fontSize: 13 }}>Composition error</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 11 }}>{error.message}</div>
             {error.stack && (
-              <div style={{ marginTop: 8, color: "#ccc", fontSize: 10 }}>{error.stack}</div>
+              <div style={{ marginTop: 8, color: "var(--text-muted)", fontSize: 10 }}>{error.stack}</div>
             )}
           </div>
         )}

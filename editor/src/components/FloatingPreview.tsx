@@ -162,19 +162,13 @@ export const FloatingPreview = () => {
         type="button"
         onClick={() => setOpen(true)}
         title="Pop out the preview into a floating, draggable window"
+        className="editor-btn editor-btn--accent"
         style={{
           position: "fixed",
           right: 340,
           bottom: 380,
           zIndex: 9000,
-          padding: "6px 10px",
-          background: "#1a2a3a",
-          border: "1px solid #368",
-          borderRadius: 4,
-          color: "#8cf",
-          fontSize: 11,
-          cursor: "pointer",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+          boxShadow: "var(--shadow-md)",
         }}
       >
         ↗ Pop out preview
@@ -191,10 +185,10 @@ export const FloatingPreview = () => {
         width: WINDOW_WIDTH,
         height: TOTAL_HEIGHT,
         zIndex: 9999,
-        background: "#111",
-        border: "1px solid #444",
-        borderRadius: 6,
-        boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
+        background: "var(--surface-0)",
+        border: "1px solid var(--border-default)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "var(--shadow-lg)",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -221,36 +215,24 @@ export const FloatingPreview = () => {
       ) : null}
       <div
         onPointerDown={onHeaderPointerDown}
-        style={{
-          height: HEADER_HEIGHT,
-          padding: "0 8px",
-          background: "#222",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          cursor: "grab",
-          touchAction: "none",
-          userSelect: "none",
-          fontSize: 11,
-          color: "#888",
-        }}
+        className="floating-preview-header"
+        style={{ height: HEADER_HEIGHT }}
       >
-        <span>Preview — drag to move</span>
+        <span style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "var(--font-ui)", fontWeight: 500 }}>Preview</span>
+        <span style={{ display: "flex", gap: 4 }}>
+          <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--text-muted)" }} />
+          <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--text-muted)" }} />
+          <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--text-muted)" }} />
+        </span>
         <button
           type="button"
           onClick={() => setOpen(false)}
           title="Close the floating preview"
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "#aaa",
-            cursor: "pointer",
-            fontSize: 16,
-            lineHeight: 1,
-            padding: "0 6px",
-          }}
+          className="floating-preview-close"
         >
-          ×
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M3 3l6 6M9 3l-6 6" />
+          </svg>
         </button>
       </div>
       <div style={{ flex: 1, background: "#000" }}>

@@ -39,18 +39,19 @@ export const ChatPane = () => {
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        background: "#0f0f0f",
+        background: "var(--surface-0)",
         fontSize: 12,
+        fontFamily: "var(--font-ui)",
       }}
     >
       <div
         style={{
           padding: "10px 12px",
-          borderBottom: "1px solid #333",
+          borderBottom: "1px solid var(--border-subtle)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          background: "#151515",
+          background: "var(--surface-1)",
         }}
       >
         <span
@@ -67,15 +68,8 @@ export const ChatPane = () => {
           type="button"
           onClick={clear}
           disabled={pending || messages.length === 0}
-          style={{
-            background: "transparent",
-            border: "1px solid #444",
-            color: "#aaa",
-            padding: "2px 8px",
-            fontSize: 10,
-            cursor: pending || messages.length === 0 ? "not-allowed" : "pointer",
-            borderRadius: 3,
-          }}
+          className="editor-btn"
+          style={{ fontSize: 10 }}
         >
           Clear
         </button>
@@ -85,9 +79,9 @@ export const ChatPane = () => {
         <div
           style={{
             padding: "8px 12px",
-            background: "#3a2a0f",
-            borderBottom: "1px solid #7a5a1a",
-            color: "#fbbf24",
+            background: "rgba(245,158,11,0.08)",
+            borderBottom: "1px solid rgba(245,158,11,0.2)",
+            color: "var(--warning)",
             fontSize: 11,
             display: "flex",
             alignItems: "center",
@@ -196,11 +190,14 @@ export const ChatPane = () => {
           />
         ))}
         {pending && (
-          <div style={{ color: "#888", fontStyle: "italic", fontSize: 11 }}>Thinking&#8230;</div>
+          <div style={{ color: "var(--text-muted)", fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}>
+            <span className="streaming-dots"><span /><span /><span /></span>
+            Thinking
+          </div>
         )}
       </div>
 
-      <div style={{ borderTop: "1px solid #333", padding: 8, background: "#0a0a0a" }}>
+      <div className="chat-input-area">
         <textarea
           ref={inputRef}
           value={input}
@@ -208,74 +205,49 @@ export const ChatPane = () => {
           onKeyDown={onKeyDown}
           placeholder={
             cooling
-              ? `Cooling down — ${cooldown?.remainingSec}s remaining`
-              : "Describe what you want — Enter or ⌘↩ to send, Shift+Enter for newline"
+              ? `Cooling down \u2014 ${cooldown?.remainingSec}s remaining`
+              : "Describe what you want \u2014 Enter to send"
           }
           rows={3}
           disabled={inputDisabled}
           style={{
-            width: "100%",
-            boxSizing: "border-box",
-            background: inputDisabled ? "#111" : "#1a1a1a",
-            color: inputDisabled ? "#666" : "#fff",
-            border: "1px solid #333",
-            borderRadius: 4,
-            padding: 8,
-            fontSize: 12,
-            fontFamily: "inherit",
-            resize: "none",
-            outline: "none",
+            opacity: inputDisabled ? 0.5 : 1,
           }}
         />
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 6 }}>
-          {pending ? (
-            <button
-              type="button"
-              onClick={cancel}
-              style={{
-                background: "#3a1a1a",
-                border: "1px solid #552",
-                color: "#f88",
-                padding: "4px 12px",
-                fontSize: 11,
-                cursor: "pointer",
-                borderRadius: 3,
-              }}
-            >
-              Cancel
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={submit}
-              disabled={!input.trim() || inputDisabled}
-              style={{
-                background: input.trim() && !inputDisabled ? "#1a3a1a" : "#222",
-                border: "1px solid #2a5",
-                color: input.trim() && !inputDisabled ? "#8f8" : "#555",
-                padding: "4px 12px",
-                fontSize: 11,
-                cursor: input.trim() && !inputDisabled ? "pointer" : "not-allowed",
-                borderRadius: 3,
-              }}
-            >
-              Send
-            </button>
-          )}
-        </div>
+        {pending ? (
+          <button
+            type="button"
+            onClick={cancel}
+            className="editor-btn editor-btn--danger"
+            style={{ flexShrink: 0 }}
+          >
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!input.trim() || inputDisabled}
+            className="chat-send-btn"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 12V2M7 2L3 6M7 2l4 4" />
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );
 };
 
-const roleStyle = (role: ChatMessage["role"]): React.CSSProperties => {
-  if (role === "user") {
-    return { alignSelf: "flex-end", background: "#1e3a5f", color: "#dbeafe", maxWidth: "90%" };
-  }
-  if (role === "system") {
-    return { alignSelf: "stretch", background: "#3a1a1a", color: "#fca5a5", maxWidth: "100%" };
-  }
-  return { alignSelf: "flex-start", background: "#1a1a1a", color: "#e5e5e5", maxWidth: "90%" };
+const roleClass = (role: ChatMessage["role"]): string => {
+  if (role === "user") return "chat-msg chat-msg--user";
+  if (role === "system") return "chat-msg";
+  return "chat-msg chat-msg--assistant";
+};
+const roleInlineStyle = (role: ChatMessage["role"]): React.CSSProperties => {
+  if (role === "system") return { alignSelf: "stretch", background: "rgba(239,68,68,0.08)", color: "var(--danger)", maxWidth: "100%", borderRadius: "var(--radius-md)" };
+  return {};
 };
 
 const MessageBubble = ({
@@ -299,30 +271,14 @@ const MessageBubble = ({
   };
   return (
     <div
-      style={{
-        ...roleStyle(message.role),
-        padding: "8px 10px",
-        borderRadius: 6,
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-word",
-        lineHeight: 1.45,
-        fontSize: 12,
-      }}
+      className={roleClass(message.role)}
+      style={roleInlineStyle(message.role)}
     >
       {message.content}
       {streaming && (
-        <span
-          style={{
-            display: "inline-block",
-            width: 6,
-            height: 12,
-            marginLeft: 2,
-            background: "#93c5fd",
-            verticalAlign: "middle",
-            animation: "pulse 1s ease-in-out infinite",
-            opacity: 0.8,
-          }}
-        />
+        <span className="streaming-dots" style={{ marginLeft: 4 }}>
+          <span /><span /><span />
+        </span>
       )}
       {toolCalls.length > 0 && (
         <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -337,9 +293,10 @@ const MessageBubble = ({
                 return "";
               }
             })();
-            const chipColor = tc.isError ? "#7f1d1d" : running ? "#1e3a5f" : "#1e3a2a";
-            const chipBorder = tc.isError ? "#b91c1c" : running ? "#3b82f6" : "#22c55e";
-            const chipText = tc.isError ? "#fca5a5" : running ? "#93c5fd" : "#86efac";
+            const chipColor = tc.isError ? "rgba(239,68,68,0.1)" : running ? "var(--accent-muted)" : "rgba(34,197,94,0.1)";
+            const chipBorder = tc.isError ? "rgba(239,68,68,0.3)" : running ? "rgba(59,130,246,0.3)" : "rgba(34,197,94,0.3)";
+            const chipText = tc.isError ? "var(--danger)" : running ? "var(--accent-hover)" : "var(--success)";
+            const dotColor = tc.isError ? "var(--danger)" : running ? "var(--accent)" : "var(--success)";
             return (
               // biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven editor canvas; keyboard UI is separate
               // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-driven editor canvas; keyboard UI is separate
@@ -347,12 +304,12 @@ const MessageBubble = ({
                 key={tc.id || tc.name}
                 style={{
                   fontSize: 10,
-                  fontFamily: "monospace",
+                  fontFamily: "var(--font-mono)",
                   background: chipColor,
                   border: `1px solid ${chipBorder}`,
-                  borderRadius: 3,
+                  borderRadius: "var(--radius-sm)",
                   color: chipText,
-                  padding: "3px 6px",
+                  padding: "4px 8px",
                   cursor: "pointer",
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",
@@ -360,10 +317,11 @@ const MessageBubble = ({
                 onClick={() => toggle(tc.id || tc.name)}
                 title={isExpanded ? "Click to collapse" : "Click to expand input + result"}
               >
-                <div>
-                  <span style={{ fontWeight: 600 }}>{tc.name}</span>{" "}
-                  <span style={{ opacity: 0.7 }}>
-                    {running ? "running…" : tc.isError ? "error" : "done"}
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span className="stage-dot" style={{ background: dotColor, width: 5, height: 5 }} />
+                  <span style={{ fontWeight: 600 }}>{tc.name}</span>
+                  <span style={{ opacity: 0.6 }}>
+                    {running ? "running" : tc.isError ? "error" : "done"}
                   </span>
                   {!isExpanded && inputSummary ? (
                     <span style={{ marginLeft: 6, opacity: 0.6 }}>{inputSummary}</span>

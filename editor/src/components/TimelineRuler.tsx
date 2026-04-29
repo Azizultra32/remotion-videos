@@ -28,8 +28,8 @@ export const TimelineRuler = ({ compositionDuration, pxPerSec, beatData, height 
         position: "relative",
         width: widthPx,
         height,
-        background: "#0a0a0a",
-        borderBottom: "1px solid #333",
+        background: "var(--surface-0)",
+        borderBottom: "1px solid var(--border-subtle)",
         overflow: "hidden",
       }}
     >
@@ -44,7 +44,7 @@ export const TimelineRuler = ({ compositionDuration, pxPerSec, beatData, height 
               bottom: 0,
               width: 1,
               height: major ? height * 0.6 : height * 0.25,
-              background: major ? "#666" : "#333",
+              background: major ? "var(--text-muted)" : "var(--border-default)",
             }}
           />
         );
@@ -59,8 +59,8 @@ export const TimelineRuler = ({ compositionDuration, pxPerSec, beatData, height 
               left: s * pxPerSec + 3,
               top: 2,
               fontSize: 9,
-              color: "#888",
-              fontFamily: "monospace",
+              color: "var(--text-muted)",
+              fontFamily: "var(--font-mono)",
               pointerEvents: "none",
             }}
           >

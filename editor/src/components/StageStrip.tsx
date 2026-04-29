@@ -44,48 +44,17 @@ const STAGES = [
 // it transitions to CLOSED permanently - we need explicit recovery.
 const RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000, 30000];
 
-const btnStyle = (
-  variant: "primary" | "danger" | "ghost",
-  disabled: boolean,
-): React.CSSProperties => ({
-  padding: "3px 10px",
-  fontSize: 10,
-  fontFamily: "monospace",
-  background: disabled
-    ? "#222"
-    : variant === "primary"
-      ? "#2196F3"
-      : variant === "danger"
-        ? "#8a2a2a"
-        : "#1a1a1a",
-  border:
-    "1px solid " +
-    (disabled
-      ? "#333"
-      : variant === "primary"
-        ? "#2196F3"
-        : variant === "danger"
-          ? "#b44"
-          : "#333"),
-  borderRadius: 3,
-  color: disabled ? "#666" : "#fff",
-  cursor: disabled ? "not-allowed" : "pointer",
-  letterSpacing: "0.06em",
-  textTransform: "uppercase" as const,
-  opacity: disabled ? 0.6 : 1,
-});
+const btnCls = (variant: "primary" | "danger" | "ghost"): string => {
+  if (variant === "primary") return "editor-btn editor-btn--accent";
+  if (variant === "danger") return "editor-btn editor-btn--danger";
+  return "editor-btn";
+};
 
-const phaseBadge = (done: boolean, active: boolean): React.CSSProperties => ({
-  padding: "3px 8px",
-  fontSize: 10,
-  fontFamily: "monospace",
-  borderRadius: 3,
-  letterSpacing: "0.06em",
-  whiteSpace: "nowrap" as const,
-  background: active ? "#1e88e5" : done ? "#103a5c" : "#1a1a1a",
-  color: done || active ? "#fff" : "#666",
-  border: `1px solid ${active ? "#64b5f6" : done ? "#2196F3" : "#333"}`,
-});
+const phaseBadgeCls = (done: boolean, active: boolean): string => {
+  if (active) return "stage-badge stage-badge--running";
+  if (done) return "stage-badge stage-badge--done";
+  return "stage-badge stage-badge--idle";
+};
 
 export const StageStrip = () => {
   const audioSrc = useEditorStore((s) => s.audioSrc);
@@ -349,16 +318,16 @@ export const StageStrip = () => {
         display: "flex",
         gap: 8,
         alignItems: "center",
-        padding: "4px 16px",
-        borderBottom: "1px solid #222",
-        background: "#0a0a0a",
+        padding: "4px 12px",
+        borderBottom: "1px solid var(--border-subtle)",
+        background: "var(--surface-0)",
         overflowX: "auto",
         flexWrap: "wrap",
         rowGap: 4,
       }}
     >
       <span
-        style={{ fontSize: 10, color: "#888", letterSpacing: "0.08em", textTransform: "uppercase" }}
+        style={{ fontSize: 10, color: "var(--text-tertiary)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, fontFamily: "var(--font-ui)" }}
       >
         Analysis
       </span>
@@ -374,10 +343,10 @@ export const StageStrip = () => {
         const phase1Done = phase1Count > 0 || phase2Count > 0;
         const phase1Label = phase1Count > 0 ? `  ${phase1Count}` : phase1Done ? "  ✓" : "  -";
         return (
-          <span style={phaseBadge(phase1Done, activePhase === "phase1")}>Phase 1{phase1Label}</span>
+          <span className={phaseBadgeCls(phase1Done, activePhase === "phase1")} style={{ fontSize: 10, fontFamily: "var(--font-mono)" }}>Phase 1{phase1Label}</span>
         );
       })()}
-      <span style={phaseBadge(phase2Count > 0, activePhase === "phase2")}>
+      <span className={phaseBadgeCls(phase2Count > 0, activePhase === "phase2")} style={{ fontSize: 10, fontFamily: "var(--font-mono)" }}>
         Phase 2{phase2Count > 0 ? `  ${phase2Count}` : "  -"}
       </span>
 
@@ -408,9 +377,10 @@ export const StageStrip = () => {
             onClick={seedBeats}
             disabled={isRunning || busy !== null}
             title="Run detect-beats.py on this project's audio and merge beats/downbeats/bpm_global into analysis.json. Preserves all other fields. Takes ~30-60s."
-            style={btnStyle("ghost", isRunning || busy !== null)}
+            className={btnCls("ghost")}
+            style={{ fontSize: 10 }}
           >
-            {busy === "seed" ? "Seeding…" : "Seed beats"}
+            {busy === "seed" ? "Seeding\u2026" : "Seed beats"}
           </button>
         </>
       )}
@@ -556,7 +526,8 @@ export const StageStrip = () => {
         }}
         disabled={isRunning || busy !== null}
         title="Drop a new event marker at the current playhead position. The marker persists to analysis.json and appears on the waveform + timeline."
-        style={btnStyle("ghost", isRunning || busy !== null)}
+        className={btnCls("ghost")}
+        style={{ fontSize: 10 }}
       >
         Add event at playhead
       </button>
@@ -566,7 +537,8 @@ export const StageStrip = () => {
           type="button"
           onClick={cancelRun}
           title="Kill the in-flight mv:analyze process group and mark the run cancelled. Artifacts already written are kept."
-          style={btnStyle("danger", false)}
+          className={btnCls("danger")}
+          style={{ fontSize: 10 }}
         >
           Cancel
         </button>
@@ -575,7 +547,8 @@ export const StageStrip = () => {
           type="button"
           onClick={runAnalysis}
           title="Run npm run mv:analyze in the background. Takes 5-10 min. Live progress streams here."
-          style={btnStyle("primary", false)}
+          className={btnCls("primary")}
+          style={{ fontSize: 10 }}
         >
           {phase2Count > 0 ? "Re-analyze" : "Analyze"}
         </button>
@@ -587,10 +560,8 @@ export const StageStrip = () => {
         onClick={clearEvents}
         disabled={busy === "clear" || isRunning || (phase1Count === 0 && phase2Count === 0)}
         title="Remove all pipeline-origin events (Phase 1 + Phase 2) from the timeline. User elements are kept. Does not delete on-disk PNG artifacts."
-        style={btnStyle(
-          "danger",
-          busy === "clear" || isRunning || (phase1Count === 0 && phase2Count === 0),
-        )}
+        className={btnCls("danger")}
+        style={{ fontSize: 10 }}
       >
         {busy === "clear" ? "Clearing…" : "Clear events"}
       </button>

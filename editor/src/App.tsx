@@ -151,8 +151,8 @@ export const App = () => {
           height: "100vh",
           width: "100vw",
           overflow: "hidden",
-          background: "#111",
-          color: "#fff",
+          background: "var(--surface-1)",
+          color: "var(--text-primary)",
           // Block trackpad pinch + double-tap zoom from propagating to the
           // browser. Belt-and-braces with the ctrl+wheel guard above.
           touchAction: "none",
@@ -164,25 +164,26 @@ export const App = () => {
         <div
           style={{
             gridRow: "1/5",
-            borderRight: "1px solid #333",
+            borderRight: "1px solid var(--border-subtle)",
             padding: 0,
             display: "flex",
             flexDirection: "column",
             minHeight: 0,
+            background: "var(--surface-0)",
           }}
         >
-          <div style={{ padding: 16, borderBottom: "1px solid #333", flex: "0 0 auto" }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Music Video Editor</h2>
+          <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border-subtle)", flex: "0 0 auto" }}>
+            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: "var(--font-ui)", letterSpacing: "-0.02em", color: "var(--text-primary)" }}>Music Video Editor</h2>
             <ErrorBoundary name="Song Picker">
               <SongPicker />
             </ErrorBoundary>
           </div>
-          <div style={{ flex: "1 1 60%", minHeight: 0, overflowY: "auto", borderBottom: "1px solid #333" }}>
+          <div style={{ flex: "1 1 60%", minHeight: 0, overflowY: "auto", borderBottom: "1px solid var(--border-subtle)" }}>
             <ErrorBoundary name="Sidebar">
               <Sidebar />
             </ErrorBoundary>
           </div>
-          <div style={{ flex: "1 1 40%", minHeight: 0, overflowY: "auto", background: "#0a0a0a" }}>
+          <div style={{ flex: "1 1 40%", minHeight: 0, overflowY: "auto", background: "var(--surface-0)" }}>
             <ErrorBoundary name="Asset Library">
               <AssetLibrary />
             </ErrorBoundary>
@@ -196,11 +197,11 @@ export const App = () => {
           style={{
             gridRow: "1/5",
             gridColumn: 2,
-            borderRight: "1px solid #333",
+            borderRight: "1px solid var(--border-subtle)",
             minWidth: 0,
             minHeight: 0,
             overflowY: "auto",
-            background: "#0c0c0c",
+            background: "var(--surface-0)",
           }}
         >
           <ErrorBoundary name="Element Detail">
@@ -220,7 +221,7 @@ export const App = () => {
             {audioUrl ? (
               <Scrubber audioUrl={audioUrl} />
             ) : (
-              <div style={{ padding: 12, color: "#888", fontSize: 11 }}>No audio source set.</div>
+              <div style={{ padding: 12, color: "var(--text-muted)", fontSize: 11, fontFamily: "var(--font-ui)" }}>No audio source set.</div>
             )}
           </ErrorBoundary>
         </div>
@@ -232,7 +233,7 @@ export const App = () => {
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
-            background: "#000",
+            background: "var(--surface-0)",
             minWidth: 0,
             minHeight: 0,
           }}
@@ -246,7 +247,7 @@ export const App = () => {
           style={{
             gridRow: 4,
             gridColumn: 3,
-            borderTop: "1px solid #333",
+            borderTop: "1px solid var(--border-subtle)",
             minWidth: 0,
             overflow: "hidden",
           }}
@@ -261,7 +262,7 @@ export const App = () => {
           style={{
             gridRow: "1/5",
             gridColumn: 4,
-            borderLeft: "1px solid #333",
+            borderLeft: "1px solid var(--border-subtle)",
             minHeight: 0,
             display: "flex",
             flexDirection: "column",

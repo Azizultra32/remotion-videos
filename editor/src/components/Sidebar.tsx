@@ -62,11 +62,12 @@ export const Sidebar = () => {
   return (
     <div
       style={{
-        background: "#0a0a0a",
-        padding: 8,
+        background: "var(--surface-0)",
+        padding: 10,
         overflowY: "auto",
         height: "100%",
         boxSizing: "border-box",
+        fontFamily: "var(--font-ui)",
       }}
     >
       {/* Category tabs — one row, one click switches the visible list. */}
@@ -85,17 +86,7 @@ export const Sidebar = () => {
               type="button"
               key={cat}
               onClick={() => setActiveCat(cat)}
-              style={{
-                padding: "4px 8px",
-                background: active ? "#2a4a7a" : "#1a1a1a",
-                border: `1px solid ${active ? "#3a6aaa" : "#333"}`,
-                borderRadius: 3,
-                color: active ? "#fff" : "#aaa",
-                fontSize: 10,
-                fontWeight: active ? 700 : 500,
-                cursor: "pointer",
-                letterSpacing: "0.04em",
-              }}
+              className={`sidebar-tab ${active ? "sidebar-tab--active" : ""}`}
             >
               {CATEGORY_LABELS[cat] ?? cat}
             </button>
@@ -112,27 +103,15 @@ export const Sidebar = () => {
             key={mod.id}
             onClick={() => handleAdd(mod.id)}
             title={mod.description}
-            style={{
-              padding: "6px 8px",
-              background: "#161616",
-              border: "1px solid #2a2a2a",
-              borderRadius: 3,
-              color: "#ddd",
-              fontSize: 11,
-              cursor: "pointer",
-              textAlign: "left",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
+            className="sidebar-element-card"
           >
-            <span style={{ color: "#4a9", fontSize: 10 }}>+</span>
-            <span>{mod.label}</span>
+            <span style={{ color: "var(--accent)", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>+</span>
+            <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-primary)" }}>{mod.label}</span>
           </button>
         ))}
       </div>
 
-      <div style={{ fontSize: 9, color: "#555", marginTop: 10, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 12, lineHeight: 1.5 }}>
         Click to add at playhead. Hover for description. Drag on the timeline to move.
       </div>
     </div>

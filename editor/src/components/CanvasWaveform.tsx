@@ -46,7 +46,14 @@ const drawWaveform = (
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssWidth, cssHeight);
-  ctx.fillStyle = color;
+  // Vertical gradient: accent blue at the center peak, fading to dark at edges
+  const gradient = ctx.createLinearGradient(0, 0, 0, cssHeight);
+  gradient.addColorStop(0, "#1e1e22");
+  gradient.addColorStop(0.3, "#2563eb");
+  gradient.addColorStop(0.5, "#3b82f6");
+  gradient.addColorStop(0.7, "#2563eb");
+  gradient.addColorStop(1, "#1e1e22");
+  ctx.fillStyle = gradient;
 
   const bucketCount = peaks.length / 2;
   if (bucketCount === 0) return;
@@ -179,7 +186,8 @@ export const CanvasWaveform = ({
         width: "100%",
         height,
         cursor: "pointer",
-        background: "#111",
+        background: "var(--surface-1)",
+        borderRadius: "var(--radius-sm)",
       }}
     >
       <canvas
@@ -200,8 +208,9 @@ export const CanvasWaveform = ({
             gap: 4,
             alignItems: "center",
             justifyContent: "center",
-            color: decodeError ? "#f88" : "#666",
+            color: decodeError ? "var(--danger)" : "var(--text-muted)",
             fontSize: 11,
+            fontFamily: "var(--font-ui)",
             padding: 12,
             textAlign: "center",
             pointerEvents: "none",

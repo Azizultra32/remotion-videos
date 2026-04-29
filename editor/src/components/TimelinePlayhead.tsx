@@ -24,17 +24,10 @@ export const TimelinePlayhead = ({ pxPerSec, height }: Props) => {
   return (
     <div
       ref={ref}
+      className="editor-playhead"
       style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        width: 2,
         height,
-        background: "#fff",
-        boxShadow: "0 0 4px rgba(255,255,255,0.7)",
         transform: "translateX(0)",
-        pointerEvents: "none",
-        zIndex: 4,
       }}
     />
   );

@@ -192,23 +192,13 @@ export const Timeline = () => {
   // Explicit toolbar buttons. Timeline navigation should remain usable even
   // while playback runs; we intentionally do NOT auto-follow the playhead.
   // Use the target button below to jump the viewport back to the live head.
-  const tbBtn: React.CSSProperties = {
-    padding: "3px 8px",
-    background: "#1a1a1a",
-    border: "1px solid #333",
-    borderRadius: 3,
-    color: "#ddd",
-    fontSize: 10,
-    cursor: "pointer",
-    fontFamily: "monospace",
-    minWidth: 36,
-  };
+  const tbBtn = "editor-btn";
 
   return (
     <div
       ref={scrollRef}
       className="timeline-scroll"
-      style={{ height: "100%", overflowX: "hidden", overflowY: "auto", background: "#0a0a0a" }}
+      style={{ height: "100%", overflowX: "hidden", overflowY: "auto", background: "var(--surface-0)" }}
       onWheelCapture={(e) => {
         const target = e.target as HTMLElement | null;
         if (!target) return;
@@ -237,26 +227,26 @@ export const Timeline = () => {
           display: "flex",
           gap: 4,
           padding: "4px 8px",
-          background: "#101010",
-          borderBottom: "1px solid #222",
-          fontFamily: "monospace",
+          background: "var(--surface-1)",
+          borderBottom: "1px solid var(--border-subtle)",
+          fontFamily: "var(--font-mono)",
           fontSize: 10,
-          color: "#aaa",
+          color: "var(--text-secondary)",
         }}
       >
         <button
           type="button"
           onClick={() => setTimelineView({ offsetSec: 0 })}
           title="Pan view to 0:00"
-          style={tbBtn}
+          className={tbBtn}
         >
-          ⏮ START
+          START
         </button>
         <button
           type="button"
           onClick={() => zoomByCenter(1 / 1.5)}
-          title="Zoom out (−)"
-          style={tbBtn}
+          title="Zoom out (-)"
+          className={tbBtn}
         >
           −
         </button>
@@ -264,39 +254,39 @@ export const Timeline = () => {
           type="button"
           onClick={() => panByFraction(-0.8)}
           title="Pan left"
-          style={tbBtn}
+          className={tbBtn}
         >
-          ←
+          {"<"}
         </button>
         <button
           type="button"
           onClick={() => focusPlayhead()}
           title="Center the viewport on the playhead"
-          style={tbBtn}
+          className={tbBtn}
         >
-          ◎
+          {"( )"}
         </button>
         <button
           type="button"
           onClick={() => fitToView()}
           title="Fit whole composition in view (0)"
-          style={tbBtn}
+          className={tbBtn}
         >
-          ⊡ FIT
+          FIT
         </button>
         <button
           type="button"
           onClick={() => panByFraction(0.8)}
           title="Pan right"
-          style={tbBtn}
+          className={tbBtn}
         >
-          →
+          {">"}
         </button>
         <button
           type="button"
           onClick={() => zoomByCenter(1.5)}
           title="Zoom in (+)"
-          style={tbBtn}
+          className={tbBtn}
         >
           +
         </button>
@@ -309,9 +299,9 @@ export const Timeline = () => {
             setTimelineView({ offsetSec: Math.max(0, compositionDuration - viewSec) });
           }}
           title="Pan view to end"
-          style={tbBtn}
+          className={tbBtn}
         >
-          END ⏭
+          END
         </button>
         <div style={{ flex: 1 }} />
         <span style={{ alignSelf: "center" }}>
@@ -336,9 +326,9 @@ export const Timeline = () => {
               width: GUTTER_WIDTH,
               minWidth: GUTTER_WIDTH,
               height: RULER_HEIGHT,
-              background: "#0a0a0a",
-              borderRight: "1px solid #333",
-              borderBottom: "1px solid #333",
+              background: "var(--surface-0)",
+              borderRight: "1px solid var(--border-subtle)",
+              borderBottom: "1px solid var(--border-subtle)",
               zIndex: 4,
             }}
           />
@@ -420,32 +410,38 @@ export const Timeline = () => {
               left: 0,
               width: GUTTER_WIDTH,
               minWidth: GUTTER_WIDTH,
-              background: "#0f0f0f",
-              borderRight: "1px solid #333",
+              background: "var(--surface-0)",
+              borderRight: "1px solid var(--border-subtle)",
               zIndex: 2,
             }}
           >
-            {Array.from({ length: TRACK_COUNT }, (_, i) => (
-              <div
-                // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the track identity (trackIndex)
-                key={i}
-                style={{
-                  height: TRACK_HEIGHT,
-                  display: "flex",
-                  alignItems: "center",
-                  paddingLeft: 10,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: "#888",
-                  letterSpacing: "0.08em",
-                  borderBottom: "1px solid #222",
-                  boxSizing: "border-box",
-                }}
-              >
-                {TRACK_LABELS[i] ?? `TRACK ${i + 1}`}
-                <span style={{ marginLeft: 6, color: "#444", fontWeight: 400 }}>{i}</span>
-              </div>
-            ))}
+            {Array.from({ length: TRACK_COUNT }, (_, i) => {
+              const catColors = ["var(--cat-text)", "var(--cat-text)", "var(--cat-audio)", "var(--cat-audio)", "var(--cat-shape)", "var(--cat-shape)", "var(--cat-overlay)", "var(--cat-default)", "var(--cat-video)"];
+              return (
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the track identity (trackIndex)
+                  key={i}
+                  style={{
+                    height: TRACK_HEIGHT,
+                    display: "flex",
+                    alignItems: "center",
+                    paddingLeft: 10,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    fontFamily: "var(--font-ui)",
+                    color: "var(--text-secondary)",
+                    letterSpacing: "0.06em",
+                    borderBottom: "1px solid var(--border-subtle)",
+                    borderLeft: `2px solid ${catColors[i] ?? "var(--cat-default)"}`,
+                    boxSizing: "border-box",
+                    background: i % 2 === 0 ? "var(--surface-0)" : "var(--surface-1)",
+                  }}
+                >
+                  {TRACK_LABELS[i] ?? `TRACK ${i + 1}`}
+                  <span style={{ marginLeft: 6, color: "var(--text-muted)", fontWeight: 400, fontSize: 9 }}>{i}</span>
+                </div>
+              );
+            })}
           </div>
 
           {/* Bar lanes — single relative container for all tracks so
@@ -614,7 +610,8 @@ export const Timeline = () => {
                   left: 0,
                   width: widthPx,
                   height: TRACK_HEIGHT,
-                  borderBottom: "1px solid #1a1a1a",
+                  borderBottom: "1px solid var(--border-subtle)",
+                  background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
                   zIndex: 1,
                 }}
               >

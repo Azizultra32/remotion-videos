@@ -4,15 +4,7 @@ import { useRef, useState } from "react";
 import { downloadProjectFile, importProjectFromFile } from "../utils/projectJson";
 import { RenderButton } from "./RenderButton";
 
-const btn: React.CSSProperties = {
-  padding: "4px 10px",
-  background: "#1a2a3a",
-  border: "1px solid #368",
-  borderRadius: 4,
-  color: "#8cf",
-  fontSize: 11,
-  cursor: "pointer",
-};
+const btnCls = "editor-btn editor-btn--accent";
 
 export const ProjectActions = () => {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -38,7 +30,7 @@ export const ProjectActions = () => {
         type="button"
         onClick={() => downloadProjectFile()}
         title="Download current timeline as .musicvideo.json (feeds `remotion render --props=...`)"
-        style={btn}
+        className={btnCls}
       >
         Export JSON
       </button>
@@ -46,7 +38,7 @@ export const ProjectActions = () => {
         type="button"
         onClick={() => fileRef.current?.click()}
         title="Load a .musicvideo.json file"
-        style={{ ...btn, background: "#2a1a3a", borderColor: "#63a", color: "#c8f" }}
+        className={btnCls}
       >
         Import JSON
       </button>
@@ -58,7 +50,7 @@ export const ProjectActions = () => {
         onChange={onImport}
       />
       {error && (
-        <span style={{ fontSize: 10, color: "#f88" }} title={error}>
+        <span style={{ fontSize: 10, color: "var(--danger)" }} title={error}>
           import failed: {error.slice(0, 40)}
         </span>
       )}

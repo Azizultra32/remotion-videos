@@ -128,7 +128,7 @@ export const SongPicker = () => {
     <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
       <label
         htmlFor="song-picker"
-        style={{ fontSize: 10, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 }}
+        style={{ fontSize: 10, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, fontFamily: "var(--font-ui)" }}
       >
         Track
       </label>
@@ -141,13 +141,13 @@ export const SongPicker = () => {
           style={{
             flex: 1,
             minWidth: 0,
-            padding: "4px 6px",
-            background: "#1a1a1a",
-            border: "1px solid #333",
-            borderRadius: 4,
-            color: "#ddd",
+            padding: "6px 8px",
+            background: "var(--surface-3)",
+            border: "1px solid var(--border-default)",
+            borderRadius: "var(--radius-sm)",
+            color: "var(--text-primary)",
             fontSize: 11,
-            fontFamily: "inherit",
+            fontFamily: "var(--font-ui)",
             cursor: songs && songs.length > 0 && !uploading ? "pointer" : "default",
           }}
         >
@@ -177,18 +177,12 @@ export const SongPicker = () => {
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={!!uploading}
-          title="Upload a local audio file to create a new project. Copies into projects/<stem>/, then auto-runs mv:analyze (Setup with beat detection + Phase 1 + Phase 2). ~5-10 min."
+          title="Upload a local audio file to create a new project. Copies into projects/<stem>/, then auto-runs mv:analyze (Setup with beat detection + Phase 1 + Phase 2)."
+          className={`editor-btn ${uploading ? "" : "editor-btn--accent"}`}
           style={{
-            padding: "4px 8px",
-            fontSize: 11,
-            fontFamily: "monospace",
-            background: uploading ? "#222" : "#1a3a1a",
-            color: uploading ? "#666" : "#afa",
-            border: `1px solid ${uploading ? "#333" : "#386"}`,
-            borderRadius: 3,
-            cursor: uploading ? "not-allowed" : "pointer",
             whiteSpace: "nowrap",
-            opacity: uploading ? 0.6 : 1,
+            opacity: uploading ? 0.5 : 1,
+            cursor: uploading ? "not-allowed" : "pointer",
           }}
         >
           {uploading ? "Uploading…" : "+ New"}
@@ -196,15 +190,14 @@ export const SongPicker = () => {
         {current && !current.hasBeats && !uploading && (
           <span
             title="No sibling analysis.json beats — Scrubber beat overlay will be empty. Run mv:analyze or click Seed beats in the Analysis strip."
+            className="editor-pill"
             style={{
               fontSize: 9,
-              padding: "2px 6px",
-              background: "#3a2a00",
-              color: "#ffb74d",
-              border: "1px solid #5a4200",
-              borderRadius: 3,
+              background: "rgba(245,158,11,0.1)",
+              color: "var(--warning)",
+              border: "1px solid rgba(245,158,11,0.3)",
               textTransform: "uppercase",
-              letterSpacing: 0.5,
+              letterSpacing: "0.05em",
               whiteSpace: "nowrap",
             }}
           >
@@ -213,11 +206,11 @@ export const SongPicker = () => {
         )}
       </div>
       {uploading && (
-        <div style={{ fontSize: 10, color: "#8cf", fontFamily: "monospace" }}>
-          Scaffolding {uploading.filename}… analysis will start automatically.
+        <div style={{ fontSize: 10, color: "var(--accent-hover)", fontFamily: "var(--font-mono)" }}>
+          {"Scaffolding " + uploading.filename + "\u2026 analysis will start automatically."}
         </div>
       )}
-      {error && <div style={{ fontSize: 10, color: "#f66" }}>Tracks: {error}</div>}
+      {error && <div style={{ fontSize: 10, color: "var(--danger)" }}>Tracks: {error}</div>}
     </div>
   );
 };

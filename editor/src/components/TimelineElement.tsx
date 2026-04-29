@@ -13,17 +13,17 @@ type Props = {
 
 // Category-based color, falls back to the old hard-coded map for legacy types.
 const categoryColors: Record<string, string> = {
-  text: "#4CAF50",
-  audio: "#9C27B0",
-  shape: "#FF9800",
-  overlay: "#00BCD4",
-  video: "#2196F3",
+  text: "#3b82f6",
+  audio: "#a855f7",
+  shape: "#22c55e",
+  overlay: "#f59e0b",
+  video: "#ef4444",
 };
 const legacyColors: Record<string, string> = {
-  text: "#4CAF50",
-  image: "#2196F3",
-  effect: "#FF9800",
-  "beat-flash": "#E91E63",
+  text: "#3b82f6",
+  image: "#60a5fa",
+  effect: "#f59e0b",
+  "beat-flash": "#ec4899",
 };
 
 const HANDLE_W = 8;
@@ -52,20 +52,23 @@ export const TimelineElement = ({ element, pxPerSec, height }: Props) => {
       style={{
         position: "absolute",
         left: leftPx,
-        top: 0,
+        top: 2,
         width: widthPx,
-        height,
-        backgroundColor: color,
-        border: isSelected ? "2px solid #fff" : "1px solid rgba(0,0,0,0.3)",
-        borderRadius: 4,
+        height: height - 4,
+        background: `linear-gradient(180deg, ${color}cc, ${color}99)`,
+        border: isSelected ? "1.5px solid var(--accent)" : "1px solid rgba(0,0,0,0.25)",
+        borderRadius: "var(--radius-xs)",
         display: "flex",
         alignItems: "center",
-        fontSize: 11,
+        fontSize: 10,
+        fontFamily: "var(--font-ui)",
         color: "#fff",
         fontWeight: 500,
         overflow: "hidden",
         userSelect: "none",
         boxSizing: "border-box",
+        boxShadow: isSelected ? "var(--shadow-glow-accent)" : "none",
+        transition: "box-shadow var(--transition-fast), border-color var(--transition-fast)",
       }}
     >
       {/* Left resize handle */}

@@ -10,14 +10,16 @@ import { SpringCurveVisualizer } from "./SpringCurveVisualizer";
 
 const fieldStyle: React.CSSProperties = {
   padding: "6px 8px",
-  background: "#222",
-  border: "1px solid #444",
-  borderRadius: 4,
-  color: "#fff",
+  background: "var(--surface-3)",
+  border: "1px solid var(--border-default)",
+  borderRadius: "var(--radius-sm)",
+  color: "var(--text-primary)",
   fontSize: 12,
+  fontFamily: "var(--font-ui)",
+  transition: "border-color 120ms ease",
 };
 
-const labelStyle: React.CSSProperties = { fontSize: 11, color: "#aaa" };
+const labelStyle: React.CSSProperties = { fontSize: 11, color: "var(--text-secondary)", fontWeight: 500 };
 
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   // biome-ignore lint/a11y/noLabelWithoutControl: Field is a wrapper; control is rendered via children prop
@@ -79,7 +81,7 @@ export const ElementDetail = () => {
 
   if (!element) {
     return (
-      <div style={{ padding: 16, color: "#888", fontSize: 12 }}>
+      <div style={{ padding: 16, color: "var(--text-muted)", fontSize: 12, fontFamily: "var(--font-ui)" }}>
         No element selected. Click an element on the timeline to edit.
       </div>
     );
@@ -136,10 +138,10 @@ export const ElementDetail = () => {
           position: "sticky",
           top: 0,
           zIndex: 2,
-          background: "#111",
+          background: "var(--surface-1)",
           margin: "-10px -10px 0 -10px",
           padding: "10px 10px 8px 10px",
-          borderBottom: "1px solid #222",
+          borderBottom: "1px solid var(--border-subtle)",
           display: "flex",
           flexDirection: "column",
           gap: 6,
@@ -151,7 +153,8 @@ export const ElementDetail = () => {
               margin: 0,
               fontSize: 13,
               fontWeight: 600,
-              color: "#eee",
+              color: "var(--text-primary)",
+              fontFamily: "var(--font-ui)",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -161,35 +164,27 @@ export const ElementDetail = () => {
             title={`${element.label} — ${mod ? mod.id : `unknown: ${element.type}`}`}
           >
             {element.label}{" "}
-            <span style={{ color: "#666", fontWeight: 400, fontSize: 10 }}>
+            <span style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: 10 }}>
               ({mod ? mod.id : `unknown: ${element.type}`})
             </span>
           </h3>
           <button
             type="button"
             onClick={() => removeElement(element.id)}
-            style={{
-              padding: "3px 8px",
-              background: "#4a1a1a",
-              border: "1px solid #833",
-              borderRadius: 3,
-              color: "#f88",
-              fontSize: 10,
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
+            className="editor-btn editor-btn--danger"
+            style={{ flexShrink: 0, fontSize: 10 }}
           >
             Delete
           </button>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <span
+            className="editor-pill"
             style={{
               fontSize: 9,
-              padding: "2px 6px",
-              border: "1px solid #555",
-              borderRadius: 2,
-              color: "#ccc",
+              background: "var(--surface-3)",
+              border: "1px solid var(--border-default)",
+              color: "var(--text-secondary)",
               letterSpacing: "0.08em",
             }}
           >
@@ -198,14 +193,13 @@ export const ElementDetail = () => {
           <button
             type="button"
             onClick={() => setElementLocked(element.id, !isLocked)}
+            className="editor-btn"
             style={{
               fontSize: 10,
               padding: "2px 8px",
-              background: isLocked ? "#2196F3" : "#333",
-              color: "#fff",
-              border: `1px solid ${isLocked ? "#2196F3" : "#555"}`,
-              borderRadius: 3,
-              cursor: "pointer",
+              background: isLocked ? "var(--accent-muted)" : "var(--surface-3)",
+              color: isLocked ? "var(--accent-hover)" : "var(--text-secondary)",
+              borderColor: isLocked ? "rgba(59,130,246,0.3)" : "var(--border-default)",
             }}
             title="Locked elements resist deletion and snap-to-beat when moved"
           >
@@ -328,7 +322,7 @@ export const ElementDetail = () => {
         />
       </Field>
 
-      <div style={{ height: 1, background: "#333", margin: "4px 0" }} />
+      <div style={{ height: 1, background: "var(--border-subtle)", margin: "4px 0" }} />
 
       {hasSpringProps && (
         <SpringCurveVisualizer
